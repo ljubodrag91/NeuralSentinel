@@ -1,0 +1,8 @@
+{
+  "name": "Neural W Monitor - Kali Linux Interface",
+  "description": "A professional-grade penetration testing dashboard for remote Kali Linux management on Raspberry Pi devices, featuring a cyberpunk aesthetic, integrated toolkits, and real-time command monitoring.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ]
+}
