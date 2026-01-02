@@ -1,15 +1,16 @@
 
 export const APP_CONFIG = {
-  VERSION: "2.9.8_STABLE",
+  VERSION: "2.9.9_STABLE",
   DEFAULT_MODEL: "gemini-3-flash-preview",
   SIMULATION: {
-    DISCOVERY_LATENCY: 2000,
-    NEURAL_LATENCY: 1500,
-    SCAN_RESULTS_COUNT: 5
+    DISCOVERY_LATENCY: 1800,
+    NEURAL_LATENCY: 1200,
+    SCAN_RESULTS_COUNT: 4
   },
   PLACEHOLDERS: {
-    API_KEY: "process.env.API_KEY", // Placeholder reference
+    // Note: process.env.API_KEY is handled by the environment
     TARGET_IP: "192.168.1.104",
-    SSH_PORT: 22
+    SSH_PORT: 22,
+    DEFAULT_USER: "kali"
   }
 };

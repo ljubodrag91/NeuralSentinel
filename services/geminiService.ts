@@ -1,4 +1,3 @@
-
 import { GoogleGenAI } from "@google/genai";
 
 export async function analyzeLogs(logs: string) {
@@ -18,8 +17,9 @@ export async function analyzeLogs(logs: string) {
 export async function explainCommand(command: string) {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   try {
+    // Upgraded to gemini-3-pro-preview for complex technical explanations
     const response = await ai.models.generateContent({
-      model: 'gemini-3-flash-preview',
+      model: 'gemini-3-pro-preview',
       contents: `Explain this Kali Linux command and its risks for a security professional: ${command}`,
     });
     return response.text;
