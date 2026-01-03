@@ -30,7 +30,7 @@ const ASCII_FROG = `
 ⠀⠀⠻⢦⣈⠓⠶⠤⣄⣉⠉⠉⠛⠒⠲⠦⠤⠤⣤⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣠⠴⢋⡴⠋⠀⠀⠀⠀⠀⠀
 ⠀⠀⠀⠀⠉⠓⠦⣄⡀⠈⠙⠓⠒⠶⠶⠶⠶⠤⣤⣀⣀⣀⣀⣀⣉⣉⣉⣉⣉⣀⣠⠴⠋⣿⠀⠀⠀⠀⠀⠀⠀
 ⠀⠀⠀⠀⠀⠀⠀⠀⠉⠓⠦⣄⣀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀⡼⠁⠀⠀⠀⠀⠀⠀⠀
-⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠉⠉⠙⠛⠒⠒⠒⠒⠒⠤⠤⠤⠒⠒⠒⠒⠒⠒⚉⡇⠀⠀⠀⠀⠀⠀⠀⠀
+⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠉⠉⠙⠛⠒⠒⠒⠒⠒⠤⠤⠤⠒⠒⠒⠒⠒⠒☿⡇⠀⠀⠀⠀⠀⠀⠀⠀
 ⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣠⠴⚛⠛ⳤ⣤⠞⠁⠀⠀⠀⠀⠀⠀⠀⠀
 ⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀⣤⠚⠁⠀⠀⠀⠀⠘⠲⣄⡀⠀⠀⠀⠀⠀⠀⠀
 ⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣴⠋⠙⢷⡋⢙⡇⢀⡴⢒⡿⢶⣄⡴⠀⠙⠳⣄⠀⠀⠀⠀⠀
@@ -42,9 +42,7 @@ const ASCII_FROG = `
 
 const App: React.FC = () => {
   const loadSettings = (): AppSettings => {
-    const saved = localStorage.getItem('neural_sentinel_settings');
-    if (saved) return JSON.parse(saved);
-    return {
+    const defaults: AppSettings = {
       showAsciiBg: true,
       globalDistortion: true,
       panelDistortion: true,
@@ -58,6 +56,16 @@ const App: React.FC = () => {
       maxCoreCharges: 5,
       maxNeuralCharges: 5
     };
+    const saved = localStorage.getItem('neural_sentinel_settings');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        return { ...defaults, ...parsed };
+      } catch {
+        return defaults;
+      }
+    }
+    return defaults;
   };
 
   const [mode, setMode] = useState<OperationalMode>(OperationalMode.SIMULATED);
@@ -74,8 +82,8 @@ const App: React.FC = () => {
   const [isTestingLocal, setIsTestingLocal] = useState(false);
   const [activeTelemetry, setActiveTelemetry] = useState<Set<string>>(new Set(['cpu', 'ram', 'net', 'disk']));
   
-  const [coreCharges, setCoreCharges] = useState(settings.maxCoreCharges);
-  const [neuralCharges, setNeuralCharges] = useState(settings.maxNeuralCharges);
+  const [coreCharges, setCoreCharges] = useState(settings.maxCoreCharges || 5);
+  const [neuralCharges, setNeuralCharges] = useState(settings.maxNeuralCharges || 5);
   const [coreReloadProgress, setCoreReloadProgress] = useState(0);
   const [neuralReloadProgress, setNeuralReloadProgress] = useState(0);
 
@@ -122,7 +130,6 @@ const App: React.FC = () => {
     if (activeLogTab !== type) setUnreadLogs(prev => ({ ...prev, [type]: true }));
   }, [mode, activeLogTab]);
 
-  // Periodic Kernel/System Log Generation (Simulated)
   useEffect(() => {
     if (mode === OperationalMode.SIMULATED) {
       const kernelInterval = setInterval(() => {
@@ -156,7 +163,6 @@ const App: React.FC = () => {
     }
   }, [mode, addLog]);
 
-  // Sync charges if max decreases
   useEffect(() => {
     if (coreCharges > settings.maxCoreCharges) setCoreCharges(settings.maxCoreCharges);
     if (neuralCharges > settings.maxNeuralCharges) setNeuralCharges(settings.maxNeuralCharges);
@@ -404,27 +410,27 @@ const App: React.FC = () => {
           {/* Core Probe Launcher (Purple) */}
           <div className="flex flex-col items-center gap-1 bg-black/30 p-2 border border-zinc-900/50 rounded-sm">
             <div className="flex gap-1.5">
-              {[...Array(settings.maxCoreCharges)].map((_, i) => (
+              {[...Array(settings.maxCoreCharges || 5)].map((_, i) => (
                 <div key={i} className={`w-2 h-7 border transition-all duration-500 ${i < coreCharges ? 'bg-purple-500 border-purple-400 glow-purple' : 'bg-zinc-900 border-zinc-800'}`} style={{ clipPath: 'polygon(0% 0%, 100% 0%, 100% 75%, 50% 100%, 0% 75%)' }}></div>
               ))}
             </div>
             <div className="w-full h-[1px] bg-zinc-900 relative overflow-hidden">
               <div className="absolute h-full bg-purple-500 transition-all duration-500" style={{ width: `${coreReloadProgress}%` }}></div>
             </div>
-            <span className="text-[10px] font-black uppercase text-purple-600 tracking-[0.1em]">Core Probe Launcher: {coreCharges}/{settings.maxCoreCharges}</span>
+            <span className="text-[10px] font-black uppercase text-purple-600 tracking-[0.1em]">Core Probe Launcher: {coreCharges}/{settings.maxCoreCharges || 5}</span>
           </div>
 
           {/* Neural Probe Launcher (Teal) */}
           <div className="flex flex-col items-center gap-1 bg-black/30 p-2 border border-zinc-900/50 rounded-sm">
             <div className="flex gap-1.5">
-              {[...Array(settings.maxNeuralCharges)].map((_, i) => (
+              {[...Array(settings.maxNeuralCharges || 5)].map((_, i) => (
                 <div key={i} className={`w-2 h-7 border transition-all duration-500 ${i < neuralCharges ? 'bg-teal-500 border-teal-400 glow-teal' : 'bg-zinc-900 border-zinc-800'}`} style={{ clipPath: 'polygon(0% 0%, 100% 0%, 100% 75%, 50% 100%, 0% 75%)' }}></div>
               ))}
             </div>
             <div className="w-full h-[1px] bg-zinc-900 relative overflow-hidden">
               <div className="absolute h-full bg-teal-500 transition-all duration-500" style={{ width: `${neuralReloadProgress}%` }}></div>
             </div>
-            <span className="text-[10px] font-black uppercase text-teal-600 tracking-[0.1em]">Neural Probe Launcher: {neuralCharges}/{settings.maxNeuralCharges}</span>
+            <span className="text-[10px] font-black uppercase text-teal-600 tracking-[0.1em]">Neural Probe Launcher: {neuralCharges}/{settings.maxNeuralCharges || 5}</span>
           </div>
         </div>
 
@@ -497,7 +503,7 @@ const App: React.FC = () => {
           <div className="relative flex-1 overflow-hidden">
             {isFrogVisible && activeLogTab === 'neural' && (
               <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-0">
-                <div className="whitespace-pre font-mono text-[7px] neural-bg-flash" style={{ color: settings.frogColor, opacity: settings.frogIntensity }}>{ASCII_FROG}</div>
+                <div className="whitespace-pre font-mono text-[7px] neural-bg-flash" style={{ color: settings.frogColor || '#22c55e', opacity: settings.frogIntensity || 0.1 }}>{ASCII_FROG}</div>
               </div>
             )}
             <div className="absolute inset-0 overflow-y-auto p-6 space-y-4 bg-transparent no-scroll z-10 flex flex-col">
@@ -554,19 +560,25 @@ const App: React.FC = () => {
                 <div className="grid grid-cols-1 gap-4">
                    <div className="flex flex-col gap-2">
                       <label className="text-[10px] font-black text-zinc-700 uppercase">Engine_Provider</label>
-                      <select value={aiConfig.provider} onChange={e => setAiConfig(prev => ({...prev, provider: e.target.value as AIProvider}))} className="bg-black border border-zinc-900 p-2 text-white font-mono text-[10px] outline-none">
+                      <select value={aiConfig.provider ?? AIProvider.GEMINI} onChange={e => setAiConfig(prev => ({...prev, provider: e.target.value as AIProvider}))} className="bg-black border border-zinc-900 p-2 text-white font-mono text-[10px] outline-none">
                         <option value={AIProvider.GEMINI}>Google Gemini (Cloud)</option>
                         <option value={AIProvider.LOCAL}>Local Node (Ollama/LMStudio)</option>
                       </select>
                    </div>
                    {aiConfig.provider === AIProvider.LOCAL && (
-                     <div className="flex flex-col gap-2">
-                        <label className="text-[10px] font-black text-zinc-700 uppercase">Local Endpoint</label>
-                        <div className="flex gap-2">
-                          <input value={aiConfig.endpoint} onChange={e => setAiConfig(prev => ({...prev, endpoint: e.target.value}))} className="flex-1 bg-black border border-zinc-900 p-2 text-white font-mono text-[10px] outline-none" placeholder="http://localhost:11434/v1" />
-                          <button onClick={handleTestLocal} disabled={isTestingLocal} className="px-4 bg-purple-500/10 border border-purple-500/40 text-purple-400 text-[9px] font-black uppercase hover:bg-purple-500/20 transition-all disabled:opacity-30">
-                            {isTestingLocal ? 'TESTING...' : 'TEST'}
-                          </button>
+                     <div className="grid grid-cols-1 gap-4">
+                        <div className="flex flex-col gap-2">
+                           <label className="text-[10px] font-black text-zinc-700 uppercase">Local Endpoint</label>
+                           <div className="flex gap-2">
+                             <input value={aiConfig.endpoint ?? ""} onChange={e => setAiConfig(prev => ({...prev, endpoint: e.target.value}))} className="flex-1 bg-black border border-zinc-900 p-2 text-white font-mono text-[10px] outline-none" placeholder="http://localhost:11434/v1" />
+                             <button onClick={handleTestLocal} disabled={isTestingLocal} className="px-4 bg-purple-500/10 border border-purple-500/40 text-purple-400 text-[9px] font-black uppercase hover:bg-purple-500/20 transition-all disabled:opacity-30">
+                               {isTestingLocal ? 'TESTING...' : 'TEST'}
+                             </button>
+                           </div>
+                        </div>
+                        <div className="flex flex-col gap-2">
+                           <label className="text-[10px] font-black text-zinc-700 uppercase">Model_ID</label>
+                           <input value={aiConfig.model ?? ""} onChange={e => setAiConfig(prev => ({...prev, model: e.target.value}))} className="bg-black border border-zinc-900 p-2 text-white font-mono text-[10px] outline-none" placeholder="e.g. openai/gpt-oss-20b" />
                         </div>
                      </div>
                    )}
@@ -580,20 +592,20 @@ const App: React.FC = () => {
                 <div className="grid grid-cols-1 gap-4">
                    <div className="space-y-1">
                       <div className="flex justify-between items-center"><label className="text-[10px] font-black text-zinc-700 uppercase">Core Recharge (s)</label><span className="text-zinc-500 text-[10px]">{settings.coreRechargeRate}s</span></div>
-                      <input type="range" min={10} max={300} step={10} value={settings.coreRechargeRate} onChange={e => setSettings(s => ({...s, coreRechargeRate: Number(e.target.value)}))} className="w-full h-1 bg-zinc-900 rounded-lg appearance-none cursor-pointer accent-purple-500" />
+                      <input type="range" min={10} max={300} step={10} value={settings.coreRechargeRate ?? 60} onChange={e => setSettings(s => ({...s, coreRechargeRate: Number(e.target.value)}))} className="w-full h-1 bg-zinc-900 rounded-lg appearance-none cursor-pointer accent-purple-500" />
                    </div>
                    <div className="space-y-1">
                       <div className="flex justify-between items-center"><label className="text-[10px] font-black text-zinc-700 uppercase">Neural Recharge (s)</label><span className="text-zinc-500 text-[10px]">{settings.neuralRechargeRate}s</span></div>
-                      <input type="range" min={5} max={120} step={5} value={settings.neuralRechargeRate} onChange={e => setSettings(s => ({...s, neuralRechargeRate: Number(e.target.value)}))} className="w-full h-1 bg-zinc-900 rounded-lg appearance-none cursor-pointer accent-teal-500" />
+                      <input type="range" min={5} max={120} step={5} value={settings.neuralRechargeRate ?? 30} onChange={e => setSettings(s => ({...s, neuralRechargeRate: Number(e.target.value)}))} className="w-full h-1 bg-zinc-900 rounded-lg appearance-none cursor-pointer accent-teal-500" />
                    </div>
                    <div className="grid grid-cols-2 gap-4 mt-2">
                       <div className="space-y-1">
                         <div className="flex justify-between items-center"><label className="text-[10px] font-black text-zinc-700 uppercase">Max Core</label><span className="text-purple-400 text-[10px]">{settings.maxCoreCharges}</span></div>
-                        <input type="range" min={2} max={10} step={1} value={settings.maxCoreCharges} onChange={e => setSettings(s => ({...s, maxCoreCharges: Number(e.target.value)}))} className="w-full h-1 bg-zinc-900 rounded-lg appearance-none cursor-pointer accent-purple-500" />
+                        <input type="range" min={2} max={10} step={1} value={settings.maxCoreCharges ?? 5} onChange={e => setSettings(s => ({...s, maxCoreCharges: Number(e.target.value)}))} className="w-full h-1 bg-zinc-900 rounded-lg appearance-none cursor-pointer accent-purple-500" />
                       </div>
                       <div className="space-y-1">
                         <div className="flex justify-between items-center"><label className="text-[10px] font-black text-zinc-700 uppercase">Max Neural</label><span className="text-teal-400 text-[10px]">{settings.maxNeuralCharges}</span></div>
-                        <input type="range" min={2} max={10} step={1} value={settings.maxNeuralCharges} onChange={e => setSettings(s => ({...s, maxNeuralCharges: Number(e.target.value)}))} className="w-full h-1 bg-zinc-900 rounded-lg appearance-none cursor-pointer accent-teal-500" />
+                        <input type="range" min={2} max={10} step={1} value={settings.maxNeuralCharges ?? 5} onChange={e => setSettings(s => ({...s, maxNeuralCharges: Number(e.target.value)}))} className="w-full h-1 bg-zinc-900 rounded-lg appearance-none cursor-pointer accent-teal-500" />
                       </div>
                    </div>
                 </div>
@@ -612,11 +624,11 @@ const App: React.FC = () => {
                 <div className="space-y-3">
                   <div className="space-y-1">
                       <div className="flex justify-between items-center"><label className="text-[10px] font-black text-zinc-700 uppercase">Ghosting Interval</label><span className="text-zinc-500 text-[10px]">{settings.frogInterval}ms</span></div>
-                      <input type="range" min={2000} max={60000} step={1000} value={settings.frogInterval} onChange={e => setSettings(s => ({...s, frogInterval: Number(e.target.value)}))} className="w-full h-1 bg-zinc-900 rounded-lg appearance-none cursor-pointer accent-purple-500" />
+                      <input type="range" min={2000} max={60000} step={1000} value={settings.frogInterval ?? 10000} onChange={e => setSettings(s => ({...s, frogInterval: Number(e.target.value)}))} className="w-full h-1 bg-zinc-900 rounded-lg appearance-none cursor-pointer accent-purple-500" />
                   </div>
                   <div className="space-y-1">
-                      <div className="flex justify-between items-center"><label className="text-[10px] font-black text-zinc-700 uppercase">Signal Intensity</label><span className="text-zinc-500 text-[10px]">{Math.round(settings.frogIntensity * 100)}%</span></div>
-                      <input type="range" min={0.01} max={0.4} step={0.01} value={settings.frogIntensity} onChange={e => setSettings(s => ({...s, frogIntensity: Number(e.target.value)}))} className="w-full h-1 bg-zinc-900 rounded-lg appearance-none cursor-pointer accent-purple-500" />
+                      <div className="flex justify-between items-center"><label className="text-[10px] font-black text-zinc-700 uppercase">Signal Intensity</label><span className="text-zinc-500 text-[10px]">{Math.round((settings.frogIntensity ?? 0.1) * 100)}%</span></div>
+                      <input type="range" min={0.01} max={0.4} step={0.01} value={settings.frogIntensity ?? 0.1} onChange={e => setSettings(s => ({...s, frogIntensity: Number(e.target.value)}))} className="w-full h-1 bg-zinc-900 rounded-lg appearance-none cursor-pointer accent-purple-500" />
                   </div>
                 </div>
               </div>
@@ -624,11 +636,11 @@ const App: React.FC = () => {
               <div className="grid grid-cols-2 gap-4 pt-2">
                  <div className="space-y-2">
                     <label className="text-[10px] font-black text-zinc-700 uppercase">Sync Freq (ms)</label>
-                    <input type="number" step={500} value={settings.pollInterval} onChange={e => setSettings(s => ({...s, pollInterval: Number(e.target.value)}))} className="w-full bg-black border border-zinc-900 p-2 text-white font-mono text-[10px] outline-none" />
+                    <input type="number" step={500} value={settings.pollInterval ?? 3000} onChange={e => setSettings(s => ({...s, pollInterval: Number(e.target.value)}))} className="w-full bg-black border border-zinc-900 p-2 text-white font-mono text-[10px] outline-none" />
                  </div>
                  <div className="space-y-2">
                     <label className="text-[10px] font-black text-zinc-700 uppercase">Time Window</label>
-                    <select value={settings.timeframe} onChange={e => setSettings(s => ({...s, timeframe: e.target.value as Timeframe}))} className="w-full bg-black border border-zinc-900 p-2 text-white font-mono text-[10px] outline-none">
+                    <select value={settings.timeframe ?? '1m'} onChange={e => setSettings(s => ({...s, timeframe: e.target.value as Timeframe}))} className="w-full bg-black border border-zinc-900 p-2 text-white font-mono text-[10px] outline-none">
                       {['1m', '5m', '15m', '30m', '1h', '6h', '12h', '24h'].map(t => <option key={t} value={t}>{t}</option>)}
                     </select>
                  </div>

@@ -1,8 +1,7 @@
-import { GoogleGenAI, Type } from "@google/genai";
+import { GoogleGenAI } from "@google/genai";
 import { AIProvider, AIConfig, OperationalMode, SmartTooltipData } from "../types";
-import { APP_CONFIG } from "./config";
 
-function truncateInputStrict(text: string, maxChars: number = 14000): string {
+function truncateInputStrict(text: string, maxChars: number = 10000): string {
   if (text.length <= maxChars) return text;
   return "[TRUNCATED_START]..." + text.slice(-maxChars);
 }
@@ -29,7 +28,12 @@ export async function testAiAvailability(config: AIConfig): Promise<boolean> {
     const response = await fetch(endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: config.model, messages: [{ role: 'user', content: 'ping' }], max_tokens: 5 }),
+      body: JSON.stringify({ 
+        model: config.model, 
+        messages: [{ role: 'user', content: 'ping' }], 
+        max_tokens: 5,
+        temperature: 0.1
+      }),
       signal: AbortSignal.timeout(4000)
     });
     return response.ok;
@@ -44,13 +48,29 @@ export async function performNeuralProbe(
 ) {
   const isMainProbe = panelName === 'GLOBAL_SYSTEM_AUDIT';
   
-  const systemInstruction = `You are the ${isMainProbe ? 'Main Neural Core' : 'Panel Diagnostic Core'} for the PiSentinel SOC.
-Analyze the provided telemetry and return a structured report. Respond ONLY with valid JSON.
-Main Core Probe focus: Holistic system integrity, threat detection, and operational optimization.
-Panel Probe focus: Localized anomaly detection and specific component health.
-JSON Schema: { "description": string, "recommendation": string, "status": string, "elementType": string, "elementId": string, "anomalies": string[], "threatLevel": "LOW"|"MEDIUM"|"HIGH"|"CRITICAL" }`;
+  const systemInstruction = `You are the ${isMainProbe ? 'Main Neural Core' : 'Panel Diagnostic Core'} for the PiSentinel SOC monitor.
+Analyze the provided telemetry and return a structured report for security professionals.
+STRICT RULES:
+- Respond ONLY with a valid JSON object.
+- No markdown formatting.
+- Include actionable security recommendations.
 
-  const userPrompt = truncateInputStrict(`[${isMainProbe ? 'MAIN_AUDIT' : 'PANEL_PROBE'}] PANEL: ${panelName} | DATA: ${JSON.stringify(metrics)} [/REQUEST]`);
+Schema:
+{
+  "description": "Short human-readable summary of element health.",
+  "recommendation": "Technical advice or suggestion.",
+  "status": "${context.mode}",
+  "elementType": "${panelName}",
+  "elementId": "probe-${Date.now()}",
+  "anomalies": ["list", "of", "issues"],
+  "threatLevel": "LOW" | "MEDIUM" | "HIGH" | "CRITICAL"
+}`;
+
+  const userPrompt = truncateInputStrict(JSON.stringify({ 
+    panel: panelName, 
+    operational_mode: context.mode,
+    telemetry_payload: metrics 
+  }));
 
   if (config.provider === AIProvider.GEMINI) {
     const ai = getAiClient(config);
@@ -70,13 +90,21 @@ JSON Schema: { "description": string, "recommendation": string, "status": string
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           model: config.model,
-          messages: [{ role: 'system', content: systemInstruction }, { role: 'user', content: userPrompt }],
-          temperature: 0.1
+          messages: [
+            { role: 'system', content: systemInstruction }, 
+            { role: 'user', content: userPrompt }
+          ],
+          temperature: 0.1,
+          max_tokens: 512
         })
       });
       const data = await response.json();
+      if (data.error) throw new Error(data.error.message);
       return extractJsonLoose(data.choices[0].message.content);
-    } catch { return fallbackProbe(panelName, context.mode); }
+    } catch (e) { 
+      console.error("Local Neural Probe Error:", e);
+      return fallbackProbe(panelName, context.mode); 
+    }
   }
 }
 
@@ -85,14 +113,26 @@ export async function fetchSmartTooltip(
   elementData: any,
   context: { sessionId: string; mode: OperationalMode }
 ): Promise<SmartTooltipData> {
-  const systemInstruction = `You are a tactical smart tooltip engine. Provide deep technical insight into specific SOC components or metrics. Respond ONLY with valid JSON.
-Schema: { "description": string, "recommendation": string, "status": "REAL"|"SIMULATED"|"OFFLINE", "elementType": string, "elementId": string }`;
+  const systemInstruction = `You are a Raspberry Pi cyber dashboard smart tooltip engine.
+STRICT RULES:
+- Respond ONLY with a valid JSON object.
+- No explanations or chat markers.
+
+Schema:
+{
+  "description": "Short human-readable summary of the specific metric or component.",
+  "recommendation": "Optional advice or warning based on the values.",
+  "status": "${context.mode}",
+  "elementType": "Type of component",
+  "elementId": "ID of component"
+}`;
 
   const userPrompt = truncateInputStrict(JSON.stringify({ 
     elementType: elementData.elementType, 
     elementId: elementData.elementId, 
     status: context.mode, 
-    metrics: elementData.metrics 
+    metrics: elementData.metrics,
+    context: "Dashboard - Real-time Overview"
   }));
 
   try {
@@ -109,12 +149,24 @@ Schema: { "description": string, "recommendation": string, "status": "REAL"|"SIM
       const response = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model: config.model, messages: [{ role: 'system', content: systemInstruction }, { role: 'user', content: userPrompt }], temperature: 0.1 })
+        body: JSON.stringify({ 
+          model: config.model, 
+          messages: [
+            { role: 'system', content: systemInstruction }, 
+            { role: 'user', content: userPrompt }
+          ], 
+          temperature: 0.1,
+          max_tokens: 300
+        })
       });
       const data = await response.json();
+      if (data.error) throw new Error(data.error.message);
       return extractJsonLoose(data.choices[0].message.content);
     }
-  } catch { return fallbackTooltip(elementData, context.mode); }
+  } catch (e) { 
+    console.error("Local Tooltip Error:", e);
+    return fallbackTooltip(elementData, context.mode); 
+  }
 }
 
 function fallbackProbe(panel: string, mode: string) { return { description: "Link Void.", recommendation: "Manual Assessment required.", status: mode as any, elementType: panel, elementId: "VOID", anomalies: ["AI_OFFLINE"], threatLevel: "ELEVATED" }; }

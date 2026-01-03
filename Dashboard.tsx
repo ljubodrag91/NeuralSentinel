@@ -121,26 +121,26 @@ const Dashboard: React.FC<DashboardProps> = ({
                   <Tooltip name="TARGET_LINK" source="CONFIG" desc="Destination IP address for the remote Kali Linux node.">
                     <label className="text-[10px] font-black text-zinc-700 uppercase tracking-widest cursor-help">Target_Link</label>
                   </Tooltip>
-                  <input value={ipInput} onChange={e => setIpInput(e.target.value)} disabled={isConnected} className={`bg-black/50 border border-zinc-900 p-2 text-[11px] font-mono outline-none ${isConnected ? 'text-teal-500/50 cursor-not-allowed' : 'text-white'}`} placeholder="0.0.0.0" />
+                  <input value={ipInput ?? ""} onChange={e => setIpInput(e.target.value)} disabled={isConnected} className={`bg-black/50 border border-zinc-900 p-2 text-[11px] font-mono outline-none ${isConnected ? 'text-teal-500/50 cursor-not-allowed' : 'text-white'}`} placeholder="0.0.0.0" />
                 </div>
                 <div className="grid grid-cols-3 gap-3">
                   <div className="flex flex-col gap-1">
                     <Tooltip name="USER_ID" source="CONFIG" desc="SSH username for authentication.">
                       <label className="text-[8px] font-black text-zinc-800 uppercase tracking-widest cursor-help">User</label>
                     </Tooltip>
-                    <input value={user} onChange={e => setUser(e.target.value)} disabled={isConnected} className="bg-black/50 border border-zinc-900 p-1.5 text-[10px] font-mono text-zinc-400 outline-none" placeholder="user" />
+                    <input value={user ?? ""} onChange={e => setUser(e.target.value)} disabled={isConnected} className="bg-black/50 border border-zinc-900 p-1.5 text-[10px] font-mono text-zinc-400 outline-none" placeholder="user" />
                   </div>
                   <div className="flex flex-col gap-1">
                     <Tooltip name="AUTH_SECRET" source="CONFIG" desc="SSH password or keyphrase for authentication.">
                       <label className="text-[8px] font-black text-zinc-800 uppercase tracking-widest cursor-help">Pass</label>
                     </Tooltip>
-                    <input type="password" value={pass} onChange={e => setPass(e.target.value)} disabled={isConnected} className="bg-black/50 border border-zinc-900 p-1.5 text-[10px] font-mono text-zinc-400 outline-none" placeholder="pass" />
+                    <input type="password" value={pass ?? ""} onChange={e => setPass(e.target.value)} disabled={isConnected} className="bg-black/50 border border-zinc-900 p-1.5 text-[10px] font-mono text-zinc-400 outline-none" placeholder="pass" />
                   </div>
                   <div className="flex flex-col gap-1">
                     <Tooltip name="COM_PORT" source="CONFIG" desc="Target SSH port (Default: 22).">
                       <label className="text-[8px] font-black text-zinc-800 uppercase tracking-widest cursor-help">Port</label>
                     </Tooltip>
-                    <input type="number" value={port} onChange={e => setPort(Number(e.target.value))} disabled={isConnected} className="bg-black/50 border border-zinc-900 p-1.5 text-[10px] font-mono text-zinc-400 outline-none" />
+                    <input type="number" value={port ?? 22} onChange={e => setPort(Number(e.target.value))} disabled={isConnected} className="bg-black/50 border border-zinc-900 p-1.5 text-[10px] font-mono text-zinc-400 outline-none" />
                   </div>
                 </div>
                 <Tooltip name="HANDSHAKE_TRIGGER" source="SYSTEM" desc="Initiate encrypted SSH handshake with the remote target.">
@@ -339,7 +339,7 @@ const Dashboard: React.FC<DashboardProps> = ({
                    <span className="text-teal-500 font-black text-lg">root@kali:~#</span>
                    <input 
                     ref={consoleInputRef}
-                    value={consoleInput}
+                    value={consoleInput ?? ""}
                     onChange={e => setConsoleInput(e.target.value)}
                     className="flex-1 bg-transparent border-none outline-none text-white text-lg placeholder:text-zinc-800 selection:bg-teal-500/30"
                     placeholder="Enter tactical command..."

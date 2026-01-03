@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { TOOLS } from '../constants';
 import { ToolDefinition, OperationalMode } from '../types';
@@ -307,7 +306,7 @@ const Toolkit: React.FC<ToolkitProps> = ({ onRunCommand, onBreakdown, mode }) =>
                             <span className={`text-[9px] font-black uppercase ${params[p.name] ? 'text-teal-400' : 'text-zinc-800'}`}>{params[p.name] ? 'ON' : 'OFF'}</span>
                           </div>
                         ) : (
-                          <input type={p.type === 'number' ? 'number' : 'text'} value={params[p.name] as any} onChange={(e) => setParams(prev => ({ ...prev, [p.name]: e.target.value }))} className="bg-zinc-950 border border-zinc-900 px-4 py-2 text-[11px] text-zinc-400 font-mono outline-none focus:border-teal-500/20 transition-colors" placeholder="Input..." />
+                          <input type={p.type === 'number' ? 'number' : 'text'} value={(params[p.name] ?? "") as any} onChange={(e) => setParams(prev => ({ ...prev, [p.name]: e.target.value }))} className="bg-zinc-950 border border-zinc-900 px-4 py-2 text-[11px] text-zinc-400 font-mono outline-none focus:border-teal-500/20 transition-colors" placeholder="Input..." />
                         )}
                       </div>
                     ))}
