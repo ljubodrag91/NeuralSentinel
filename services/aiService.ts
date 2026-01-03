@@ -4,7 +4,7 @@ import { AIProvider, AIConfig, OperationalMode, SmartTooltipData } from "../type
 import { APP_CONFIG } from "./config";
 
 /**
- * Robust JSON extraction from LLM outputs that might contain markdown or thoughts.
+ * Robust JSON extraction from LLM outputs that might contain markdown, thought tags, or other wrappers.
  */
 function extractJsonLoose(text: string): any {
   const cleaned = text
@@ -19,7 +19,7 @@ function extractJsonLoose(text: string): any {
 }
 
 /**
- * Truncates text to prevent context window overflow.
+ * Truncates text to a safe character limit to avoid exceeding model context windows.
  */
 function truncateInput(text: string, maxInputTokens: number = 3000): string {
   const charLimit = maxInputTokens * 3.5;
@@ -31,22 +31,37 @@ const getAiClient = (config: AIConfig) => {
   return new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
 };
 
+/**
+ * Validates the availability of the configured AI provider.
+ */
 export async function testAiAvailability(config: AIConfig): Promise<boolean> {
   if (config.provider === AIProvider.GEMINI) {
     return !!process.env.API_KEY;
   }
+  
   try {
-    const response = await fetch(config.endpoint, {
+    // Standardize endpoint - ensure it has the correct completions suffix if not provided
+    const endpoint = config.endpoint.includes('/chat/completions') 
+      ? config.endpoint 
+      : `${config.endpoint.replace(/\/$/, "")}/chat/completions`;
+
+    const response = await fetch(endpoint, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      },
       body: JSON.stringify({
         model: config.model,
         messages: [{ role: 'user', content: 'ping' }],
-        max_tokens: 1
-      })
+        max_tokens: 5,
+        temperature: 0.1
+      }),
+      signal: AbortSignal.timeout(4000)
     });
     return response.ok;
-  } catch {
+  } catch (e) {
+    console.debug("Local node probe failed:", e);
     return false;
   }
 }
@@ -58,21 +73,21 @@ export async function performNeuralProbe(
   context: { sessionId: string; mode: OperationalMode }
 ) {
   const systemInstruction = `You are the Neural Intelligence Core for the PiSentinel Kali SOC.
-Analyze metrics and return a high-fidelity JSON diagnostic report.
-Respond with ONLY valid JSON.
+Analyze the provided metrics and return a high-fidelity diagnostic report.
+STRICT RULE: Respond with ONLY a valid JSON object.
 
 Schema:
 {
-  "description": "Deep technical analysis.",
-  "recommendation": "Primary tactical action.",
+  "description": "Deep technical analysis of the telemetry.",
+  "recommendation": "Primary tactical action suggested.",
   "status": "${context.mode}",
   "elementType": "${panelName}",
-  "elementId": "ID",
-  "anomalies": ["Detection 1", "Detection 2"],
+  "elementId": "PROBE_${context.sessionId}",
+  "anomalies": ["Detection A", "Detection B"],
   "threatLevel": "LOW" | "ELEVATED" | "CRITICAL"
 }`;
 
-  const userPrompt = truncateInput(`[PROBE] PANEL: ${panelName} | DATA: ${JSON.stringify(metrics)} [/PROBE]`);
+  const userPrompt = truncateInput(`[PROBE_REQUEST] PANEL: ${panelName} | TELEMETRY: ${JSON.stringify(metrics)} [/PROBE_REQUEST]`);
 
   if (config.provider === AIProvider.GEMINI) {
     const ai = getAiClient(config);
@@ -99,12 +114,12 @@ Schema:
       });
       return JSON.parse(response.text || "{}");
     } catch (e) {
-      console.error("Gemini Probe Error:", e);
       return fallbackProbe(panelName, context.mode);
     }
   } else {
     try {
-      const response = await fetch(config.endpoint, {
+      const endpoint = config.endpoint.includes('/chat/completions') ? config.endpoint : `${config.endpoint.replace(/\/$/, "")}/chat/completions`;
+      const response = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -113,7 +128,8 @@ Schema:
             { role: 'system', content: systemInstruction },
             { role: 'user', content: userPrompt }
           ],
-          temperature: 0.2
+          temperature: 0.1,
+          max_tokens: 1024
         })
       });
       if (!response.ok) throw new Error("LOCAL_LINK_OFFLINE");
@@ -130,10 +146,27 @@ export async function fetchSmartTooltip(
   elementData: any,
   context: { sessionId: string; mode: OperationalMode }
 ): Promise<SmartTooltipData> {
-  const systemInstruction = `Analyze component metrics for a SOC console. Return ONLY JSON.
-Schema: { "description": "String", "recommendation": "String", "status": "${context.mode}", "elementType": "String", "elementId": "String" }`;
+  const systemInstruction = `You are a Raspberry Pi cyber dashboard smart tooltip engine.
+STRICT RULES:
+- Respond ONLY with a valid JSON object
+- No markdown, no explanations, no chat tokens
 
-  const userPrompt = truncateInput(`ID: ${elementData.elementId} | DATA: ${JSON.stringify(elementData)}`);
+Schema:
+{
+  "description": string,
+  "recommendation": string,
+  "status": "REAL" | "SIMULATED" | "OFFLINE",
+  "elementType": string,
+  "elementId": string
+}`;
+
+  const userPrompt = JSON.stringify({
+    elementType: elementData.elementType,
+    elementId: elementData.elementId,
+    status: context.mode,
+    metrics: elementData.metrics,
+    context: "Dashboard - System Overview"
+  });
 
   try {
     if (config.provider === AIProvider.GEMINI) {
@@ -145,7 +178,8 @@ Schema: { "description": "String", "recommendation": "String", "status": "${cont
       });
       return JSON.parse(response.text || "{}");
     } else {
-      const response = await fetch(config.endpoint, {
+      const endpoint = config.endpoint.includes('/chat/completions') ? config.endpoint : `${config.endpoint.replace(/\/$/, "")}/chat/completions`;
+      const response = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -153,9 +187,12 @@ Schema: { "description": "String", "recommendation": "String", "status": "${cont
           messages: [
             { role: 'system', content: systemInstruction },
             { role: 'user', content: userPrompt }
-          ]
+          ],
+          temperature: 0.1,
+          max_tokens: 300
         })
       });
+      if (!response.ok) throw new Error("LOCAL_LINK_OFFLINE");
       const data = await response.json();
       return extractJsonLoose(data.choices[0].message.content);
     }
@@ -167,11 +204,11 @@ Schema: { "description": "String", "recommendation": "String", "status": "${cont
 function fallbackProbe(panel: string, mode: string) {
   return { 
     description: "Manual assessment required. Local link offline.", 
-    recommendation: "Validate environment variables and local node status.", 
+    recommendation: "Ensure Local LLM server (LM Studio/Ollama) is responsive and configured correctly.", 
     status: mode as any, 
     elementType: panel, 
-    elementId: "LINK_FAIL", 
-    anomalies: ["AI_NODE_UNREACHABLE"], 
+    elementId: "LINK_VOID", 
+    anomalies: ["AI_NODE_DISCONNECTED"], 
     threatLevel: "ELEVATED" 
   };
 }

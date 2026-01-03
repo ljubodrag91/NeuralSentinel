@@ -1,30 +1,51 @@
-# Neural W Monitor - Kali Linux Interface
+# Neural Sentinel - Kali SOC Console v.2.9.9
 
-Neural W Monitor is a professional-grade multi-window web interface designed as a remote control panel for Kali Linux deployments on Raspberry Pi devices. It provides a localized, cyberpunk-styled SOC (Security Operations Center) experience with real-time telemetry, advanced toolkits, and an integrated AI Neural Engine for automated diagnostic probes.
+Neural Sentinel is a high-fidelity Security Operations Center (SOC) interface designed for managing remote Kali Linux deployments on Raspberry Pi devices. It bridges the gap between raw command-line tools and tactical intelligence through an integrated AI Neural Engine.
 
-## Core Features
+## 📊 System Telemetry Explanation
 
-- **Neural Probe System**: Deep analysis of panel metrics using Gemini AI or Local LLMs. It generates structured JSON diagnostic reports identifying anomalies, threat levels, and tactical recommendations.
-- **PiNode Management**: Persistent handshake protocol for establishing telemetry tunnels to remote nodes (REAL mode) or using synthetic data (SIMULATED mode).
-- **Spectrum Analysis**: High-fidelity visual telemetry for RF signal integrity (RSSI) and spectral density, featuring global timeframe management.
-- **Attack Toolkit**: A comprehensive, tree-structured explorer for penetration testing workflows including Reconnaissance, Wireless attacks, Web Enumeration, and Exploitation.
-- **Smart Tooltips**: Context-aware AI insights for every dashboard component, providing technical descriptions and advice.
-- **Cyberpunk UI**: High-fidelity aesthetic with CRT overlays, scanlines, chromatic aberration, and shimmer effects designed for professional security environments.
+The `SYSTEM_STATS` tab provides real-time visibility into the physical health and performance of the remote node. In a penetration testing context, these metrics are critical for mission success:
 
-## Architecture
+### 1. CPU Matrix (Compute & Thermals)
+- **Utilization Flow**: Measures processor saturation. High CPU usage is expected during active brute-forcing (Hashcat) or complex scanning (Nmap aggressive modes).
+- **Thermal Envelope**: Raspberry Pi devices are prone to thermal throttling. Monitoring temperature ensures the device doesn't down-clock or shut down during a critical exploitation phase.
+- **Load Average**: Displayed as 1, 5, and 15-minute intervals. This helps identify if the system is experiencing a temporary spike or sustained bottleneck.
 
-- **Frontend**: React 19, Tailwind CSS for layout, and Recharts for telemetry visualization.
-- **AI Integration**: Powered by `@google/genai` for Gemini Flash/Pro models, supporting both cloud-based and local LLM endpoints.
-- **Telemetry**: Real-time polling of system statistics (CPU, Temperature, RAM, Network) via a dedicated 5050 port heartbeat on the remote node.
-- **Visuals**: Specialized CSS-driven effects including "Neural Core" logic icons, CRT flickers, and localized scanlines.
+### 2. Memory Pool (Volatile Storage)
+- **RAM Allocation**: Tracks memory consumption. Tools like Metasploit or heavy web scanners (Burp Suite) can quickly consume the limited 4GB/8GB RAM on a Pi, leading to "Out of Memory" (OOM) kills.
+- **Saturation Ratio**: A percentage-based view of memory pressure. Sustained saturation above 85% indicates a high risk of session instability.
 
-## Usage Instructions
-
-1. **AI Initialization**: Open the `Global Settings` (gear icon) and ensure your Gemini API key is configured. You can toggle between Gemini and Local providers.
-2. **Mode Selection**: Switch between `SIMULATED` (for training/demonstration) and `REAL` (for active operations) via the toggle in the header.
-3. **Establish Handshake**: In the `Dashboard` tab, input the IP address of your Raspberry Pi Kali node and click `INITIALIZE` to link the telemetry streams.
-4. **Diagnostic Probes**: Every monitoring panel features a `PROBE` button. Clicking this triggers the AI Neural Engine to analyze current data and return a tactical report.
-5. **Execute Modules**: Navigate to the `Toolkit` tab, select a pentesting module, configure flags, and click `EXECUTE_MODULE_PAYLOAD` to send commands to the linked node.
+### 3. IO Adapter (Network Throughput)
+- **RX (Ingress)**: Volume of data entering the node. High RX is typical during packet captures or broad-spectrum network discovery.
+- **TX (Egress)**: Volume of data leaving the node. Crucial for monitoring data exfiltration or reverse-shell stability.
+- **Adapter Matrix**: Status indicators for `wlan0` (Wireless), `eth0` (Ethernet), and `lo` (Loopback). GREEN status indicates a stable link.
 
 ---
-*Build: Neural_Sentinel_v2.9.8_STABLE*
+
+## 🧠 Neural Intelligence Engine
+
+The "Neural" aspect of the console uses advanced LLMs (Gemini or Local) to act as a virtual security analyst.
+
+- **Neural Probe**: Located on every major card. Analyzes current telemetry and generates a JSON-structured tactical report. It identifies anomalies (e.g., "Unexpected CPU spike during idle") and suggests mitigations.
+- **Smart Tooltips (Brain Probe)**: Hover-activated AI analysis. It explains complex metrics or flags in plain language and provides professional recommendations based on the specific context of the data.
+- **Neural Stream v.10**: A unified logging system that prepends the latest activity to the top. It supports "Stream Probing," where the AI analyzes the recent log history or user-selected text for immediate insight.
+
+## ⚙️ Configuration & AI Link
+
+The console supports two primary AI backends:
+
+1.  **Google Gemini (Cloud)**: High-speed, high-reasoning model. Requires a valid API key.
+2.  **Local Node (Offline)**: Connects to local servers like **LM Studio** or **Ollama**. 
+    - **Endpoint**: Usually `http://localhost:1234/v1`.
+    - **Test Availability**: Use this button in Global Settings to verify the link. The `NEURAL_CORE` indicator in the header will glow **PURPLE** when a stable AI link is established.
+
+## 🛠 Operational Workflow
+
+1.  **Link Handshake**: Establish an SSH tunnel via the Dashboard.
+2.  **Telemetry Sync**: Ensure the remote Pi is running the sentinel heartbeat service on port **5050**.
+3.  **Tactical Execution**: Use the **Toolkit** to build and arm payloads. 
+4.  **Audit Archive**: All actions are recorded in the **History** tab for post-engagement reporting.
+
+---
+*Build: Neural_Sentinel_v2.9.9_STABLE*
+*Security Clearance: LEVEL_04_SOC_OP*

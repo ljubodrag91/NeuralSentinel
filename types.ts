@@ -12,8 +12,11 @@ export enum LogLevel {
   WARNING = 'WARNING',
   SYSTEM = 'SYSTEM',
   NEURAL = 'NEURAL',
-  ALERT = 'ALERT'
+  ALERT = 'ALERT',
+  COMMAND = 'COMMAND'
 }
+
+export type LogType = 'neural' | 'console' | 'kernel' | 'system';
 
 export interface LogEntry {
   id: string;
@@ -38,25 +41,50 @@ export interface PiStats {
     usage: number;
     temp: number;
     load: number[];
+    freqCurrent?: number;
+    freqMax?: number;
+    cores?: number;
   };
   memory?: {
     total: number;
     used: number;
     usage: number;
+    available?: number;
+    swapUsage?: number;
+  };
+  disk?: {
+    rootUsage: number;
+    readRate: number;
+    writeRate: number;
+    partitions?: any[];
   };
   network?: {
+    inRate: number;
+    outRate: number;
     interfaces: Record<string, {
       up: boolean;
       ip: string;
       rx: number;
       tx: number;
+      speed?: number;
+      mac?: string[];
+      ipv4?: string[];
     }>;
   };
-  neural?: {
-    latency: number;
-    contextUsage: number;
-    tokensPerSec: number;
-    linkStability: number;
+  processes?: {
+    topByCpu: any[];
+    topByMemory: any[];
+    total: number;
+  };
+  sensors?: {
+    throttled?: string;
+    throttledInfo?: string[];
+    raw?: Record<string, number>;
+  };
+  system?: {
+    hostname: string;
+    uptime: number;
+    osName: string;
   };
 }
 
@@ -72,6 +100,14 @@ export interface AIConfig {
   fallbackToLocal: boolean;
 }
 
+export interface AppSettings {
+  showAsciiBg: boolean;
+  globalDistortion: boolean;
+  panelDistortion: boolean;
+  pollInterval: number;
+  timeframe: Timeframe;
+}
+
 export interface SmartTooltipData {
   description: string;
   recommendation: string;
@@ -80,7 +116,7 @@ export interface SmartTooltipData {
   elementId: string;
 }
 
-export type Timeframe = '1m' | '5m' | '15m' | '30m' | '1h' | '6h';
+export type Timeframe = '1m' | '5m' | '15m' | '30m' | '1h' | '6h' | '12h' | '24h';
 
 export interface ToolParameter {
   name: string;
