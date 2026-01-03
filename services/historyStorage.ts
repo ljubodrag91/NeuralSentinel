@@ -19,10 +19,13 @@ export const HistoryStorage = {
     if (!store[type]) store[type] = [];
     
     const now = Date.now();
-    // Prune old entries
-    store[type] = store[type].filter(e => now - e.timestamp < MAX_AGE_MS);
     
-    // Store as flat CSV string data to save space, reconstructing metadata on read if needed
+    // Prune old entries strictly before appending
+    Object.keys(store).forEach(key => {
+        store[key] = store[key].filter(e => (now - e.timestamp) < MAX_AGE_MS);
+    });
+    
+    // Store as flat CSV string data to save space
     store[type].push({
       timestamp: now,
       data: values.join(',')
@@ -36,7 +39,11 @@ export const HistoryStorage = {
     if (!raw) return headers;
     
     const store: Record<string, HistoryEntry[]> = JSON.parse(raw);
-    const entries = store[type] || [];
+    let entries = store[type] || [];
+    
+    const now = Date.now();
+    // Filter on read as well
+    entries = entries.filter(e => (now - e.timestamp) < MAX_AGE_MS);
     
     if (entries.length === 0) return headers;
 
@@ -54,7 +61,10 @@ export const HistoryStorage = {
     if (!raw) return [];
 
     const store: Record<string, HistoryEntry[]> = JSON.parse(raw);
-    const entries = store[type] || [];
+    let entries = store[type] || [];
+    
+    const now = Date.now();
+    entries = entries.filter(e => (now - e.timestamp) < MAX_AGE_MS);
 
     return entries.map(e => ({
       timestamp: e.timestamp,
@@ -62,14 +72,13 @@ export const HistoryStorage = {
     })).reverse(); // Newest first
   },
 
-  // Legacy method for Session Actions
   getParsed(type: string): any[] {
     const entries = this.getEntries(type);
     return entries.map((e, index) => {
       const parts = e.values;
       return {
         id: `hist-${e.timestamp}-${index}`,
-        timestamp: parts[0] || new Date(e.timestamp).toLocaleTimeString(), // Legacy compat: sometimes session actions store time in data
+        timestamp: parts[0] || new Date(e.timestamp).toLocaleTimeString(),
         action: parts[1] || 'UNKNOWN',
         target: parts[2] || 'UNKNOWN',
         result: parts[3] || 'UNKNOWN'

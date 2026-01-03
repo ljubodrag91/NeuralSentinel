@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import BrainIcon from './BrainIcon';
 import Tooltip from './Tooltip';
 import TacticalButton from './TacticalButton';
+import { Platform } from '../../types';
 
 interface CardProps {
   id: string;
@@ -19,10 +20,12 @@ interface CardProps {
   variant?: 'real' | 'sim' | 'default' | 'blue' | 'purple' | 'green' | 'offline' | 'teal';
   probeColor?: string;
   allowDistortion?: boolean;
+  platform?: Platform;
+  cooldown?: number; // ms
 }
 
 const Card: React.FC<CardProps> = ({ 
-  id, title, titleTooltip, children, className = '', onProbe, onProbeInfo, onBrain, onLauncherSelect, onHistory, isProcessing, variant = 'default', probeColor, allowDistortion = false
+  id, title, titleTooltip, children, className = '', onProbe, onProbeInfo, onBrain, onLauncherSelect, onHistory, isProcessing, variant = 'default', probeColor, allowDistortion = false, platform, cooldown = 0
 }) => {
   const [isGlitching, setIsGlitching] = useState(false);
 
@@ -33,18 +36,12 @@ const Card: React.FC<CardProps> = ({
 
     const triggerGlitch = () => {
       setIsGlitching(true);
-      // Glitch duration: 150ms - 300ms (Quick, sharp snap)
       setTimeout(() => setIsGlitching(false), 150 + Math.random() * 150);
-
-      // Schedule next glitch: ~60s interval (50s - 70s range)
-      // Reduced from 2s-8s to prevent visual fatigue and match requirements
       const nextDelay = Math.random() * 20000 + 50000;
       timeoutId = setTimeout(triggerGlitch, nextDelay);
     };
 
-    // Initial start delay
     timeoutId = setTimeout(triggerGlitch, Math.random() * 5000 + 1000);
-
     return () => clearTimeout(timeoutId);
   }, [allowDistortion]);
 
@@ -73,7 +70,15 @@ const Card: React.FC<CardProps> = ({
     return '#bd00ff';
   };
 
+  const getTitleColor = () => {
+    if (platform === Platform.LINUX) return 'text-yellow-500';
+    if (platform === Platform.WINDOWS) return 'text-blue-400';
+    if (variant === 'offline') return 'text-red-900';
+    return 'text-white';
+  };
+
   const accent = getAccentStyles();
+  const titleColorClass = getTitleColor();
 
   return (
     <div className={`cyber-border bg-[#0a0c0f]/95 border-t-2 ${accent.border} ${accent.shadow} flex flex-col ${className} ${isGlitching ? 'core-distortion' : ''}`}>
@@ -82,12 +87,12 @@ const Card: React.FC<CardProps> = ({
           <div className="flex items-center gap-2">
             {titleTooltip ? (
               <Tooltip name={title} source="SYSTEM" desc={titleTooltip}>
-                <h3 className={`text-[10px] font-black uppercase tracking-[0.3em] ${variant === 'offline' ? 'text-red-900' : 'text-[#4a5568]'}`}>
+                <h3 className={`text-[10px] font-black uppercase tracking-[0.3em] ${titleColorClass}`}>
                   {title}
                 </h3>
               </Tooltip>
             ) : (
-              <h3 className={`text-[10px] font-black uppercase tracking-[0.3em] ${variant === 'offline' ? 'text-red-900' : 'text-[#4a5568]'}`}>
+              <h3 className={`text-[10px] font-black uppercase tracking-[0.3em] ${titleColorClass}`}>
                 {title}
               </h3>
             )}
@@ -101,7 +106,7 @@ const Card: React.FC<CardProps> = ({
                   className="w-3.5 h-3.5 border border-zinc-700 bg-zinc-950 flex items-center justify-center hover:border-zinc-400 group transition-all"
                 >
                   <svg className="w-2.5 h-2.5 text-zinc-500 group-hover:text-zinc-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    <path d="M12 8v4l3 3m6-3a9 9 0 1 1-12.73 0 9 9 0 0118 0z" />
                   </svg>
                 </button>
               </Tooltip>
@@ -133,6 +138,7 @@ const Card: React.FC<CardProps> = ({
                     color={getEffectiveProbeColor()}
                     size="sm"
                     hasTopPins={false}
+                    cooldown={cooldown}
                   />
                 </Tooltip>
               </div>

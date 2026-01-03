@@ -1,0 +1,27 @@
+
+export const arraysData = [
+  {
+    "id": "STD_SYS_SCANNER",
+    "name": "Standard_System_Scanner",
+    "description": "Baseline security auditing profile. Always available.",
+    "compatibility": "BOTH",
+    "nodeIds": ["BASIC_NODE", "NET_IFACE", "CPU_HEURISTICS", "MEM_INTEGRITY", "DISK_IO", "THERMAL_EVT"],
+    "settings": {
+      "maxExecutionTime": 10000,
+      "executionMode": "SEQUENTIAL",
+      "visualDensity": "MEDIUM"
+    }
+  },
+  {
+    "id": "FULL_SPECTRUM_GRID",
+    "name": "Full_Spectrum_Grid",
+    "description": "Advanced heavy-duty scanning configuration for deep-dive forensics.",
+    "compatibility": "BOTH",
+    "nodeIds": ["BASIC_NODE", "NET_IFACE", "DEV_TOPOLOGY", "SVC_DAEMON", "OPEN_PORTS", "CPU_HEURISTICS", "MEM_INTEGRITY", "DISK_IO", "SYS_LOGS", "PROC_ANOMALY", "THERMAL_EVT"],
+    "settings": {
+      "maxExecutionTime": 25000,
+      "executionMode": "PARALLEL",
+      "visualDensity": "HIGH"
+    }
+  }
+];

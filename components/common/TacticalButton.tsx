@@ -10,12 +10,14 @@ interface TacticalButtonProps {
   size?: 'sm' | 'md' | 'lg';
   className?: string;
   hasTopPins?: boolean;
+  cooldown?: number; // ms remaining
 }
 
 const TacticalButton: React.FC<TacticalButtonProps> = memo(({ 
-  label, onClick, onContextMenu, disabled, color = '#00ffd5', size = 'md', className = '', hasTopPins = false 
+  label, onClick, onContextMenu, disabled, color = '#00ffd5', size = 'md', className = '', hasTopPins = false, cooldown = 0 
 }) => {
   const isSm = size === 'sm';
+  const isCooldown = cooldown > 0;
   
   return (
     <div className={`relative flex flex-col items-center group ${className}`}>
@@ -30,7 +32,7 @@ const TacticalButton: React.FC<TacticalButtonProps> = memo(({
       
       {/* Transistor Body */}
       <button 
-        onClick={(e) => { e.stopPropagation(); onClick(); }}
+        onClick={(e) => { e.stopPropagation(); if (!isCooldown) onClick(); }}
         onContextMenu={(e) => {
           if (onContextMenu) {
             e.preventDefault();
@@ -38,18 +40,27 @@ const TacticalButton: React.FC<TacticalButtonProps> = memo(({
             onContextMenu(e);
           }
         }}
-        disabled={disabled}
+        disabled={disabled || isCooldown}
         className={`relative bg-[#050608] border-x border-b shadow-lg flex items-center justify-center transition-all disabled:opacity-30 overflow-hidden cursor-pointer active:scale-95 group-hover:bg-zinc-900/40`}
         style={{ 
-          borderColor: `${color}44`,
+          borderColor: isCooldown ? '#3f3f46' : `${color}44`, // zinc-700 when cooldown
           width: isSm ? '60px' : '80px',
           height: isSm ? '20px' : '28px',
-          boxShadow: `0 4px 10px rgba(0,0,0,0.5), inset 0 0 0px ${color}00`
+          boxShadow: `0 4px 10px rgba(0,0,0,0.5), inset 0 0 0px ${color}00`,
+          cursor: isCooldown ? 'not-allowed' : 'pointer'
         }}
       >
         {/* Glow effect on hover */}
-        <div className="absolute inset-0 opacity-0 group-hover:opacity-10 transition-opacity" style={{ backgroundColor: color }}></div>
+        {!isCooldown && <div className="absolute inset-0 opacity-0 group-hover:opacity-10 transition-opacity" style={{ backgroundColor: color }}></div>}
         
+        {/* Cooldown Overlay */}
+        {isCooldown && (
+           <div className="absolute inset-0 bg-black/80 flex items-center justify-center z-20">
+              <span className="text-[8px] font-black text-zinc-500 animate-pulse">{(cooldown / 1000).toFixed(1)}s</span>
+              <div className="absolute bottom-0 left-0 h-[2px] bg-red-500 transition-all duration-100 w-full animate-pulse"></div>
+           </div>
+        )}
+
         <div className="absolute top-0.5 left-1 text-[4px] text-zinc-800 font-mono tracking-tighter uppercase opacity-30 group-hover:opacity-50 transition-opacity">NPN_STNL</div>
         
         <span className={`font-black uppercase tracking-widest text-center transition-all group-hover:brightness-125`} style={{ 

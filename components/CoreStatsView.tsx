@@ -5,7 +5,7 @@ import Card from './common/Card';
 import Tooltip from './common/Tooltip';
 import { launcherSystem } from '../services/launcherService';
 import Modal from './common/Modal';
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, ResponsiveContainer } from 'recharts';
+import { AreaChart, Area, XAxis, YAxis, ResponsiveContainer } from 'recharts';
 
 interface CoreStatsViewProps {
   stats: CoreStats | null;
@@ -21,9 +21,12 @@ interface CoreStatsViewProps {
   processingId?: string;
   activeTelemetry: Set<string>;
   setActiveTelemetry: (s: Set<string>) => void;
+  launcherState?: Record<string, { cooldown: number }>; // New prop
 }
 
-const CoreStatsView: React.FC<CoreStatsViewProps> = ({ stats, mode, settings, onProbeClick, onProbeInfo, onBrainClick, onLauncherSelect, onCommand, onHistoryShow, processingId, activeTelemetry, setActiveTelemetry }) => {
+const CoreStatsView: React.FC<CoreStatsViewProps> = ({ 
+  stats, mode, settings, onProbeClick, onProbeInfo, onBrainClick, onLauncherSelect, onCommand, onHistoryShow, processingId, activeTelemetry, setActiveTelemetry, launcherState = {}
+}) => {
   const [showInfo, setShowInfo] = useState(false);
   const [tempHistory, setTempHistory] = useState<{time: string, temp: number}[]>([]);
   
@@ -62,6 +65,12 @@ const CoreStatsView: React.FC<CoreStatsViewProps> = ({ stats, mode, settings, on
     return launcherSystem.getById(id)?.color || '#bd00ff';
   };
 
+  const getCooldown = (panelId: string) => {
+    const slot = settings.panelSlots[panelId]?.dataSlot;
+    const id = slot?.launcherId || 'std-core';
+    return launcherState[id]?.cooldown || 0;
+  };
+
   const handleKillProcess = (pid: number) => {
     if (mode !== OperationalMode.REAL) return;
     
@@ -88,12 +97,7 @@ const CoreStatsView: React.FC<CoreStatsViewProps> = ({ stats, mode, settings, on
 
   const filteredProcesses = useMemo(() => {
     if (!stats?.processes) return [];
-    
-    // Choose source array based on sort preference, though usually both are available.
-    // Ideally we merge them, but for now we pick the one matching the sort key as primary data source if available.
     let rawList = procSort === 'cpu' ? (stats.processes.topByCpu || []) : (stats.processes.topByMemory || []);
-    
-    // Fallback if one list is missing
     if (rawList.length === 0) rawList = stats.processes.topByCpu || stats.processes.topByMemory || [];
 
     return rawList.filter(p => 
@@ -114,13 +118,12 @@ const CoreStatsView: React.FC<CoreStatsViewProps> = ({ stats, mode, settings, on
         </button>
       </div>
 
-      {/* Primary Telemetry Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 items-stretch">
         {/* CPU */}
         <Tooltip name="CPU_MATRIX" source={sourceState} desc="Thermal and computational load monitoring. Detects crypto-mining signatures or runaway processes via thermal spikes. Click to HIGHLIGHT. Right-click to CONFIGURE NEURAL LAUNCHER." className="h-full">
           <div 
             onClick={() => toggleMetric('cpu')}
-            onContextMenu={(e) => { e.preventDefault(); onLauncherSelect('GLOBAL_SYSTEM_PROBE', 'neural'); }}
+            onContextMenu={(e) => { e.preventDefault(); onLauncherSelect('brain_tooltip', 'neural'); }}
             className={`cursor-pointer border p-5 flex flex-col gap-3 transition-all group h-full ${
               activeTelemetry.has('cpu') ? 'bg-zinc-900/80 border-purple-500/50 shadow-[0_0_15px_rgba(168,85,247,0.1)]' : 'bg-black border-zinc-900 hover:border-zinc-800'
             }`}
@@ -146,7 +149,7 @@ const CoreStatsView: React.FC<CoreStatsViewProps> = ({ stats, mode, settings, on
         <Tooltip name="MEMORY_POOL" source={sourceState} desc="Volatile memory usage analysis. Monitors RAM allocation and Swap usage to detect buffer overflow attempts or leaks. Click to HIGHLIGHT. Right-click to CONFIGURE NEURAL LAUNCHER." className="h-full">
           <div 
             onClick={() => toggleMetric('ram')}
-            onContextMenu={(e) => { e.preventDefault(); onLauncherSelect('GLOBAL_SYSTEM_PROBE', 'neural'); }}
+            onContextMenu={(e) => { e.preventDefault(); onLauncherSelect('brain_tooltip', 'neural'); }}
             className={`cursor-pointer border p-5 flex flex-col gap-3 transition-all group h-full ${
               activeTelemetry.has('ram') ? 'bg-zinc-900/80 border-purple-500/50 shadow-[0_0_15px_rgba(168,85,247,0.1)]' : 'bg-black border-zinc-900 hover:border-zinc-800'
             }`}
@@ -172,7 +175,7 @@ const CoreStatsView: React.FC<CoreStatsViewProps> = ({ stats, mode, settings, on
         <Tooltip name="DISK_VOLUMES" source={sourceState} desc="Storage filesystem integrity monitor. Tracks partition usage and I/O rates to identify data exfiltration or ransomware activity. Click to HIGHLIGHT. Right-click to CONFIGURE NEURAL LAUNCHER." className="h-full">
           <div 
             onClick={() => toggleMetric('disk')}
-            onContextMenu={(e) => { e.preventDefault(); onLauncherSelect('GLOBAL_SYSTEM_PROBE', 'neural'); }}
+            onContextMenu={(e) => { e.preventDefault(); onLauncherSelect('brain_tooltip', 'neural'); }}
             className={`cursor-pointer border p-5 flex flex-col gap-3 transition-all group h-full ${
               activeTelemetry.has('disk') ? 'bg-zinc-900/80 border-purple-500/50 shadow-[0_0_15px_rgba(168,85,247,0.1)]' : 'bg-black border-zinc-900 hover:border-zinc-800'
             }`}
@@ -197,7 +200,7 @@ const CoreStatsView: React.FC<CoreStatsViewProps> = ({ stats, mode, settings, on
         <Tooltip name="IO_LINK" source={sourceState} desc="Network throughput analyzer. Measures RX/TX rates to detect C2 beacons or unauthorized large file transfers. Click to HIGHLIGHT. Right-click to CONFIGURE NEURAL LAUNCHER." className="h-full">
           <div 
             onClick={() => toggleMetric('net')}
-            onContextMenu={(e) => { e.preventDefault(); onLauncherSelect('GLOBAL_SYSTEM_PROBE', 'neural'); }}
+            onContextMenu={(e) => { e.preventDefault(); onLauncherSelect('brain_tooltip', 'neural'); }}
             className={`cursor-pointer border p-5 flex flex-col gap-3 transition-all group h-full ${
               activeTelemetry.has('net') ? 'bg-zinc-900/80 border-purple-500/50 shadow-[0_0_15px_rgba(168,85,247,0.1)]' : 'bg-black border-zinc-900 hover:border-zinc-800'
             }`}
@@ -228,18 +231,18 @@ const CoreStatsView: React.FC<CoreStatsViewProps> = ({ stats, mode, settings, on
           probeColor={getLauncherColor('NODE_DIAGNOSTICS')}
           onProbe={() => onProbeClick('NODE_DIAGNOSTICS', stats)} 
           onProbeInfo={() => onProbeInfo('NODE_DIAGNOSTICS', stats)}
-          onBrain={() => onBrainClick('NODE_DIAGNOSTICS', 'Environment Audit', stats)} 
-          onLauncherSelect={(type) => onLauncherSelect('NODE_DIAGNOSTICS', type)}
-          onHistory={() => onHistoryShow?.('NODE_DIAGNOSTICS', 'ENVIRONMENTAL_LOGS', ['TEMP', 'LOAD', 'UPTIME'])}
+          onBrain={() => onBrainClick('node_diag_panel', 'Environment Audit', stats)} 
+          onLauncherSelect={(_, type) => onLauncherSelect('NODE_DIAGNOSTICS', type)}
+          onHistory={() => onHistoryShow?.('NODE_DIAGNOSTICS', 'NODE_DIAG', ['TEMP', 'LOAD', 'UPTIME'])}
           isProcessing={processingId === 'NODE_DIAGNOSTICS'}
           allowDistortion={settings.panelDistortion}
+          cooldown={getCooldown('NODE_DIAGNOSTICS')}
         >
           <div className="space-y-4 font-mono text-[11px]">
              <div className="flex justify-between border-b border-zinc-900 pb-2"><span className="text-zinc-600 uppercase">Hostname</span><span className="text-teal-500 uppercase font-black">{stats?.system?.hostname || 'SENTINEL_NULL'}</span></div>
              <div className="flex justify-between border-b border-zinc-900 pb-2"><span className="text-zinc-600 uppercase">{settings.platform === Platform.WINDOWS ? 'OS_Version' : 'OS_Kernel'}</span><span className="text-zinc-400">{stats?.system?.osName || 'Unknown'}</span></div>
              <div className="flex justify-between border-b border-zinc-900 pb-2"><span className="text-zinc-600 uppercase">Uptime</span><span className="text-zinc-400">{stats?.system?.uptime ? (stats.system.uptime / 3600).toFixed(1) + 'h' : '—'}</span></div>
              
-             {/* Partitions List */}
              {stats?.disk?.partitions && (
                <div className="mt-4">
                  <h4 className="text-[9px] font-black text-zinc-700 uppercase mb-2">Partition_Matrix</h4>
@@ -255,7 +258,6 @@ const CoreStatsView: React.FC<CoreStatsViewProps> = ({ stats, mode, settings, on
                </div>
              )}
 
-             {/* Temp Graph */}
              {tempHistory.length > 0 && (
                 <div className="h-24 mt-4 border border-zinc-900/50 bg-black/20">
                    <ResponsiveContainer width="100%" height="100%">
@@ -278,23 +280,23 @@ const CoreStatsView: React.FC<CoreStatsViewProps> = ({ stats, mode, settings, on
           probeColor={getLauncherColor('PROCESS_PROBE')}
           onProbe={() => onProbeClick('PROCESS_PROBE', stats?.processes)} 
           onProbeInfo={() => onProbeInfo('PROCESS_PROBE', stats?.processes)}
-          onBrain={() => onBrainClick('PROCESS_PROBE', 'Process Probe', stats?.processes)} 
-          onLauncherSelect={(type) => onLauncherSelect('PROCESS_PROBE', type)}
-          onHistory={() => onHistoryShow?.('PROCESS_PROBE', 'PROCESS_SNAPSHOTS', ['PID', 'NAME', 'CPU%', 'MEM%'])}
+          onBrain={() => onBrainClick('process_audit_panel', 'Process Probe', stats?.processes)} 
+          onLauncherSelect={(_, type) => onLauncherSelect('PROCESS_PROBE', type)}
+          onHistory={() => onHistoryShow?.('PROCESS_PROBE', 'PROCESS_AUDIT', ['PID', 'NAME', 'CPU', 'MEM'])}
           isProcessing={processingId === 'PROCESS_PROBE'}
           allowDistortion={settings.panelDistortion}
+          cooldown={getCooldown('PROCESS_PROBE')}
         >
           <div className="flex flex-col h-full">
-            {/* Process Controls */}
             <div className="flex gap-2 mb-3">
               <input 
                 type="text" 
                 value={procFilter}
                 onChange={(e) => setProcFilter(e.target.value)}
                 placeholder="FILTER PID/NAME..."
-                className="bg-black/50 border border-zinc-900 px-2 py-1 text-[9px] text-zinc-300 font-mono outline-none focus:border-purple-500/50 flex-1"
+                className="bg-black/50 border border-zinc-900 px-2 py-1 text-[9px] md:text-[14px] lg:text-[9px] text-zinc-300 font-mono outline-none focus:border-purple-500/50 flex-1 min-w-0"
               />
-              <div className="flex border border-zinc-900">
+              <div className="flex border border-zinc-900 shrink-0">
                 <button 
                   onClick={() => setProcSort('cpu')}
                   className={`px-2 py-1 text-[8px] font-black uppercase transition-all ${procSort === 'cpu' ? 'bg-teal-500/20 text-teal-400' : 'text-zinc-600 hover:text-zinc-400'}`}
@@ -321,7 +323,7 @@ const CoreStatsView: React.FC<CoreStatsViewProps> = ({ stats, mode, settings, on
               
               {filteredProcesses.length > 0 ? filteredProcesses.slice(0, 50).map((p: any) => (
                 <div key={p.pid} className="grid grid-cols-12 items-center text-[10px] font-mono border-b border-zinc-900/30 py-1 hover:bg-white/5 transition-colors group">
-                  <div className="col-span-2 text-zinc-600">{p.pid}</div>
+                  <div className="col-span-2 text-zinc-600 truncate">{p.pid}</div>
                   <div className="col-span-5 text-zinc-300 truncate uppercase group-hover:text-white transition-colors">{p.name}</div>
                   <div className="col-span-3 text-right flex gap-2 justify-end">
                     <span className={`text-[9px] ${procSort === 'cpu' ? 'text-teal-500 font-bold' : 'text-zinc-500'}`}>{p.cpu_percent ? p.cpu_percent.toFixed(1) : 0}%</span>

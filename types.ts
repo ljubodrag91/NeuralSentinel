@@ -160,7 +160,7 @@ export interface NeuralNetworkConfig {
 
 export interface SlotConfig {
   launcherId: string;
-  ammoId: string;
+  ammoId: string; // Internal ID refers to Consumable
 }
 
 export interface PanelSlotConfig {
@@ -181,8 +181,6 @@ export interface AppSettings {
   neuralRechargeRate: number; 
   maxCoreCharges: number;
   maxNeuralCharges: number;
-  // Deprecated: probeLaunchers: Record<string, string>;
-  // New per-panel dual-slot configuration
   panelSlots: Record<string, PanelSlotConfig>;
   telemetryEnabled: boolean;
   neuralUplinkEnabled: boolean;
@@ -207,19 +205,19 @@ export interface Launcher {
   description: string;
   maxCharges: number;
   rechargeRate: number; // seconds
-  compatibleProbes: string[]; // probe types or ids
+  compatibleProbes: string[]; 
   color: string;
-  tokens: number; // Max chars for core, max output tokens for neural
+  tokens: number;
 }
 
-export interface ProbeAmmunition {
+export interface Consumable {
   id: string;
   name: string;
   type: 'data' | 'neural';
   description: string;
   compatibleLaunchers: ('core' | 'neural')[];
   cost: number;
-  features: string[]; // e.g., 'HISTORY', 'THERMAL'
+  features: string[];
   disabled?: boolean;
   unlimited?: boolean;
   maxStack?: number;
@@ -241,6 +239,43 @@ export interface ProbeResult {
   elementId: string;
   anomalies: string[];
   threatLevel: "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
+}
+
+// --- SCANNER SYSTEM TYPES ---
+
+export type SensorScanType = 'NETWORK' | 'SYSTEM' | 'PROCESS' | 'FILESYSTEM' | 'SECURITY';
+
+export interface SensorNodeConfig {
+  id: string;
+  name: string;
+  type: SensorScanType;
+  enabled: boolean;
+  description: string;
+  anomalyCriteria: string;
+  noDataDefinition: string;
+  sensitivity: number; // 1-100
+  timeout: number; // ms
+  // Visual placement
+  x: number;
+  y: number;
+}
+
+export interface GlobalArraySettings {
+  maxExecutionTime: number; // ms
+  executionMode: 'SEQUENTIAL' | 'PARALLEL';
+  visualDensity: 'LOW' | 'MEDIUM' | 'HIGH';
+}
+
+export interface SensorArrayConfig {
+  id: string;
+  name: string;
+  description: string;
+  compatibility?: "WINDOWS" | "LINUX" | "BOTH";
+  nodeIds?: string[]; // References to SensorNodeConfig IDs
+  nodes: SensorNodeConfig[]; // Hydrated nodes
+  settings: GlobalArraySettings;
+  created: number;
+  modified: number;
 }
 
 export interface ToolParameter {

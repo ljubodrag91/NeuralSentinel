@@ -24,10 +24,11 @@ interface DashboardProps {
   processingId?: string;
   latestCoreProbeResult?: any;
   activeTelemetry?: Set<string>;
+  launcherState?: Record<string, { cooldown: number }>; // New prop
 }
 
 const Dashboard: React.FC<DashboardProps> = ({ 
-  mode, session, stats, settings, terminalHistory, onHandshake, onDisconnect, onBrainClick, onProbeClick, onProbeInfo, onLauncherSelect, onAdapterCommand, onHistoryShow, processingId, latestCoreProbeResult, activeTelemetry
+  mode, session, stats, settings, terminalHistory, onHandshake, onDisconnect, onBrainClick, onProbeClick, onProbeInfo, onLauncherSelect, onAdapterCommand, onHistoryShow, processingId, latestCoreProbeResult, activeTelemetry, launcherState = {}
 }) => {
   // Removed hardcoded placeholders. Remote connections require manual entry.
   const [ipInput, setIpInput] = useState('');
@@ -84,6 +85,12 @@ const Dashboard: React.FC<DashboardProps> = ({
     return launcherSystem.getById(id)?.color || '#bd00ff';
   };
 
+  const getCooldown = (panelId: string) => {
+    const slot = settings.panelSlots[panelId]?.dataSlot;
+    const id = slot?.launcherId || 'std-core';
+    return launcherState[id]?.cooldown || 0;
+  };
+
   // Logic for Handshake Panel Visuals
   // Local: Blue if stats present (online), Red if not. Always disabled.
   // Remote: Green if connected, Red if disconnected. Enabled when disconnected.
@@ -125,11 +132,12 @@ const Dashboard: React.FC<DashboardProps> = ({
 
       {!terminalMode ? (
         <>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-stretch shrink-0">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-stretch shrink-0">
             <Card 
               id="HANDSHAKE_CORE"
               title="HANDSHAKE_NODE" 
               variant={handshakeVariant}
+              platform={settings.platform}
               onProbe={() => onProbeClick('HANDSHAKE_CORE', { ipInput: isLocal ? '127.0.0.1' : ipInput, user: isLocal ? localIdentity : user, port })}
               onProbeInfo={() => onProbeInfo('HANDSHAKE_CORE', { ipInput: isLocal ? '127.0.0.1' : ipInput, user: isLocal ? localIdentity : user, port })}
               onBrain={() => onBrainClick('HANDSHAKE_CORE', 'Connection Link', { ipInput: isLocal ? '127.0.0.1' : ipInput, user, status: session.status })}
@@ -137,13 +145,14 @@ const Dashboard: React.FC<DashboardProps> = ({
               onHistory={() => onHistoryShow?.('HANDSHAKE_CORE', 'CONNECTION_ATTEMPTS', ['IP', 'USER', 'PORT', 'STATUS'])}
               isProcessing={processingId === 'HANDSHAKE_CORE'}
               probeColor={getLauncherColor('HANDSHAKE_CORE')}
+              cooldown={getCooldown('HANDSHAKE_CORE')}
             >
               <div className="space-y-4">
                 <input 
                   value={isLocal ? 'LOCALHOST [127.0.0.1]' : ipInput} 
                   onChange={e => setIpInput(e.target.value)} 
                   disabled={isHandshakeInputDisabled} 
-                  className={`bg-black/50 border p-2 text-[11px] font-mono outline-none w-full transition-colors ${
+                  className={`bg-black/50 border p-2 text-[11px] md:text-[16px] lg:text-[11px] font-mono outline-none w-full transition-colors ${
                     isLocal 
                       ? 'border-zinc-900 text-blue-500/50 cursor-not-allowed' 
                       : (isConnected ? 'border-green-900/50 text-green-500/50' : 'border-zinc-800 text-white focus:border-green-500')
@@ -155,7 +164,7 @@ const Dashboard: React.FC<DashboardProps> = ({
                     value={isLocal ? localIdentity : user} 
                     onChange={e => setUser(e.target.value)} 
                     disabled={isHandshakeInputDisabled} 
-                    className={`bg-black/50 border p-1.5 text-[10px] font-mono outline-none ${isLocal ? 'border-zinc-900 text-blue-500/50' : 'border-zinc-900 text-zinc-300 focus:border-green-500'}`} 
+                    className={`bg-black/50 border p-1.5 text-[10px] md:text-[16px] lg:text-[10px] font-mono outline-none ${isLocal ? 'border-zinc-900 text-blue-500/50' : 'border-zinc-900 text-zinc-300 focus:border-green-500'}`} 
                     placeholder="user" 
                   />
                   <input 
@@ -163,7 +172,7 @@ const Dashboard: React.FC<DashboardProps> = ({
                     value={isLocal ? '******' : pass} 
                     onChange={e => setPass(e.target.value)} 
                     disabled={isHandshakeInputDisabled} 
-                    className={`bg-black/50 border p-1.5 text-[10px] font-mono outline-none ${isLocal ? 'border-zinc-900 text-blue-500/50' : 'border-zinc-900 text-zinc-300 focus:border-green-500'}`} 
+                    className={`bg-black/50 border p-1.5 text-[10px] md:text-[16px] lg:text-[10px] font-mono outline-none ${isLocal ? 'border-zinc-900 text-blue-500/50' : 'border-zinc-900 text-zinc-300 focus:border-green-500'}`} 
                     placeholder="pass" 
                   />
                   <input 
@@ -171,13 +180,13 @@ const Dashboard: React.FC<DashboardProps> = ({
                     value={isLocal ? 'N/A' : port} 
                     onChange={e => setPort(Number(e.target.value))} 
                     disabled={isHandshakeInputDisabled} 
-                    className={`bg-black/50 border p-1.5 text-[10px] font-mono outline-none ${isLocal ? 'border-zinc-900 text-blue-500/50' : 'border-zinc-900 text-zinc-300 focus:border-green-500'}`} 
+                    className={`bg-black/50 border p-1.5 text-[10px] md:text-[16px] lg:text-[10px] font-mono outline-none ${isLocal ? 'border-zinc-900 text-blue-500/50' : 'border-zinc-900 text-zinc-300 focus:border-green-500'}`} 
                   />
                 </div>
                 <button 
                   onClick={isLocal ? undefined : (isConnected ? onDisconnect : () => onHandshake(ipInput, user, pass, port))} 
                   disabled={isLocal}
-                  className={`w-full py-3 text-[10px] font-black border transition-all tracking-widest uppercase ${
+                  className={`w-full py-3 text-[10px] font-black border transition-all tracking-widest uppercase min-h-[44px] ${
                     isLocal 
                       ? 'border-zinc-900 text-zinc-700 bg-zinc-950 cursor-not-allowed'
                       : isConnected 
@@ -194,6 +203,7 @@ const Dashboard: React.FC<DashboardProps> = ({
               id="ADAPTER_HUB"
               title="ADAPTER_MATRIX" 
               variant={handshakeVariant} 
+              platform={settings.platform}
               onProbe={() => onProbeClick('ADAPTER_HUB', { stats })} 
               onProbeInfo={() => onProbeInfo('ADAPTER_HUB', { stats })}
               onBrain={() => onBrainClick('ADAPTER_HUB', 'Network Matrix', { stats })} 
@@ -201,17 +211,28 @@ const Dashboard: React.FC<DashboardProps> = ({
               onHistory={() => onHistoryShow?.('ADAPTER_HUB', 'INTERFACE_TRAFFIC', ['CONNS', 'RX(KB)', 'TX(KB)'])}
               isProcessing={processingId === 'ADAPTER_HUB'}
               probeColor={getLauncherColor('ADAPTER_HUB')}
+              cooldown={getCooldown('ADAPTER_HUB')}
             >
               <div className="flex flex-col gap-2 max-h-40 overflow-y-auto no-scroll">
+                <div className="grid grid-cols-4 px-2 py-1 text-[8px] font-black text-zinc-600 uppercase border-b border-zinc-900/50 mb-1">
+                   <div className="col-span-1">Status</div>
+                   <div className="col-span-1">IF_Name</div>
+                   <div className="col-span-2 text-right">IP_Assignment</div>
+                </div>
                 {adapters.map(name => {
                   const data = getInterfaceData(name);
                   return (
-                    <div key={name} className="px-4 py-2 border border-zinc-900/40 bg-black/20 flex justify-between items-center group hover:bg-teal-500/5 transition-all">
-                      <div className="flex items-center gap-3">
-                        <div className={`w-1.5 h-1.5 rounded-full ${data.up ? 'bg-green-500 glow-green' : 'bg-red-500'}`}></div>
-                        <span className="text-[10px] font-black text-zinc-500 uppercase tracking-widest group-hover:text-teal-400">{name}</span>
+                    <div key={name} className="px-2 py-2 border border-zinc-900/40 bg-black/20 grid grid-cols-4 items-center group hover:bg-teal-500/5 transition-all">
+                      <div className="col-span-1 flex items-center gap-2">
+                        <div className={`w-1.5 h-1.5 rounded-full ${data.up ? 'bg-green-500 glow-green' : 'bg-zinc-700'}`}></div>
+                        {data.up && <div className="w-1 h-1 bg-green-500/50 animate-ping"></div>}
                       </div>
-                      <span className="text-[10px] font-mono text-zinc-600">{data.ip}</span>
+                      <div className="col-span-1 text-[10px] font-black text-zinc-500 uppercase tracking-widest group-hover:text-teal-400 truncate">
+                        {name}
+                      </div>
+                      <div className="col-span-2 text-[10px] font-mono text-zinc-600 text-right truncate">
+                        {data.ip}
+                      </div>
                     </div>
                   );
                 })}
@@ -223,12 +244,14 @@ const Dashboard: React.FC<DashboardProps> = ({
             id="GLOBAL_SYSTEM_PROBE"
             title="MASTER_INTELLIGENCE_LINK" 
             variant="purple" 
+            platform={settings.platform}
             className="relative overflow-visible shrink-0 pb-6 flex-1 max-h-[350px]"
             // Header actions: Brain and Launcher Config restored
             onBrain={() => onBrainClick('GLOBAL_SYSTEM_PROBE', 'Neural Hub Intelligence', { latestResult: latestCoreProbeResult })}
             onLauncherSelect={(_, type) => onLauncherSelect('GLOBAL_SYSTEM_PROBE', type)}
             onHistory={() => onHistoryShow?.('GLOBAL_SYSTEM_PROBE', 'CORE_METRICS', ['CPU%', 'RAM%', 'DISK%'])}
             probeColor={getLauncherColor('GLOBAL_SYSTEM_PROBE')}
+            cooldown={getCooldown('GLOBAL_SYSTEM_PROBE')}
           >
             <div className="flex flex-col h-full">
               {/* STATUS CIRCLES RESTORED */}
@@ -243,9 +266,9 @@ const Dashboard: React.FC<DashboardProps> = ({
                   </div>
               </div>
 
-              <div className="flex items-center justify-between gap-8 flex-1 min-h-0">
+              <div className="flex flex-col md:flex-row items-center justify-between gap-8 flex-1 min-h-0">
                 {/* Status Left */}
-                <div className="flex-1 text-[10px] font-mono text-zinc-500 leading-relaxed border-r border-zinc-900/30 pr-4 h-full overflow-y-auto no-scroll flex flex-col justify-center">
+                <div className="flex-1 w-full text-[10px] font-mono text-zinc-500 leading-relaxed md:border-r border-zinc-900/30 md:pr-4 h-full overflow-y-auto no-scroll flex flex-col justify-center text-center md:text-left">
                   {latestCoreProbeResult ? (
                     <div className="animate-in fade-in duration-500">
                       <div className="text-purple-400 font-black mb-1 uppercase tracking-tighter">Status: {latestCoreProbeResult.status}</div>
@@ -272,20 +295,26 @@ const Dashboard: React.FC<DashboardProps> = ({
                     <div className="block cursor-help">
                       <button 
                         onClick={() => onProbeClick('GLOBAL_SYSTEM_PROBE', { stats, mode, activeFocus: Array.from(activeTelemetry || []) })}
-                        disabled={isProbeActive}
+                        disabled={isProbeActive || getCooldown('GLOBAL_SYSTEM_PROBE') > 0}
                         className="relative w-64 h-20 bg-[#050608] border-x border-b border-purple-500/60 shadow-2xl flex flex-col items-center justify-center transition-all group-hover:border-purple-400 group-hover:shadow-[0_0_30px_rgba(189,0,255,0.2)] disabled:opacity-50 overflow-hidden cursor-pointer"
                       >
                         <div className="absolute top-2 left-4 text-[6px] text-zinc-800 font-mono tracking-tighter uppercase">Sentinel_NPN_v2.9</div>
                         <div className="absolute bottom-2 right-4 text-[6px] text-zinc-800 font-mono tracking-tighter uppercase">Lot: 0xNEURAL</div>
                         
                         <span className={`text-[12px] font-black uppercase tracking-[0.6em] transition-colors ${isProbeActive ? 'text-white animate-pulse' : 'text-purple-400 group-hover:text-purple-200'}`}>
-                          {isProbeActive ? 'SCANNING...' : 'CORE PROBE'}
+                          {isProbeActive ? 'SCANNING...' : (getCooldown('GLOBAL_SYSTEM_PROBE') > 0 ? 'COOLDOWN' : 'CORE PROBE')}
                         </span>
                         
                         {isProbeActive && (
                           <div className="absolute inset-0 pointer-events-none">
                             <div className="w-full h-full bg-purple-500/10 animate-ping opacity-20"></div>
                           </div>
+                        )}
+                        {/* Cooldown Overlay for Big Button */}
+                        {getCooldown('GLOBAL_SYSTEM_PROBE') > 0 && !isProbeActive && (
+                           <div className="absolute inset-0 bg-black/80 flex items-center justify-center z-20">
+                              <span className="text-[10px] font-black text-red-500 animate-pulse">{(getCooldown('GLOBAL_SYSTEM_PROBE') / 1000).toFixed(1)}s</span>
+                           </div>
                         )}
                       </button>
                     </div>
@@ -303,7 +332,7 @@ const Dashboard: React.FC<DashboardProps> = ({
                 </div>
 
                 {/* Recommendation Right */}
-                <div className="flex-1 text-[10px] font-mono text-zinc-500 leading-relaxed border-l border-zinc-900/30 pl-4 h-full overflow-y-auto no-scroll flex flex-col justify-center">
+                <div className="flex-1 w-full text-[10px] font-mono text-zinc-500 leading-relaxed md:border-l border-zinc-900/30 md:pl-4 h-full overflow-y-auto no-scroll flex flex-col justify-center text-center md:text-left">
                   {latestCoreProbeResult ? (
                     <div className="animate-in fade-in duration-500">
                       <div className="text-teal-500 font-black mb-1 uppercase tracking-tighter">Recommendation:</div>
@@ -341,7 +370,7 @@ const Dashboard: React.FC<DashboardProps> = ({
                  <span className="text-teal-500 font-black">{prompt}</span>
                  <input 
                     ref={consoleInputRef} value={consoleInput} onChange={e => setConsoleInput(e.target.value)}
-                    className="flex-1 bg-transparent border-none outline-none text-white selection:bg-teal-500/30 placeholder-zinc-800"
+                    className="flex-1 bg-transparent border-none outline-none text-white selection:bg-teal-500/30 placeholder-zinc-800 text-[16px] md:text-[14px]"
                     placeholder="Enter command vector..." autoFocus
                  />
               </form>
