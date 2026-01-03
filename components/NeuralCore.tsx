@@ -20,7 +20,7 @@ const NeuralCore: React.FC<NeuralCoreProps> = ({ state }) => {
     <div className={`relative w-40 h-16 flex items-center justify-center transition-all duration-700 cursor-pointer group`}>
       {/* HUD Background elements */}
       <div 
-        className="absolute inset-0 opacity-10 group-hover:opacity-25 transition-opacity duration-1000 blur-xl pointer-events-none"
+        className="absolute inset-0 opacity-10 group-hover:opacity-30 transition-opacity duration-1000 blur-xl pointer-events-none"
         style={{ background: `radial-gradient(circle, ${color} 0%, transparent 80%)` }}
       ></div>
 
@@ -49,8 +49,8 @@ const NeuralCore: React.FC<NeuralCoreProps> = ({ state }) => {
           <React.Fragment key={i}>
             <rect x={42 + i * 7} y="2" width="1" height="4" fill={color} opacity="0.4" />
             <rect x={42 + i * 7} y="34" width="1" height="4" fill={color} opacity="0.4" />
-            <rect x="32" y="12 + i * 7" width="4" height="1" fill={color} opacity="0.4" />
-            <rect x="64" y="12 + i * 7" width="4" height="1" fill={color} opacity="0.4" />
+            <rect x="32" y={12 + i * 7} width="4" height="1" fill={color} opacity="0.4" />
+            <rect x="64" y={12 + i * 7} width="4" height="1" fill={color} opacity="0.4" />
           </React.Fragment>
         ))}
 
@@ -65,20 +65,26 @@ const NeuralCore: React.FC<NeuralCoreProps> = ({ state }) => {
         {/* Energy Core Die */}
         <rect x="47" y="17" width="6" height="6" fill={color} className="animate-pulse" opacity="0.2" />
         <circle cx="50" cy="20" r="1.5" fill={accent} filter="url(#hudGlow)">
-          <animate attributeName="r" values="1;2;1" dur="2s" repeatCount="indefinite" />
+          <animate attributeName="r" values="1;2.5;1" dur="1.5s" repeatCount="indefinite" />
         </circle>
 
-        {/* Spark Arcs (Active Link Indicators) - only appears if connected/simulated */}
-        {state !== 'disconnected' && (
-          <g filter="url(#hudGlow)">
-            <path d="M38 10 L42 14" stroke={accent} strokeWidth="0.5" strokeLinecap="round">
-              <animate attributeName="opacity" values="0;1;0" dur="0.1s" repeatCount="indefinite" />
-            </path>
-            <path d="M62 30 L58 26" stroke={accent} strokeWidth="0.5" strokeLinecap="round">
+        {/* Spark Arcs (Electrical Discharge) */}
+        <g filter="url(#hudGlow)" className="transition-opacity duration-300">
+           {/* Top-Left Spark */}
+           <path d="M38 8 L42 12" stroke={accent} strokeWidth="0.4" opacity="0.8">
+              <animate attributeName="opacity" values="0;1;0" dur="0.08s" repeatCount="indefinite" />
+              <animate attributeName="d" values="M38 8 L42 12; M37 7 L43 13; M38 8 L42 12" dur="0.1s" repeatCount="indefinite" />
+           </path>
+           {/* Bottom-Right Spark */}
+           <path d="M62 32 L58 28" stroke={accent} strokeWidth="0.4" opacity="0.8">
               <animate attributeName="opacity" values="0;1;0" dur="0.12s" repeatCount="indefinite" />
-            </path>
-          </g>
-        )}
+              <animate attributeName="d" values="M62 32 L58 28; M63 33 L57 27; M62 32 L58 28" dur="0.09s" repeatCount="indefinite" />
+           </path>
+           {/* Center Horizontal Pulse Spark */}
+           <line x1="45" y1="20" x2="55" y2="20" stroke="white" strokeWidth="0.2" opacity="0.4">
+              <animate attributeName="opacity" values="0;0.5;0" dur="0.05s" repeatCount="indefinite" />
+           </line>
+        </g>
 
         {/* Technical Labels */}
         <text x="50" y="38" fill={color} fontSize="2.5" fontWeight="900" textAnchor="middle" opacity="0.6" letterSpacing="1">STN_CORE</text>
