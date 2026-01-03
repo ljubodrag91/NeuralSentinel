@@ -1,19 +1,25 @@
+
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { OperationalMode, SessionInfo, PiStats } from '../types';
+import { OperationalMode, SessionInfo, PiStats, AppSettings } from '../types';
 import Card from './common/Card';
 import Tooltip from './common/Tooltip';
 import TacticalButton from './common/TacticalButton';
-import BrainIcon from './common/BrainIcon';
+import BrainIcon from './components/common/BrainIcon';
+import { launcherSystem } from '../services/launcherService';
 
 interface DashboardProps {
   mode: OperationalMode;
   session: SessionInfo;
   stats: PiStats | null;
+  settings: AppSettings;
+  terminalHistory: string[];
   onHandshake: (ip: string, username: string, password: string, port: number) => void;
   onDisconnect: () => void;
   onLog: (msg: string, level?: any) => void;
   onBrainClick: (id: string, type: string, metrics: any) => void;
   onProbeClick: (panel: string, metrics: any) => void;
+  onProbeInfo: (panelName: string, metrics: any) => void;
+  onLauncherSelect: (id: string, type: 'core' | 'neural') => void;
   onAdapterCommand: (cmd: string) => void;
   onRefresh: () => void;
   processingId?: string;
@@ -22,7 +28,7 @@ interface DashboardProps {
 }
 
 const Dashboard: React.FC<DashboardProps> = ({ 
-  mode, session, stats, onHandshake, onDisconnect, onLog, onBrainClick, onProbeClick, onAdapterCommand, onRefresh, processingId, latestCoreProbeResult, activeTelemetry
+  mode, session, stats, settings, terminalHistory, onHandshake, onDisconnect, onLog, onBrainClick, onProbeClick, onProbeInfo, onLauncherSelect, onAdapterCommand, onRefresh, processingId, latestCoreProbeResult, activeTelemetry
 }) => {
   const [ipInput, setIpInput] = useState('10.121.41.108');
   const [user, setUser] = useState('kali');
@@ -31,6 +37,7 @@ const Dashboard: React.FC<DashboardProps> = ({
   const [terminalMode, setTerminalMode] = useState(false);
   const [consoleInput, setConsoleInput] = useState('');
   const consoleInputRef = useRef<HTMLInputElement>(null);
+  const terminalEndRef = useRef<HTMLDivElement>(null);
   
   const adapters = useMemo(() => {
     const base = ['wlan0', 'wlan1', 'eth0', 'lo'];
@@ -44,6 +51,12 @@ const Dashboard: React.FC<DashboardProps> = ({
   useEffect(() => {
     if (session.targetIp) setIpInput(session.targetIp);
   }, [session.targetIp]);
+
+  useEffect(() => {
+    if (terminalEndRef.current) {
+      terminalEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [terminalHistory]);
 
   const getInterfaceData = (name: string) => {
     if (mode === OperationalMode.SIMULATED) {
@@ -61,11 +74,6 @@ const Dashboard: React.FC<DashboardProps> = ({
   const isConnected = session.status === 'ACTIVE';
   const isProbeActive = processingId === 'GLOBAL_SYSTEM_AUDIT';
 
-  const getDynamicVariant = () => {
-    if (mode === OperationalMode.SIMULATED) return 'sim';
-    return isConnected ? 'real' : 'offline';
-  };
-
   const handleConsoleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (consoleInput.trim()) {
@@ -80,6 +88,11 @@ const Dashboard: React.FC<DashboardProps> = ({
     }
   }, [terminalMode]);
 
+  const getLauncherColor = (panelId: string) => {
+    const id = settings.probeLaunchers[panelId];
+    return launcherSystem.getById(id)?.color || '#bd00ff';
+  };
+
   return (
     <div className="space-y-6 h-full flex flex-col no-scroll overflow-hidden pb-4">
       <div className="flex justify-between items-center px-2 shrink-0">
@@ -88,8 +101,9 @@ const Dashboard: React.FC<DashboardProps> = ({
             <span className="text-[10px] font-black text-zinc-700 uppercase tracking-widest cursor-help">Dashboard_Stream</span>
           </Tooltip>
           {isConnected && (
-            <Tooltip name="TERMINAL_OVERLAY" source="SYSTEM" desc="Engage/Disengage the interactive bash console overlay for direct command injection.">
+            <Tooltip name="TERMINAL_OVERLAY" source="SYSTEM" desc="Engage/Disengage the interactive bash console overlay.">
               <button 
+                type="button"
                 onClick={() => setTerminalMode(!terminalMode)}
                 className={`px-4 py-1.5 border text-[9px] font-black uppercase tracking-widest transition-all ${terminalMode ? 'bg-teal-500/10 border-teal-500 text-teal-400' : 'bg-zinc-950 border-zinc-800 text-zinc-600 hover:text-white'}`}
               >
@@ -98,86 +112,80 @@ const Dashboard: React.FC<DashboardProps> = ({
             </Tooltip>
           )}
         </div>
-        <Tooltip name="NODE_STATUS" source={isConnected ? 'LINKED' : 'READY'} desc="Current bridge integrity state. LINKED indicates active SSH session.">
-          <div className="text-[9px] font-mono text-zinc-800 uppercase cursor-help">STN_NODE_STATUS: {isConnected ? 'LINKED' : 'READY'}</div>
-        </Tooltip>
+        <div className="flex items-center gap-3">
+          <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`}></div>
+          <div className="text-[9px] font-mono text-zinc-800 uppercase">STN_NODE_STATUS: {isConnected ? 'LINKED' : 'VOID'}</div>
+        </div>
       </div>
 
       {!terminalMode ? (
         <>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-stretch shrink-0">
             <Card 
+              id="HANDSHAKE_CORE"
               title="HANDSHAKE_NODE" 
-              titleTooltip="Primary SSH authentication node. SCANNING consumes 1 CORE CHARGE (Purple)."
-              variant={getDynamicVariant()}
+              variant={isConnected ? 'real' : 'offline'}
               onProbe={() => onProbeClick('HANDSHAKE_CORE', { ipInput, user, port })}
+              onProbeInfo={() => onProbeInfo('HANDSHAKE_CORE', { ipInput, user, port })}
               onBrain={() => onBrainClick('handshake_panel', 'Connection Link', { ipInput, user, status: session.status })}
+              onLauncherSelect={(type) => onLauncherSelect('HANDSHAKE_CORE', type)}
               isProcessing={processingId === 'HANDSHAKE_CORE'}
               className="flex-1"
-              probeColor="#bd00ff"
+              probeColor={getLauncherColor('HANDSHAKE_CORE')}
             >
               <div className="space-y-4">
                 <div className="flex flex-col gap-1">
-                  <Tooltip name="TARGET_LINK" source="CONFIG" desc="Remote destination IP address. Ensure port 22 is reachable.">
-                    <label className="text-[10px] font-black text-zinc-700 uppercase tracking-widest cursor-help">Target_Link</label>
-                  </Tooltip>
-                  <input value={ipInput} onChange={e => setIpInput(e.target.value)} disabled={isConnected} className={`bg-black/50 border border-zinc-900 p-2 text-[11px] font-mono outline-none ${isConnected ? 'text-teal-500/50 cursor-not-allowed' : 'text-white'}`} placeholder="0.0.0.0" />
+                  <label className="text-[10px] font-black text-zinc-700 uppercase tracking-widest">Target_Link</label>
+                  <input value={ipInput ?? ""} onChange={e => setIpInput(e.target.value)} disabled={isConnected} className={`bg-black/50 border border-zinc-900 p-2 text-[11px] font-mono outline-none ${isConnected ? 'text-teal-500/50 cursor-not-allowed' : 'text-white'}`} placeholder="0.0.0.0" />
                 </div>
                 <div className="grid grid-cols-3 gap-3">
                   <div className="flex flex-col gap-1">
-                    <Tooltip name="USER_ID" source="CONFIG" desc="SSH username (Default: kali).">
-                      <label className="text-[8px] font-black text-zinc-800 uppercase tracking-widest cursor-help">User</label>
-                    </Tooltip>
-                    <input value={user} onChange={e => setUser(e.target.value)} disabled={isConnected} className="bg-black/50 border border-zinc-900 p-1.5 text-[10px] font-mono text-zinc-400 outline-none" placeholder="user" />
+                    <label className="text-[8px] font-black text-zinc-800 uppercase tracking-widest">User</label>
+                    <input value={user ?? ""} onChange={e => setUser(e.target.value)} disabled={isConnected} className="bg-black/50 border border-zinc-900 p-1.5 text-[10px] font-mono text-zinc-400 outline-none" placeholder="user" />
                   </div>
                   <div className="flex flex-col gap-1">
-                    <Tooltip name="AUTH_SECRET" source="CONFIG" desc="SSH password or keyphrase. Encrypted during transit.">
-                      <label className="text-[8px] font-black text-zinc-800 uppercase tracking-widest cursor-help">Pass</label>
-                    </Tooltip>
-                    <input type="password" value={pass} onChange={e => setPass(e.target.value)} disabled={isConnected} className="bg-black/50 border border-zinc-900 p-1.5 text-[10px] font-mono text-zinc-400 outline-none" placeholder="pass" />
+                    <label className="text-[8px] font-black text-zinc-800 uppercase tracking-widest">Pass</label>
+                    <input type="password" value={pass ?? ""} onChange={e => setPass(e.target.value)} disabled={isConnected} className="bg-black/50 border border-zinc-900 p-1.5 text-[10px] font-mono text-zinc-400 outline-none" placeholder="pass" />
                   </div>
                   <div className="flex flex-col gap-1">
-                    <Tooltip name="COM_PORT" source="CONFIG" desc="Target TCP port for SSH handshake.">
-                      <label className="text-[8px] font-black text-zinc-800 uppercase tracking-widest cursor-help">Port</label>
-                    </Tooltip>
-                    <input type="number" value={port} onChange={e => setPort(Number(e.target.value))} disabled={isConnected} className="bg-black/50 border border-zinc-900 p-1.5 text-[10px] font-mono text-zinc-400 outline-none" />
+                    <label className="text-[8px] font-black text-zinc-800 uppercase tracking-widest">Port</label>
+                    <input type="number" value={port ?? 22} onChange={e => setPort(Number(e.target.value))} disabled={isConnected} className="bg-black/50 border border-zinc-900 p-1.5 text-[10px] font-mono text-zinc-400 outline-none" />
                   </div>
                 </div>
-                <Tooltip name="HANDSHAKE_TRIGGER" source="SYSTEM" desc="Initiate encrypted Handshake Protocol with remote node.">
-                  <button 
-                    onClick={isConnected ? onDisconnect : () => onHandshake(ipInput, user, pass, port)} 
-                    disabled={!!processingId}
-                    className={`w-full py-3 text-[10px] font-black border transition-all uppercase tracking-widest ${isConnected ? 'border-red-900/40 text-red-500 hover:bg-red-500/10' : 'border-zinc-800 text-zinc-600 hover:text-white hover:border-zinc-500'} ${processingId ? 'opacity-30' : ''}`}
-                  >
-                    {processingId === 'HANDSHAKE_CORE' ? 'SYNCING...' : (isConnected ? 'TERMINATE_SESSION' : 'INITIALIZE_HANDSHAKE')}
-                  </button>
-                </Tooltip>
+                <button 
+                  type="button"
+                  onClick={isConnected ? onDisconnect : () => onHandshake(ipInput, user, pass, port)} 
+                  disabled={!!processingId}
+                  className={`w-full py-3 text-[10px] font-black border transition-all uppercase tracking-widest ${isConnected ? 'border-red-900/40 text-red-500 hover:bg-red-500/10' : 'border-zinc-800 text-zinc-600 hover:text-white hover:border-zinc-500'} ${processingId ? 'opacity-30' : ''}`}
+                >
+                  {processingId === 'HANDSHAKE_CORE' ? 'SYNCING...' : (isConnected ? 'TERMINATE_SESSION' : 'INITIALIZE_HANDSHAKE')}
+                </button>
               </div>
             </Card>
 
             <Card 
+              id="ADAPTER_HUB"
               title="ADAPTER_MATRIX" 
-              titleTooltip="Network interface mapping. SCANNING consumes 1 CORE CHARGE (Purple)."
-              variant={getDynamicVariant()} 
+              variant={isConnected ? 'real' : 'offline'} 
               onProbe={() => onProbeClick('ADAPTER_HUB', { stats })} 
+              onProbeInfo={() => onProbeInfo('ADAPTER_HUB', { stats })}
               onBrain={() => onBrainClick('adapter_hub', 'Network Matrix', { stats })} 
+              onLauncherSelect={(type) => onLauncherSelect('ADAPTER_HUB', type)}
               isProcessing={processingId === 'ADAPTER_HUB'}
               className="flex-1"
-              probeColor="#bd00ff"
+              probeColor={getLauncherColor('ADAPTER_HUB')}
             >
               <div className="flex flex-col gap-2 max-h-40 overflow-y-auto no-scroll">
                 {adapters.map(name => {
                   const data = getInterfaceData(name);
                   return (
-                    <Tooltip key={name} name={name.toUpperCase()} source={data.up ? 'REAL' : 'OFFLINE'} desc={`Interface status and IPv4 assignment. Click to run 'ip addr' check.`}>
-                      <div onClick={() => onAdapterCommand(`ip a show ${name}`)} className={`px-4 py-2 border border-zinc-900/40 bg-black/20 flex justify-between items-center transition-all cursor-pointer group hover:bg-teal-500/5 ${!data.up ? 'opacity-30' : ''}`}>
-                        <div className="flex items-center gap-3">
-                          <div className={`w-1.5 h-1.5 rounded-full ${data.up ? 'bg-green-500 glow-green' : 'bg-red-500'}`}></div>
-                          <span className="text-[10px] font-black text-zinc-500 uppercase tracking-widest group-hover:text-teal-400">{name}</span>
-                        </div>
-                        <span className="text-[10px] font-mono text-zinc-600">{data.ip}</span>
+                    <div key={name} onClick={() => onAdapterCommand(`ip a show ${name}`)} className={`px-4 py-2 border border-zinc-900/40 bg-black/20 flex justify-between items-center transition-all cursor-pointer group hover:bg-teal-500/5 ${!data.up ? 'opacity-30' : ''}`}>
+                      <div className="flex items-center gap-3">
+                        <div className={`w-1.5 h-1.5 rounded-full ${data.up ? 'bg-green-500 glow-green' : 'bg-red-500'}`}></div>
+                        <span className="text-[10px] font-black text-zinc-500 uppercase tracking-widest group-hover:text-teal-400">{name}</span>
                       </div>
-                    </Tooltip>
+                      <span className="text-[10px] font-mono text-zinc-600">{data.ip}</span>
+                    </div>
                   );
                 })}
               </div>
@@ -185,164 +193,89 @@ const Dashboard: React.FC<DashboardProps> = ({
           </div>
 
           <Card 
+            id="GLOBAL_SYSTEM_AUDIT"
             title="MASTER_INTELLIGENCE_LINK" 
-            titleTooltip="Unified AI reasoning hub. CORE PROBE consumes 1 CORE CHARGE (Purple)."
             variant="purple" 
-            className="relative overflow-visible shrink-0 pb-6 min-h-0 flex-1 max-h-[300px]"
+            className="relative overflow-visible shrink-0 pb-6 flex-1 max-h-[300px]"
+            onProbe={() => onProbeClick('GLOBAL_SYSTEM_AUDIT', { stats, mode, activeFocus: Array.from(activeTelemetry || []) })} 
+            onProbeInfo={() => onProbeInfo('GLOBAL_SYSTEM_AUDIT', { stats, mode, activeFocus: Array.from(activeTelemetry || []) })}
             onBrain={() => onBrainClick('MASTER_LINK', 'Neural Hub Intelligence', { latestResult: latestCoreProbeResult })}
+            onLauncherSelect={(type) => onLauncherSelect('GLOBAL_SYSTEM_AUDIT', type)}
             isProcessing={processingId === 'MASTER_LINK'}
-            probeColor="#bd00ff"
+            probeColor={getLauncherColor('GLOBAL_SYSTEM_AUDIT')}
           >
             <div className="flex items-center justify-between gap-8 h-full">
-              <div className="flex-1 text-[10px] font-mono text-zinc-500 leading-relaxed border-r border-zinc-900/30 pr-4 h-full max-h-40 overflow-y-auto no-scroll flex flex-col justify-center">
+              <div className="flex-1 text-[10px] font-mono text-zinc-500 leading-relaxed border-r border-zinc-900/30 pr-4 h-full overflow-y-auto no-scroll flex flex-col justify-center">
                 {latestCoreProbeResult ? (
                   <div className="animate-in fade-in duration-500">
-                    <Tooltip name="NEURAL_STATUS" source="AI" variant="purple" desc="Current high-level system summary from Neural Engine.">
-                      <div className="text-purple-400 font-black mb-1 uppercase tracking-tighter cursor-help">Status: {latestCoreProbeResult.status}</div>
-                    </Tooltip>
+                    <div className="text-purple-400 font-black mb-1 uppercase tracking-tighter">Status: {latestCoreProbeResult.status}</div>
                     <div className="text-zinc-400 italic">"{latestCoreProbeResult.description}"</div>
-                    {latestCoreProbeResult.anomalies && latestCoreProbeResult.anomalies.length > 0 && (
-                      <div className="mt-2 space-y-1">
-                        <span className="text-[8px] text-zinc-700 uppercase font-black tracking-widest">Anomalies:</span>
-                        {latestCoreProbeResult.anomalies.map((a: string, i: number) => (
-                          <div key={i} className="text-red-400 text-[9px]">• {a}</div>
-                        ))}
-                      </div>
-                    )}
                   </div>
                 ) : (
-                  <div className="text-zinc-800 italic uppercase text-[8px] tracking-widest animate-pulse text-center">Awaiting Neural Data Link...</div>
+                  <div className="text-zinc-800 italic uppercase text-[8px] tracking-widest text-center animate-pulse">Awaiting Neural Link...</div>
                 )}
               </div>
 
-              <div className="flex flex-col items-center justify-center relative group w-64 shrink-0">
-                 <div className="absolute top-[-30px] flex gap-12 pointer-events-none opacity-20">
-                    <div className="w-[1px] h-32 bg-purple-500"></div>
-                    <div className="w-[1px] h-40 bg-purple-500"></div>
-                    <div className="w-[1px] h-32 bg-purple-500"></div>
+              <div className="flex flex-col items-center justify-center relative w-64 shrink-0">
+                 <div className={`relative w-64 h-20 bg-[#050608] border shadow-2xl flex flex-col items-center justify-center transition-all ${isProbeActive ? 'animate-pulse' : ''}`} style={{ borderColor: getLauncherColor('GLOBAL_SYSTEM_AUDIT') }}>
+                    <span className={`text-[12px] font-black uppercase tracking-[0.6em]`} style={{ color: getLauncherColor('GLOBAL_SYSTEM_AUDIT') }}>
+                      {isProbeActive ? 'SCANNING...' : 'CORE PROBE'}
+                    </span>
                  </div>
-                 <div className="w-24 h-6 bg-zinc-800 border-x border-t border-purple-500/30 rounded-t-sm mb-0 flex items-center justify-center">
-                    <div className="w-4 h-4 rounded-full bg-black border border-zinc-700 shadow-inner"></div>
-                 </div>
-                 <div className="relative z-10">
-                    <Tooltip name="CORE_PROBE" source="AI" variant="purple" desc="Trigger system-wide telemetry audit using Purple Launcher payloads.">
-                      <button 
-                        onClick={() => onProbeClick('GLOBAL_SYSTEM_AUDIT', { stats, mode, activeFocus: Array.from(activeTelemetry || []) })} 
-                        disabled={!!processingId} 
-                        className={`relative w-64 h-20 bg-[#050608] border-x border-b border-purple-500/60 shadow-2xl flex flex-col items-center justify-center transition-all group-hover:border-purple-400 group-hover:shadow-[0_0_30px_rgba(189,0,255,0.2)] disabled:opacity-50 overflow-hidden cursor-pointer`}
-                      >
-                        <div className="absolute top-2 left-4 text-[6px] text-zinc-800 font-mono tracking-tighter uppercase">Sentinel_NPN_v2.9</div>
-                        <div className="absolute bottom-2 right-4 text-[6px] text-zinc-800 font-mono tracking-tighter uppercase">Lot: 0xNEURAL</div>
-                        <span className={`text-[12px] font-black uppercase tracking-[0.6em] transition-colors ${isProbeActive ? 'text-teal-400 animate-pulse' : 'text-purple-400 group-hover:text-purple-200'}`}>
-                          {isProbeActive ? 'SCANNING...' : 'CORE PROBE'}
-                        </span>
-                        <div className={`absolute inset-0 pointer-events-none transition-opacity ${isProbeActive ? 'opacity-20' : 'opacity-0'}`}>
-                           <div className="w-full h-full bg-purple-500 animate-ping"></div>
-                        </div>
-                      </button>
-                    </Tooltip>
-                 </div>
-                 <div className="flex gap-16 mt-[-2px] pointer-events-none">
-                    <div className={`w-0.5 h-10 bg-purple-500/40 transition-all ${isProbeActive ? 'h-14 bg-teal-500' : ''}`}></div>
-                    <div className={`w-0.5 h-16 bg-purple-500/40 transition-all ${isProbeActive ? 'h-20 bg-teal-500 delay-75' : ''}`}></div>
-                    <div className={`w-0.5 h-10 bg-purple-500/40 transition-all ${isProbeActive ? 'h-14 bg-teal-500 delay-150' : ''}`}></div>
-                 </div>
-                 <span className="absolute bottom-[-30px] text-[7px] font-black uppercase tracking-[0.4em] text-zinc-800 pointer-events-none whitespace-nowrap">Neural_Bridge_Standby_Ready</span>
               </div>
 
-              <div className="flex-1 text-[10px] font-mono text-zinc-500 leading-relaxed border-l border-zinc-900/30 pl-4 h-full max-h-40 overflow-y-auto no-scroll flex flex-col justify-center">
+              <div className="flex-1 text-[10px] font-mono text-zinc-500 leading-relaxed border-l border-zinc-900/30 pl-4 h-full overflow-y-auto no-scroll flex flex-col justify-center">
                 {latestCoreProbeResult ? (
                   <div className="animate-in fade-in duration-500">
-                    <Tooltip name="TACTICAL_REC" source="AI" variant="teal" desc="Direct actionable recommendation from the intelligence unit.">
-                      <div className="text-teal-500 font-black mb-1 uppercase tracking-tighter cursor-help">Recommendation:</div>
-                    </Tooltip>
+                    <div className="text-teal-500 font-black mb-1 uppercase tracking-tighter">Recommendation:</div>
                     <div className="text-zinc-300 font-bold">{latestCoreProbeResult.recommendation}</div>
-                    {latestCoreProbeResult.threatLevel && (
-                      <Tooltip name="THREAT_LEVEL" source="SYSTEM" desc="Assessed operational threat level based on current telemetry anomalies.">
-                        <div className={`mt-2 text-[8px] font-black uppercase tracking-widest px-2 py-0.5 w-fit rounded-sm cursor-help ${latestCoreProbeResult.threatLevel === 'CRITICAL' ? 'bg-red-500 text-white animate-pulse' : 'bg-zinc-800 text-zinc-400'}`}>
-                          [Threat: {latestCoreProbeResult.threatLevel}]
-                        </div>
-                      </Tooltip>
-                    )}
                   </div>
                 ) : (
-                  <div className="text-zinc-800 italic uppercase text-[8px] tracking-widest text-center">System Matrix Stable...</div>
+                  <div className="text-zinc-800 italic uppercase text-[8px] tracking-widest text-center">System Matrix Ready.</div>
                 )}
               </div>
             </div>
           </Card>
         </>
       ) : (
-        <div className="flex-1 flex flex-col bg-black/60 border border-zinc-900/60 rounded-sm relative overflow-hidden animate-in fade-in slide-in-from-bottom-4">
-           {/* Terminal Header */}
+        <div className="flex-1 flex flex-col bg-black/60 border border-zinc-900/60 rounded-sm relative overflow-hidden">
            <div className="h-10 border-b border-zinc-900 bg-zinc-950/40 flex items-center justify-between px-6">
-              <div className="flex items-center gap-4">
-                 <Tooltip name="INTERACTIVE_SHELL" source="REAL" desc="Direct access to the remote Kali Linux terminal session.">
-                   <span className="text-[10px] font-black text-teal-500 uppercase tracking-widest cursor-help">KALI_INTERACTIVE_CONSOLE</span>
-                 </Tooltip>
-                 <div className="w-2 h-2 rounded-full bg-teal-500 animate-pulse"></div>
-              </div>
-              <div className="flex items-center gap-4">
-                <Tooltip name="TERMINAL_PROBE" source="AI" variant="purple" desc="Perform security audit on the current terminal context.">
-                  <TacticalButton 
-                    label={processingId === 'TERMINAL_COMMAND_AUDIT' ? 'SYNC' : 'PROBE_SHELL'} 
-                    onClick={() => onProbeClick('TERMINAL_COMMAND_AUDIT', { lastCommand: consoleInput })} 
-                    disabled={!!processingId}
-                    size="sm" 
-                    color="#bd00ff" 
-                  />
-                </Tooltip>
-                <BrainIcon onClick={() => onBrainClick('terminal_overlay', 'Interactive Console', { state: 'ACTIVE' })} isProcessing={processingId === 'terminal_overlay'} className="!p-1 !w-6 !h-6" color="#00ffd5" />
+              <span className="text-[10px] font-black text-teal-500 uppercase tracking-widest">KALI_INTERACTIVE_CONSOLE</span>
+              <div className="flex gap-4">
+                 <button onClick={() => onProbeInfo('TERMINAL_COMMAND_AUDIT', { lastCommand: consoleInput })} className="w-3.5 h-3.5 rounded-full bg-purple-500/40 hover:bg-purple-400 border border-purple-900" title="Payload Audit" />
+                 <TacticalButton label="PROBE" onClick={() => onProbeClick('TERMINAL_COMMAND_AUDIT', { lastCommand: consoleInput })} size="sm" color={getLauncherColor('TERMINAL_COMMAND_AUDIT')} />
               </div>
            </div>
 
-           {/* Terminal Input Area */}
-           <div className="flex-1 p-8 font-mono text-sm overflow-hidden flex flex-col justify-center">
-              <div className="max-w-4xl mx-auto w-full">
-                <Tooltip name="COMMAND_PROMPT" source="SYSTEM" desc="Enter bash commands for execution. Outputs are logged in the right-side console.">
-                  <div className="text-zinc-600 mb-2 uppercase text-[9px] tracking-widest cursor-help">Awaiting_Input_Vector...</div>
-                </Tooltip>
-                <form onSubmit={handleConsoleSubmit} className="flex items-center gap-4 group">
-                   <span className="text-teal-500 font-black text-lg">root@kali:~#</span>
-                   <input 
+           <div className="flex-1 p-6 font-mono text-[13px] overflow-y-auto no-scroll bg-black/80">
+              <div className="space-y-1">
+                 {terminalHistory.map((line, i) => (
+                   <div key={i} className="whitespace-pre-wrap">
+                     {line.startsWith('root@kali') ? (
+                       <span className="text-green-500 font-bold">{line}</span>
+                     ) : line.startsWith('[ERROR]') ? (
+                       <span className="text-red-500 font-bold">{line}</span>
+                     ) : (
+                       <span className="text-zinc-300">{line}</span>
+                     )}
+                   </div>
+                 ))}
+                 <div ref={terminalEndRef} />
+              </div>
+           </div>
+
+           <div className="h-12 border-t border-zinc-900 bg-black/40 flex items-center px-6">
+              <form onSubmit={handleConsoleSubmit} className="flex-1 flex items-center gap-3">
+                 <span className="text-teal-500 font-black">root@kali:~#</span>
+                 <input 
                     ref={consoleInputRef}
                     value={consoleInput}
                     onChange={e => setConsoleInput(e.target.value)}
-                    className="flex-1 bg-transparent border-none outline-none text-white text-lg placeholder:text-zinc-800 selection:bg-teal-500/30"
-                    placeholder="Enter tactical command..."
+                    className="flex-1 bg-transparent border-none outline-none text-white selection:bg-teal-500/30"
+                    placeholder="Enter command..."
                     autoFocus
-                   />
-                </form>
-                <div className="mt-12 grid grid-cols-2 gap-8 border-t border-zinc-900/40 pt-8">
-                   <div className="space-y-2">
-                      <Tooltip name="SYSTEM_CONTEXT" source="SYSTEM" desc="Identified user and host context for current bridge session.">
-                        <span className="text-[8px] font-black text-zinc-800 uppercase tracking-widest cursor-help">System_Context</span>
-                      </Tooltip>
-                      <div className="text-[10px] text-zinc-600 font-mono">
-                         NODE: {stats?.system?.hostname || 'PENDING'}<br/>
-                         USER: kali (privileged)<br/>
-                         PROC: {stats?.processes?.total || 0} active
-                      </div>
-                   </div>
-                   <div className="space-y-2 text-right">
-                      <Tooltip name="QUICK_LAUNCH" source="SYSTEM" desc="Pre-configured commands for rapid execution.">
-                        <span className="text-[8px] font-black text-zinc-800 uppercase tracking-widest cursor-help">Quick_Launch</span>
-                      </Tooltip>
-                      <div className="flex gap-2 justify-end">
-                        {['nmap -F', 'ip addr', 'netdiscover', 'ls -la'].map(q => (
-                          <Tooltip key={q} name="QUICK_EXEC" source="SYSTEM" desc={`Instantly transmit '${q}' to host.`}>
-                            <button onClick={() => onAdapterCommand(q)} className="text-[9px] px-2 py-0.5 border border-zinc-900 text-zinc-700 hover:text-teal-400 hover:border-teal-400/30 transition-all uppercase">{q}</button>
-                          </Tooltip>
-                        ))}
-                      </div>
-                   </div>
-                </div>
-              </div>
-           </div>
-
-           {/* Terminal Footer */}
-           <div className="h-8 border-t border-zinc-900 bg-zinc-950/20 flex items-center px-6">
-              <span className="text-[8px] font-black text-zinc-800 uppercase tracking-[0.3em]">Direct Command Link Stabilized. Data encrypted at rest.</span>
+                 />
+              </form>
            </div>
         </div>
       )}

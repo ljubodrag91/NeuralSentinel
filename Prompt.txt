@@ -1,0 +1,35 @@
+Project Name: Neural W Monitor - Kali Linux Interface for Penetration Testing
+
+Project Overview:
+Create a multi-window, high-fidelity security dashboard designed for remote management of Kali Linux on Raspberry Pi devices. The UI must follow a "Cyber-Tactical HUD" aesthetic with scanlines, CRT flicker, and chromatic aberration effects.
+
+Core Requirements:
+1. Multi-Tab Interface:
+   - Dashboard (Link status, Handshake config, Network adapters)
+   - Telemetry (Live AreaCharts for RF Signal and Spectral Density)
+   - Pi Stats (CPU, RAM, Disk, Thermal monitoring, Process list)
+   - Toolkit (Categorized tool selection: Recon, Wireless, Web)
+   - History (Tactical log archive)
+
+2. Neural Intelligence Engine Integration:
+   - Integrate Google Gemini API for "Neural Probes" and "Smart Tooltips".
+   - Support for Local LLM endpoints (Ollama/LM Studio) via OpenAI-compatible chat/completions.
+   - Implement a "Charges" system (Core Charges and Neural Charges) with reload timers for AI actions.
+   - AI must respond with strictly formatted JSON for UI-integrated reports.
+
+3. Visual Design:
+   - Colors: #00ffd5 (Teal), #bd00ff (Purple), #ff3e3e (Red), #020406 (Deep BG).
+   - Component styles: Transistor-inspired buttons with "leads/pins", HUD rect frames, blurring background haze.
+   - Animated Logo: A simplified schematic CPU/Core package with a pulsing status die.
+
+4. Functionality:
+   - Guided Wizards for complex tools like Nmap and Deauthentication.
+   - Interactive Bash Terminal overlay for direct command injection.
+   - Unified tactical log stream with source-specific filtering (Kernel, Neural, Console, System).
+   - "Audit Dots": Integrated small dots next to AI probe buttons that, when clicked, open a dialog to inspect the raw JSON packet analyzed by the engine.
+   - Real-time Connection Monitoring: Interface must visually respond to node health status, switching to a disconnected state (Red Core) if the heartbeat fetch fails or times out.
+
+5. Developer Specs:
+   - React 19, TypeScript, Tailwind CSS, Recharts.
+   - Robust error handling for AI endpoints (400/500 errors).
+   - Mocked simulation mode for offline testing.

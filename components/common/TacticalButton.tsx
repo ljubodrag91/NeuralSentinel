@@ -3,6 +3,7 @@ import React from 'react';
 interface TacticalButtonProps {
   label: string;
   onClick: () => void;
+  onContextMenu?: (e: React.MouseEvent) => void;
   disabled?: boolean;
   color?: string; // hex
   size?: 'sm' | 'md' | 'lg';
@@ -11,7 +12,7 @@ interface TacticalButtonProps {
 }
 
 const TacticalButton: React.FC<TacticalButtonProps> = ({ 
-  label, onClick, disabled, color = '#00ffd5', size = 'md', className = '', hasTopPins = false 
+  label, onClick, onContextMenu, disabled, color = '#00ffd5', size = 'md', className = '', hasTopPins = false 
 }) => {
   const isSm = size === 'sm';
   
@@ -29,6 +30,13 @@ const TacticalButton: React.FC<TacticalButtonProps> = ({
       {/* Transistor Body */}
       <button 
         onClick={(e) => { e.stopPropagation(); onClick(); }}
+        onContextMenu={(e) => {
+          if (onContextMenu) {
+            e.preventDefault();
+            e.stopPropagation();
+            onContextMenu(e);
+          }
+        }}
         disabled={disabled}
         className={`relative bg-[#050608] border-x border-b shadow-lg flex items-center justify-center transition-all disabled:opacity-30 overflow-hidden cursor-pointer active:scale-95 group-hover:bg-zinc-900/40`}
         style={{ 

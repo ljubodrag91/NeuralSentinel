@@ -1,19 +1,27 @@
-
 import React from 'react';
 import Card from './common/Card';
 
 interface HistoryProps {
   data: any[];
   onProbe: (panel: string, data: any) => void;
+  onProbeInfo: (panel: string, data: any) => void;
   onBrainClick: (id: string, type: string, metrics: any) => void;
   processingId?: string;
 }
 
-const History: React.FC<HistoryProps> = ({ data, onProbe, onBrainClick, processingId }) => {
-  const handleAudit = () => {
+const History: React.FC<HistoryProps> = ({ data, onProbe, onProbeInfo, onBrainClick, processingId }) => {
+  const getArchivePayload = () => {
     const csvHeaders = "TIMESTAMP,ACTION,TARGET,RESULT";
     const csvRows = data.map(h => `${h.timestamp},${h.action},${h.target},${h.result}`).join("\n");
-    onProbe('SESSION_ARCHIVE', { csv: `${csvHeaders}\n${csvRows}` });
+    return { csv: `${csvHeaders}\n${csvRows}` };
+  };
+
+  const handleAudit = () => {
+    onProbe('SESSION_ARCHIVE', getArchivePayload());
+  };
+
+  const handleAuditInfo = () => {
+    onProbeInfo('SESSION_ARCHIVE', getArchivePayload());
   };
 
   return (
@@ -23,6 +31,7 @@ const History: React.FC<HistoryProps> = ({ data, onProbe, onBrainClick, processi
         titleTooltip="Archive of all tactical actions executed during the current neural session."
         variant="default" 
         onProbe={handleAudit}
+        onProbeInfo={handleAuditInfo}
         onBrain={() => onBrainClick('history_archive', 'Audit Database', { logCount: data.length })}
         isProcessing={processingId === 'SESSION_ARCHIVE' || processingId === 'history_archive'}
       >

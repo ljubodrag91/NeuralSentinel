@@ -1,5 +1,8 @@
+
 import { GoogleGenAI } from "@google/genai";
-import { AIProvider, AIConfig, OperationalMode, SmartTooltipData } from "../types";
+// Fixed missing exported members by aliasing existing types from types.ts
+import { NeuralNetworkProvider as AIProvider, NeuralNetworkConfig as AIConfig, OperationalMode, SmartTooltipData } from "../types";
+import { PROBE_CONTRACTS } from "./probeContracts";
 
 function truncateInputStrict(text: string, maxChars: number = 10000): string {
   if (text.length <= maxChars) return text;
@@ -17,15 +20,32 @@ function extractJsonLoose(text: string): any {
   return JSON.parse(match[0]);
 }
 
+// Ensure initialization uses process.env.API_KEY directly and cast to string
 const getAiClient = (config: AIConfig) => {
-  return new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
+  return new GoogleGenAI({ apiKey: process.env.API_KEY as string });
 };
+
+/**
+ * Enhanced fetch for Local AI.
+ * Handles normalization and provides security hints for local endpoints.
+ */
+async function secureLocalFetch(url: string, options: RequestInit): Promise<Response> {
+  const normalizedUrl = url.replace('localhost', '127.0.0.1');
+  return fetch(normalizedUrl, {
+    ...options,
+    // Ensure the browser handles PNA preflight correctly without manual header interference
+    referrerPolicy: "no-referrer",
+    mode: 'cors',
+  });
+}
 
 export async function testAiAvailability(config: AIConfig): Promise<boolean> {
   if (config.provider === AIProvider.GEMINI) return !!process.env.API_KEY;
   try {
-    const endpoint = config.endpoint.includes('/chat/completions') ? config.endpoint : `${config.endpoint.replace(/\/$/, "")}/chat/completions`;
-    const response = await fetch(endpoint, {
+    const baseUrl = config.endpoint.replace(/\/$/, "");
+    const endpoint = baseUrl.includes('/chat/completions') ? baseUrl : `${baseUrl}/chat/completions`;
+    
+    const response = await secureLocalFetch(endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ 
@@ -47,6 +67,7 @@ export async function performNeuralProbe(
   context: { sessionId: string; mode: OperationalMode }
 ) {
   const isMainProbe = panelName === 'GLOBAL_SYSTEM_AUDIT';
+  const contract = PROBE_CONTRACTS[panelName];
   
   const systemInstruction = `You are the ${isMainProbe ? 'Main Neural Core' : 'Panel Diagnostic Core'} for the PiSentinel SOC monitor.
 Analyze the provided telemetry and return a structured report for security professionals.
@@ -66,10 +87,11 @@ Schema:
   "threatLevel": "LOW" | "MEDIUM" | "HIGH" | "CRITICAL"
 }`;
 
+  const payload = contract ? contract.buildPayload(metrics) : { telemetry: metrics };
   const userPrompt = truncateInputStrict(JSON.stringify({ 
     panel: panelName, 
     operational_mode: context.mode,
-    telemetry_payload: metrics 
+    payload: payload
   }));
 
   if (config.provider === AIProvider.GEMINI) {
@@ -84,8 +106,10 @@ Schema:
     } catch { return fallbackProbe(panelName, context.mode); }
   } else {
     try {
-      const endpoint = config.endpoint.includes('/chat/completions') ? config.endpoint : `${config.endpoint.replace(/\/$/, "")}/chat/completions`;
-      const response = await fetch(endpoint, {
+      const baseUrl = config.endpoint.replace(/\/$/, "");
+      const endpoint = baseUrl.includes('/chat/completions') ? baseUrl : `${baseUrl}/chat/completions`;
+      
+      const response = await secureLocalFetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -145,8 +169,10 @@ Schema:
       });
       return JSON.parse(response.text || "{}");
     } else {
-      const endpoint = config.endpoint.includes('/chat/completions') ? config.endpoint : `${config.endpoint.replace(/\/$/, "")}/chat/completions`;
-      const response = await fetch(endpoint, {
+      const baseUrl = config.endpoint.replace(/\/$/, "");
+      const endpoint = baseUrl.includes('/chat/completions') ? baseUrl : `${baseUrl}/chat/completions`;
+      
+      const response = await secureLocalFetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 

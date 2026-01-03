@@ -1,4 +1,7 @@
 
+// Import React to resolve 'Cannot find namespace React' error
+import React from 'react';
+
 export enum OperationalMode {
   OFFLINE = 'OFFLINE',
   SIMULATED = 'SIMULATED',
@@ -25,7 +28,13 @@ export interface LogEntry {
   message: string;
   source: OperationalMode;
   details?: string;
-  metadata?: any; 
+  metadata?: {
+    type?: string;
+    title?: string;
+    data?: any;
+    launcherId?: string;
+    probeType?: 'NEURAL' | 'DATA';
+  };
 }
 
 export interface SessionInfo {
@@ -88,13 +97,13 @@ export interface PiStats {
   };
 }
 
-export enum AIProvider {
+export enum NeuralNetworkProvider {
   GEMINI = 'GEMINI',
   LOCAL = 'LOCAL'
 }
 
-export interface AIConfig {
-  provider: AIProvider;
+export interface NeuralNetworkConfig {
+  provider: NeuralNetworkProvider;
   endpoint: string;
   model: string;
   fallbackToLocal: boolean;
@@ -113,6 +122,8 @@ export interface AppSettings {
   neuralRechargeRate: number; 
   maxCoreCharges: number;
   maxNeuralCharges: number;
+  // Per-probe launcher mappings
+  probeLaunchers: Record<string, string>;
 }
 
 export interface SmartTooltipData {
@@ -125,11 +136,40 @@ export interface SmartTooltipData {
 
 export type Timeframe = '1m' | '5m' | '15m' | '30m' | '1h' | '6h' | '12h' | '24h';
 
+export interface Launcher {
+  id: string;
+  name: string;
+  type: 'core' | 'neural';
+  description: string;
+  maxCharges: number;
+  rechargeRate: number; // seconds
+  compatibleProbes: string[]; // probe types or ids
+  color: string;
+}
+
+export interface ModuleDefinition {
+  id: string;
+  name: string;
+  icon: string;
+  enabled: boolean;
+  component: React.ComponentType<any>;
+}
+
+export interface ProbeResult {
+  description: string;
+  recommendation: string;
+  status: OperationalMode;
+  elementType: string;
+  elementId: string;
+  anomalies: string[];
+  threatLevel: "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
+}
+
 export interface ToolParameter {
   name: string;
   flag: string;
   description: string;
-  type: 'text' | 'number' | 'toggle';
+  type: 'text' | 'toggle' | 'number';
   value: string | number | boolean;
 }
 

@@ -1,20 +1,25 @@
+
 import React from 'react';
-import { PiStats, OperationalMode, Timeframe } from '../types';
+import { PiStats, OperationalMode, Timeframe, AppSettings } from '../types';
 import Card from './common/Card';
 import Tooltip from './common/Tooltip';
+import { launcherSystem } from '../services/launcherService';
 
 interface PiStatsViewProps {
   stats: PiStats | null;
   mode: OperationalMode;
   timeframe: Timeframe;
+  settings: AppSettings;
   onProbeClick: (panel: string, metrics: any) => void;
+  onProbeInfo: (title: string, payload: any) => void;
   onBrainClick: (id: string, type: string, metrics: any) => void;
+  onLauncherSelect: (id: string, type: 'core' | 'neural') => void;
   processingId?: string;
   activeTelemetry: Set<string>;
   setActiveTelemetry: (s: Set<string>) => void;
 }
 
-const PiStatsView: React.FC<PiStatsViewProps> = ({ stats, mode, timeframe, onProbeClick, onBrainClick, processingId, activeTelemetry, setActiveTelemetry }) => {
+const PiStatsView: React.FC<PiStatsViewProps> = ({ stats, mode, timeframe, settings, onProbeClick, onProbeInfo, onBrainClick, onLauncherSelect, processingId, activeTelemetry, setActiveTelemetry }) => {
 
   const toggleMetric = (id: string) => {
     const next = new Set(activeTelemetry);
@@ -30,6 +35,11 @@ const PiStatsView: React.FC<PiStatsViewProps> = ({ stats, mode, timeframe, onPro
 
   const isDataActive = mode === OperationalMode.SIMULATED || (mode === OperationalMode.REAL && stats);
   const sourceState = !isDataActive && mode === OperationalMode.REAL ? 'OFFLINE' : mode as string;
+
+  const getLauncherColor = (panelId: string) => {
+    const id = settings.probeLaunchers[panelId];
+    return launcherSystem.getById(id)?.color || '#bd00ff';
+  };
 
   return (
     <div className="space-y-10 animate-in fade-in duration-700 pb-20 no-scroll h-full overflow-y-auto pr-4">
@@ -53,7 +63,6 @@ const PiStatsView: React.FC<PiStatsViewProps> = ({ stats, mode, timeframe, onPro
                 <span className={`text-2xl font-black ${isDataActive ? 'text-zinc-200' : 'text-zinc-900'}`}>{safe(stats?.cpu?.usage, 1, '%')}</span>
                 <span className={`text-md font-bold ${isDataActive ? 'text-zinc-500' : 'text-zinc-950'}`}>{safe(stats?.cpu?.temp, 1, '°C')}</span>
               </div>
-              <div className="text-[8px] text-zinc-800 font-mono tracking-tighter uppercase mt-2">Load: {stats?.cpu?.load?.join(' / ') || '—'}</div>
             </div>
           </div>
         </Tooltip>
@@ -76,7 +85,6 @@ const PiStatsView: React.FC<PiStatsViewProps> = ({ stats, mode, timeframe, onPro
                 <span className={`text-2xl font-black ${isDataActive ? 'text-zinc-200' : 'text-zinc-900'}`}>{safe(stats?.memory?.usage, 1, '%')}</span>
                 <span className={`text-md font-bold ${isDataActive ? 'text-zinc-500' : 'text-zinc-950'}`}>{safe(stats?.memory?.used, 2, 'G')}</span>
               </div>
-              <div className="text-[8px] text-zinc-800 font-mono tracking-tighter uppercase mt-2">Avail: {safe(stats?.memory?.available, 2, 'G')}</div>
             </div>
           </div>
         </Tooltip>
@@ -97,9 +105,7 @@ const PiStatsView: React.FC<PiStatsViewProps> = ({ stats, mode, timeframe, onPro
             <div className="flex flex-col flex-1 justify-center">
               <div className="flex items-baseline gap-4">
                 <span className={`text-2xl font-black ${isDataActive ? 'text-zinc-200' : 'text-zinc-900'}`}>{safe(stats?.disk?.rootUsage, 1, '%')}</span>
-                <span className={`text-md font-bold ${isDataActive ? 'text-zinc-500' : 'text-zinc-950'}`}>{safe(stats?.disk?.readRate, 1, 'K/s')}</span>
               </div>
-              <div className="text-[8px] text-zinc-800 font-mono tracking-tighter uppercase mt-2">Root Partition Trace</div>
             </div>
           </div>
         </Tooltip>
@@ -120,23 +126,40 @@ const PiStatsView: React.FC<PiStatsViewProps> = ({ stats, mode, timeframe, onPro
             <div className="flex flex-col flex-1 justify-center">
               <div className="flex items-baseline gap-4">
                 <span className={`text-2xl font-black ${isDataActive ? 'text-zinc-200' : 'text-zinc-900'}`}>RX {safe(stats?.network?.inRate, 1, 'K')}</span>
-                <span className={`text-md font-bold ${isDataActive ? 'text-zinc-500' : 'text-zinc-950'}`}>TX {safe(stats?.network?.outRate, 1, 'K')}</span>
               </div>
-              <div className="text-[8px] text-zinc-800 font-mono tracking-tighter uppercase mt-2">I/O Tunnel Active</div>
             </div>
           </div>
         </Tooltip>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        <Card title="NODE_DIAGNOSTICS" variant="real" probeColor="#bd00ff" onProbe={() => onProbeClick('NODE_DIAGNOSTICS', stats)} onBrain={() => onBrainClick('node_diag_panel', 'Environment Audit', stats)} isProcessing={processingId === 'NODE_DIAGNOSTICS'}>
+        <Card 
+          id="NODE_DIAGNOSTICS"
+          title="NODE_DIAGNOSTICS" 
+          variant="real" 
+          probeColor={getLauncherColor('NODE_DIAGNOSTICS')}
+          onProbe={() => onProbeClick('NODE_DIAGNOSTICS', stats)} 
+          onProbeInfo={() => onProbeInfo('NODE_DIAGNOSTICS', stats)}
+          onBrain={() => onBrainClick('node_diag_panel', 'Environment Audit', stats)} 
+          onLauncherSelect={(type) => onLauncherSelect('NODE_DIAGNOSTICS', type)}
+          isProcessing={processingId === 'NODE_DIAGNOSTICS'}
+        >
           <div className="space-y-4 font-mono text-[11px]">
              <div className="flex justify-between border-b border-zinc-900 pb-2"><span className="text-zinc-600 uppercase">Hostname</span><span className="text-teal-500 uppercase font-black">{stats?.system?.hostname || 'SENTINEL_NULL'}</span></div>
              <div className="flex justify-between border-b border-zinc-900 pb-2"><span className="text-zinc-600 uppercase">OS_Kernel</span><span className="text-zinc-400">{stats?.system?.osName || 'Kali Linux'}</span></div>
-             <div className="flex justify-between"><span className="text-zinc-600 uppercase">Cores_Freq</span><span className="text-zinc-400">{stats?.cpu?.cores || 4}x @ {stats?.cpu?.freqCurrent || '—'}MHz</span></div>
           </div>
         </Card>
-        <Card title="TOP_PROCESSES" variant="purple" probeColor="#bd00ff" onProbe={() => onProbeClick('PROCESS_AUDIT', stats?.processes)} onBrain={() => onBrainClick('process_audit_panel', 'Process Audit', stats?.processes)} isProcessing={processingId === 'PROCESS_AUDIT'}>
+        <Card 
+          id="PROCESS_AUDIT"
+          title="TOP_PROCESSES" 
+          variant="purple" 
+          probeColor={getLauncherColor('PROCESS_AUDIT')}
+          onProbe={() => onProbeClick('PROCESS_AUDIT', stats?.processes)} 
+          onProbeInfo={() => onProbeInfo('PROCESS_AUDIT', stats?.processes)}
+          onBrain={() => onBrainClick('process_audit_panel', 'Process Audit', stats?.processes)} 
+          onLauncherSelect={(type) => onLauncherSelect('PROCESS_AUDIT', type)}
+          isProcessing={processingId === 'PROCESS_AUDIT'}
+        >
           <div className="space-y-2 max-h-48 overflow-y-auto no-scroll">
             {stats?.processes?.topByCpu?.slice(0, 6).map((p: any, i: number) => (
               <div key={i} className="flex justify-between items-center text-[10px] font-mono border-b border-zinc-900/40 py-1.5 hover:bg-white/5 transition-colors group">

@@ -2,50 +2,51 @@
 
 Neural Sentinel is a high-fidelity Security Operations Center (SOC) interface designed for managing remote Kali Linux deployments on Raspberry Pi devices. It bridges the gap between raw command-line tools and tactical intelligence through an integrated AI Neural Engine.
 
-## 📊 System Telemetry Explanation
+---
 
-The `SYSTEM_STATS` tab provides real-time visibility into the physical health and performance of the remote node. In a penetration testing context, these metrics are critical for mission success:
+## 🚀 App Functionality
 
-### 1. CPU Matrix (Compute & Thermals)
-- **Utilization Flow**: Measures processor saturation. High CPU usage is expected during active brute-forcing (Hashcat) or complex scanning (Nmap aggressive modes).
-- **Thermal Envelope**: Raspberry Pi devices are prone to thermal throttling. Monitoring temperature ensures the device doesn't down-clock or shut down during a critical exploitation phase.
-- **Load Average**: Displayed as 1, 5, and 15-minute intervals. This helps identify if the system is experiencing a temporary spike or sustained bottleneck.
+### 1. Multi-Window Command Center
+The application is structured into five core tactical modules:
+- **Dashboard**: Handshake bridge for SSH tunnel establishment and network interface matrix. Includes an interactive Bash Terminal overlay.
+- **Telemetry**: Real-time RF and spectral density analysis using Recharts.
+- **Pi Stats**: Deep-dive system monitoring (CPU, RAM, Disk, Temp) with process auditing.
+- **Toolkit**: A tiered arsenal of penetration testing modules including Guided Wizards for Nmap and Wireless Deauthentication.
+- **History**: An encrypted persistence log of all tactical session actions.
 
-### 2. Memory Pool (Volatile Storage)
-- **RAM Allocation**: Tracks memory consumption. Tools like Metasploit or heavy web scanners (Burp Suite) can quickly consume the limited 4GB/8GB RAM on a Pi, leading to "Out of Memory" (OOM) kills.
-- **Saturation Ratio**: A percentage-based view of memory pressure. Sustained saturation above 85% indicates a high risk of session instability.
+### 2. Neural Intelligence Engine
+- **Core Probes**: System-wide audits that analyze complex telemetry to find security anomalies.
+- **Neural Brain Tooltips**: On-demand smart inference on specific metrics or logs.
+- **Payload Audit (Audit Dots)**: Next to every probe button is a small interactive dot. Clicking this opens a "Payload Audit" dialog, revealing the exact JSON packet being transmitted to the AI engine for transparency.
+- **Unified Charge System**: Tactical AI actions are governed by Core and Neural chargers in the header, simulating hardware constraints.
 
-### 3. IO Adapter (Network Throughput)
-- **RX (Ingress)**: Volume of data entering the node. High RX is typical during packet captures or broad-spectrum network discovery.
-- **TX (Egress)**: Volume of data leaving the node. Crucial for monitoring data exfiltration or reverse-shell stability.
-- **Adapter Matrix**: Status indicators for `wlan0` (Wireless), `eth0` (Ethernet), and `lo` (Loopback). GREEN status indicates a stable link.
+### 3. Visual & Aesthetic Identity
+- **CRT / HUD Aesthetics**: Scanlines, chromatic aberration, and holographic haze create a professional "Cyber-Tactical" environment.
+- **Real-Time Link Monitoring**: The main "Sentinel Core" logo dynamically updates its state based on heartbeats from the remote node, turning red immediately if the connection is lost.
 
 ---
 
-## 🧠 Neural Intelligence Engine
+## 🛠 Developer Perspective
 
-The "Neural" aspect of the console uses advanced LLMs (Gemini or Local) to act as a virtual security analyst.
+### Technical Architecture
+- **Framework**: React 19.x with TypeScript for strict type safety.
+- **AI Connectivity**: Supports both **Google Gemini** and **Local OpenAI-compatible** endpoints (Ollama/LM Studio).
+- **Resilience**: Implements AbortControllers for fetch timeouts to ensure the connection status remains accurate.
 
-- **Neural Probe**: Located on every major card. Analyzes current telemetry and generates a JSON-structured tactical report. It identifies anomalies (e.g., "Unexpected CPU spike during idle") and suggests mitigations.
-- **Smart Tooltips (Brain Probe)**: Hover-activated AI analysis. It explains complex metrics or flags in plain language and provides professional recommendations based on the specific context of the data.
-- **Neural Stream v.10**: A unified logging system that prepends the latest activity to the top. It supports "Stream Probing," where the AI analyzes the recent log history or user-selected text for immediate insight.
+---
 
-## ⚙️ Configuration & AI Link
+## 📖 User Guide
 
-The console supports two primary AI backends:
+### Initial Setup
+1. **AI Bridge**: Open **Global Settings** (cog icon). Choose your engine.
+2. **Handshake**: Navigate to the **Dashboard**. Enter target IP and auth details.
 
-1.  **Google Gemini (Cloud)**: High-speed, high-reasoning model. Requires a valid API key.
-2.  **Local Node (Offline)**: Connects to local servers like **LM Studio** or **Ollama**. 
-    - **Endpoint**: Usually `http://localhost:1234/v1`.
-    - **Test Availability**: Use this button in Global Settings to verify the link. The `NEURAL_CORE` indicator in the header will glow **PURPLE** when a stable AI link is established.
-
-## 🛠 Operational Workflow
-
-1.  **Link Handshake**: Establish an SSH tunnel via the Dashboard.
-2.  **Telemetry Sync**: Ensure the remote Pi is running the sentinel heartbeat service on port **5050**.
-3.  **Tactical Execution**: Use the **Toolkit** to build and arm payloads. 
-4.  **Audit Archive**: All actions are recorded in the **History** tab for post-engagement reporting.
+### Operational Procedures
+- **System Audit**: Click the large **CORE PROBE** transistor in the Dashboard to run a systemic health check.
+- **Payload Audit**: Click the small dot next to any PROBE button to inspect the raw data being sent to the AI.
+- **Terminal Overlay**: Toggle **ENGAGE_TERMINAL** for direct bash interaction with the remote node.
 
 ---
 *Build: Neural_Sentinel_v2.9.9_STABLE*
+*Developer: Neural W Monitor Team*
 *Security Clearance: LEVEL_04_SOC_OP*

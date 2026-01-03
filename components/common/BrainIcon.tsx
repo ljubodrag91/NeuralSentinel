@@ -18,7 +18,6 @@ const BrainIcon: React.FC<BrainIconProps> = ({ onClick, className = '', isProces
       style={{ color: isProcessing ? color : '#52525b' }}
       onMouseEnter={(e) => e.currentTarget.style.color = color}
       onMouseLeave={(e) => !isProcessing && (e.currentTarget.style.color = '#52525b')}
-      title="Neural Intelligence Brain Probe"
     >
       <svg className="w-9 h-9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
         <rect x="4" y="4" width="16" height="16" rx="2" />

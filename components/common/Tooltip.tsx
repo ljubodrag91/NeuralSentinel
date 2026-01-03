@@ -1,3 +1,4 @@
+
 import React, { useEffect, useRef } from 'react';
 
 interface TooltipProps {
@@ -52,14 +53,14 @@ const Tooltip: React.FC<TooltipProps> = ({ name, unit, desc, source, rate, child
       tooltip.innerHTML = `
         <div class="flex justify-between items-center mb-2 border-b border-zinc-900 pb-2">
           <div class="${accentClass} font-black text-[10px] tracking-[0.2em] uppercase">${name}</div>
-          <div class="text-[7px] text-zinc-800 font-mono font-bold uppercase tracking-widest">${variant === 'default' ? 'SYSTEM_METRIC' : variant.toUpperCase() + '_PROBE'}</div>
+          <div class="text-[7px] text-zinc-800 font-mono font-bold uppercase tracking-widest">${variant === 'default' ? 'SYSTEM_METRIC' : 'NEURAL_NETWORK_PROBE'}</div>
         </div>
         <div class="flex flex-col gap-1.5 font-mono text-[10px]">
           ${unit ? `<div class="flex justify-between gap-6"><span class="text-zinc-600">UNIT:</span><span class="text-zinc-300">${unit}</span></div>` : ''}
           <div class="flex justify-between gap-6"><span class="text-zinc-600">SOURCE:</span><span class="${stateColor} font-bold">${source}</span></div>
           ${!isOffline && rate ? `<div class="flex justify-between gap-6"><span class="text-zinc-600">INTERVAL:</span><span class="text-zinc-400">${rate}</span></div>` : ''}
           <div class="mt-2 text-[9px] text-zinc-500 leading-tight border-t border-zinc-900/40 pt-2 italic">
-            ${isOffline ? '[WARNING]: Node unreachable. Metric data stale or unavailable.' : (desc || 'Awaiting further telemetry analysis...')}
+            ${isOffline ? '[WARNING]: Node unreachable. Metric data stale or unavailable.' : (desc || 'Awaiting further neural telemetry analysis...')}
           </div>
         </div>
       `;

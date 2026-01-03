@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useMemo } from 'react';
 import Card from './common/Card';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, ResponsiveContainer, Tooltip as RechartsTooltip, BarChart, Bar } from 'recharts';
@@ -8,6 +7,7 @@ import Modal from './common/Modal';
 
 interface TelemetryProps {
   onProbe: (panel: string, data: any) => void;
+  onProbeInfo: (title: string, payload: any) => void;
   onBrainClick: (id: string, type: string, metrics: any) => void;
   isSimulated: boolean;
   isConnected: boolean;
@@ -15,7 +15,7 @@ interface TelemetryProps {
   processingId?: string;
 }
 
-const TelemetryGraphs: React.FC<TelemetryProps> = ({ onProbe, onBrainClick, isSimulated, isConnected, timeframe, processingId }) => {
+const TelemetryGraphs: React.FC<TelemetryProps> = ({ onProbe, onProbeInfo, onBrainClick, isSimulated, isConnected, timeframe, processingId }) => {
   const [rssiData, setRssiData] = useState<any[]>([]);
   const [activeMetrics, setActiveMetrics] = useState<Set<string>>(new Set(['rssi']));
   const [showInfo, setShowInfo] = useState(false);
@@ -111,6 +111,7 @@ const TelemetryGraphs: React.FC<TelemetryProps> = ({ onProbe, onBrainClick, isSi
             variant={isSimulated ? 'sim' : 'real'} 
             className="h-[400px] animate-in zoom-in-95"
             onProbe={() => onProbe('RSSI_REPORT', { rssiData })}
+            onProbeInfo={() => onProbeInfo('RSSI_REPORT', { rssiData })}
             onBrain={() => onBrainClick('rssi_graph', 'RF Intelligence', { currentRssi })}
           >
             <div className="w-full h-full pb-10">
