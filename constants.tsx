@@ -24,6 +24,31 @@ export const TOOLS: ToolDefinition[] = [
     ]
   },
   {
+    id: 'nmap-advanced',
+    name: 'Advanced Network Scanner',
+    category: 'Network Scanning',
+    baseCommand: 'nmap',
+    description: 'Profile-based advanced network scanning engine.',
+    parameters: [
+      { name: 'Target', flag: '', description: 'Target IP/Range', type: 'text', value: '192.168.1.1' },
+      { 
+        name: 'Profile', 
+        flag: '', 
+        description: 'Select a pre-configured scan profile', 
+        type: 'select', 
+        value: '-F -T4',
+        options: [
+          '-F -T4', 
+          '-sS -T4', 
+          '-sV -sC -O -T4', 
+          '-p- -T4', 
+          '--script vuln'
+        ]
+      },
+      { name: 'Verbose', flag: '-v', description: 'Increase verbosity level', type: 'toggle', value: true }
+    ]
+  },
+  {
     id: 'guided-deauth',
     name: 'Guided Deauthentication',
     category: 'Wireless Attacks',

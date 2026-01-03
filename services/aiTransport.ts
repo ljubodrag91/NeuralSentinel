@@ -23,15 +23,12 @@ export const aiTransport = {
       if (config.provider === 'GEMINI') {
         const modelName = 'gemini-3-flash-preview';
         
-        // Ensure prompt is cleanly combined with system instruction if not using native systemInstruction parameter
-        // But the SDK supports a config.systemInstruction.
         requestBody = {
           model: modelName,
           contents: [{ parts: [{ text: prompt }] }],
           config: { 
             systemInstruction: systemInstruction,
             responseMimeType: "application/json",
-            // We set a moderate thinking budget for data probes to ensure they return a result
             thinkingConfig: { thinkingBudget: isDataProbe ? 1024 : 0 },
             temperature: 0.1,
           }
@@ -72,18 +69,27 @@ export const aiTransport = {
         });
         
         const data = await response.json();
-        if (data.error) throw new Error(data.error.message);
+        if (data.error) throw new Error(data.error.message || "Unknown Local AI Error");
+        
         const text = data.choices[0].message.content;
         const jsonMatch = text.match(/\{[\s\S]*\}/);
+        
+        if (!jsonMatch) throw new Error("JSON_PARSE_FAILED: Output did not contain valid JSON.");
+
         return { 
           success: true, 
-          data: JSON.parse(jsonMatch ? jsonMatch[0] : "{}"), 
+          data: JSON.parse(jsonMatch[0]), 
           requestBody 
         };
       }
     } catch (e: any) {
       console.error("AI Transport Error:", e);
-      return { success: false, data: null, requestBody, error: e.message };
+      return { 
+        success: false, 
+        data: null, 
+        requestBody, 
+        error: e.message || "Neural Transport Failure" 
+      };
     }
   }
 };

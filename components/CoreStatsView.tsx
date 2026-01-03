@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { CoreStats, OperationalMode, Timeframe, AppSettings, Platform } from '../types';
 import Card from './common/Card';
 import Tooltip from './common/Tooltip';
@@ -16,14 +16,19 @@ interface CoreStatsViewProps {
   onProbeInfo: (title: string, payload: any) => void;
   onBrainClick: (id: string, type: string, metrics: any) => void;
   onLauncherSelect: (id: string, type: 'core' | 'neural') => void;
+  onCommand: (cmd: string) => void;
   processingId?: string;
   activeTelemetry: Set<string>;
   setActiveTelemetry: (s: Set<string>) => void;
 }
 
-const CoreStatsView: React.FC<CoreStatsViewProps> = ({ stats, mode, settings, onProbeClick, onProbeInfo, onBrainClick, onLauncherSelect, processingId, activeTelemetry, setActiveTelemetry }) => {
+const CoreStatsView: React.FC<CoreStatsViewProps> = ({ stats, mode, settings, onProbeClick, onProbeInfo, onBrainClick, onLauncherSelect, onCommand, processingId, activeTelemetry, setActiveTelemetry }) => {
   const [showInfo, setShowInfo] = useState(false);
   const [tempHistory, setTempHistory] = useState<{time: string, temp: number}[]>([]);
+  
+  // Process Viewer State
+  const [procSort, setProcSort] = useState<'cpu' | 'mem'>('cpu');
+  const [procFilter, setProcFilter] = useState('');
 
   useEffect(() => {
     if (stats?.sensors?.cpu_thermal_temp1) {
@@ -53,6 +58,30 @@ const CoreStatsView: React.FC<CoreStatsViewProps> = ({ stats, mode, settings, on
     const id = settings.probeLaunchers[panelId];
     return launcherSystem.getById(id)?.color || '#bd00ff';
   };
+
+  const handleKillProcess = (pid: number) => {
+    if (mode !== OperationalMode.REAL) return;
+    const cmd = settings.platform === Platform.WINDOWS 
+      ? `Stop-Process -Id ${pid} -Force` 
+      : `kill -9 ${pid}`;
+    onCommand(cmd);
+  };
+
+  const filteredProcesses = useMemo(() => {
+    if (!stats?.processes) return [];
+    
+    // Choose source array based on sort preference, though usually both are available.
+    // Ideally we merge them, but for now we pick the one matching the sort key as primary data source if available.
+    let rawList = procSort === 'cpu' ? (stats.processes.topByCpu || []) : (stats.processes.topByMemory || []);
+    
+    // Fallback if one list is missing
+    if (rawList.length === 0) rawList = stats.processes.topByCpu || stats.processes.topByMemory || [];
+
+    return rawList.filter(p => 
+      p.name.toLowerCase().includes(procFilter.toLowerCase()) || 
+      p.pid.toString().includes(procFilter)
+    );
+  }, [stats?.processes, procSort, procFilter]);
 
   return (
     <div className="space-y-10 animate-in fade-in duration-700 pb-20 no-scroll h-full overflow-y-auto pr-4">
@@ -221,7 +250,7 @@ const CoreStatsView: React.FC<CoreStatsViewProps> = ({ stats, mode, settings, on
         
         <Card 
           id="PROCESS_PROBE"
-          title="TOP_PROCESSES" 
+          title="ACTIVE_PROCESS_MATRIX" 
           variant="purple" 
           probeColor={getLauncherColor('PROCESS_PROBE')}
           onProbe={() => onProbeClick('PROCESS_PROBE', stats?.processes)} 
@@ -230,16 +259,66 @@ const CoreStatsView: React.FC<CoreStatsViewProps> = ({ stats, mode, settings, on
           onLauncherSelect={(type) => onLauncherSelect('PROCESS_PROBE', type)}
           isProcessing={processingId === 'PROCESS_PROBE'}
         >
-          <div className="space-y-2 max-h-64 overflow-y-auto no-scroll">
-            {stats?.processes?.topByCpu?.slice(0, 8).map((p: any, i: number) => (
-              <div key={i} className="flex justify-between items-center text-[10px] font-mono border-b border-zinc-900/40 py-1.5 hover:bg-white/5 transition-colors group">
-                <div className="flex gap-4"><span className="text-zinc-700 w-10">{p.pid}</span><span className="text-zinc-300 truncate w-24 uppercase group-hover:text-white transition-colors">{p.name}</span></div>
-                <div className="flex gap-4">
-                  <span className="text-zinc-600 uppercase text-[8px]">MEM:</span><span className="text-purple-400 w-8 text-right">{p.memory_percent ? p.memory_percent.toFixed(1) : 0}%</span>
-                  <span className="text-zinc-600 uppercase text-[8px]">CPU:</span><span className="text-teal-500 w-10 text-right font-black">{p.cpu_percent ? p.cpu_percent.toFixed(1) : 0}%</span>
-                </div>
+          <div className="flex flex-col h-full">
+            {/* Process Controls */}
+            <div className="flex gap-2 mb-3">
+              <input 
+                type="text" 
+                value={procFilter}
+                onChange={(e) => setProcFilter(e.target.value)}
+                placeholder="FILTER PID/NAME..."
+                className="bg-black/50 border border-zinc-900 px-2 py-1 text-[9px] text-zinc-300 font-mono outline-none focus:border-purple-500/50 flex-1"
+              />
+              <div className="flex border border-zinc-900">
+                <button 
+                  onClick={() => setProcSort('cpu')}
+                  className={`px-2 py-1 text-[8px] font-black uppercase transition-all ${procSort === 'cpu' ? 'bg-teal-500/20 text-teal-400' : 'text-zinc-600 hover:text-zinc-400'}`}
+                >
+                  CPU
+                </button>
+                <div className="w-[1px] bg-zinc-900"></div>
+                <button 
+                  onClick={() => setProcSort('mem')}
+                  className={`px-2 py-1 text-[8px] font-black uppercase transition-all ${procSort === 'mem' ? 'bg-purple-500/20 text-purple-400' : 'text-zinc-600 hover:text-zinc-400'}`}
+                >
+                  MEM
+                </button>
               </div>
-            )) || <div className="text-center py-10 text-zinc-800 uppercase tracking-widest text-[9px]">Awaiting tactical data...</div>}
+            </div>
+
+            <div className="space-y-1 max-h-64 overflow-y-auto no-scroll flex-1">
+              <div className="grid grid-cols-12 text-[8px] text-zinc-600 font-black uppercase mb-1 px-1">
+                <div className="col-span-2">PID</div>
+                <div className="col-span-5">NAME</div>
+                <div className="col-span-3 text-right">RES</div>
+                <div className="col-span-2 text-right">ACT</div>
+              </div>
+              
+              {filteredProcesses.length > 0 ? filteredProcesses.slice(0, 50).map((p: any) => (
+                <div key={p.pid} className="grid grid-cols-12 items-center text-[10px] font-mono border-b border-zinc-900/30 py-1 hover:bg-white/5 transition-colors group">
+                  <div className="col-span-2 text-zinc-600">{p.pid}</div>
+                  <div className="col-span-5 text-zinc-300 truncate uppercase group-hover:text-white transition-colors">{p.name}</div>
+                  <div className="col-span-3 text-right flex gap-2 justify-end">
+                    <span className={`text-[9px] ${procSort === 'cpu' ? 'text-teal-500 font-bold' : 'text-zinc-500'}`}>{p.cpu_percent ? p.cpu_percent.toFixed(1) : 0}%</span>
+                    <span className={`text-[9px] ${procSort === 'mem' ? 'text-purple-400 font-bold' : 'text-zinc-500'}`}>{p.memory_percent ? p.memory_percent.toFixed(1) : 0}%</span>
+                  </div>
+                  <div className="col-span-2 text-right">
+                    {mode === OperationalMode.REAL && (
+                      <button 
+                        onClick={() => handleKillProcess(p.pid)}
+                        className="text-[8px] text-red-900 hover:text-red-500 font-black uppercase border border-transparent hover:border-red-900/50 px-1 transition-all opacity-0 group-hover:opacity-100"
+                      >
+                        KILL
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )) : (
+                <div className="text-center py-10 text-zinc-800 uppercase tracking-widest text-[9px]">
+                  {stats ? 'No matching processes' : 'Awaiting tactical data...'}
+                </div>
+              )}
+            </div>
           </div>
         </Card>
       </div>

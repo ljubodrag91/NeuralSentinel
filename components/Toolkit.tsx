@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { TOOLS } from '../constants';
 import { ToolDefinition, OperationalMode } from '../types';
@@ -16,7 +17,7 @@ type WizardStep = 'PREPARE' | 'DISCOVER' | 'SELECT' | 'INTENSITY' | 'CONFIRM' | 
 const Toolkit: React.FC<ToolkitProps> = ({ onRunCommand, onBreakdown, mode }) => {
   const [selectedTool, setSelectedTool] = useState<ToolDefinition | null>(null);
   const [params, setParams] = useState<Record<string, string | number | boolean>>({});
-  const [expandedCats, setExpandedCats] = useState<Set<string>>(new Set(['Reconnaissance', 'Wireless Attacks']));
+  const [expandedCats, setExpandedCats] = useState<Set<string>>(new Set(['Reconnaissance', 'Wireless Attacks', 'Network Scanning']));
 
   // Wizard States
   const [wizardStep, setWizardStep] = useState<WizardStep>('PREPARE');
@@ -305,6 +306,14 @@ const Toolkit: React.FC<ToolkitProps> = ({ onRunCommand, onBreakdown, mode }) =>
                             </div>
                             <span className={`text-[9px] font-black uppercase ${params[p.name] ? 'text-teal-400' : 'text-zinc-800'}`}>{params[p.name] ? 'ON' : 'OFF'}</span>
                           </div>
+                        ) : p.type === 'select' ? (
+                          <select 
+                            value={(params[p.name] ?? "") as any} 
+                            onChange={(e) => setParams(prev => ({ ...prev, [p.name]: e.target.value }))}
+                            className="bg-zinc-950 border border-zinc-900 px-4 py-2 text-[11px] text-zinc-400 font-mono outline-none focus:border-teal-500/20 transition-colors w-full appearance-none"
+                          >
+                            {p.options?.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                          </select>
                         ) : (
                           <input type={p.type === 'number' ? 'number' : 'text'} value={(params[p.name] ?? "") as any} onChange={(e) => setParams(prev => ({ ...prev, [p.name]: e.target.value }))} className="bg-zinc-950 border border-zinc-900 px-4 py-2 text-[11px] text-zinc-400 font-mono outline-none focus:border-teal-500/20 transition-colors" placeholder="Input..." />
                         )}

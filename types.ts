@@ -13,6 +13,8 @@ export enum Platform {
   WINDOWS = 'WINDOWS'
 }
 
+export type DataSourceMode = 'LOCAL' | 'REMOTE';
+
 export enum LogLevel {
   INFO = 'INFO',
   SUCCESS = 'SUCCESS',
@@ -132,6 +134,10 @@ export interface CoreStats {
   rates: {
     sampleInterval: number;
   };
+  // Injected by frontend backend-logic
+  platform?: Platform;
+  source?: DataSourceMode;
+  
   timestamp: number;
   datetime: string;
 }
@@ -166,6 +172,7 @@ export interface AppSettings {
   telemetryEnabled: boolean;
   neuralUplinkEnabled: boolean;
   platform: Platform;
+  dataSourceMode: DataSourceMode;
 }
 
 export interface SmartTooltipData {
@@ -211,8 +218,9 @@ export interface ToolParameter {
   name: string;
   flag: string;
   description: string;
-  type: 'text' | 'toggle' | 'number';
+  type: 'text' | 'toggle' | 'number' | 'select';
   value: string | number | boolean;
+  options?: string[];
 }
 
 export interface ToolDefinition {

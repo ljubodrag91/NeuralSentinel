@@ -26,10 +26,11 @@ interface DashboardProps {
   processingId?: string;
   latestCoreProbeResult?: any;
   activeTelemetry?: Set<string>;
+  uplinkStatus: { neural: boolean; service: boolean };
 }
 
 const Dashboard: React.FC<DashboardProps> = ({ 
-  mode, session, stats, settings, terminalHistory, onHandshake, onDisconnect, onLog, onBrainClick, onProbeClick, onProbeInfo, onLauncherSelect, onAdapterCommand, processingId, latestCoreProbeResult, activeTelemetry
+  mode, session, stats, settings, terminalHistory, onHandshake, onDisconnect, onLog, onBrainClick, onProbeClick, onProbeInfo, onLauncherSelect, onAdapterCommand, processingId, latestCoreProbeResult, activeTelemetry, uplinkStatus
 }) => {
   const [ipInput, setIpInput] = useState(session.targetIp || '10.121.41.108');
   const [user, setUser] = useState('kali'); 
@@ -185,14 +186,14 @@ const Dashboard: React.FC<DashboardProps> = ({
             probeColor={getLauncherColor('GLOBAL_SYSTEM_PROBE')}
           >
             <div className="flex flex-col h-full">
-              {/* STATUS CIRCLES RESTORED */}
+              {/* STATUS CIRCLES RESTORED WITH REAL UPLINK STATUS */}
               <div className="flex justify-center gap-6 mb-4 border-b border-zinc-900/30 pb-2 shrink-0">
                   <div className="flex items-center gap-2">
-                      <div className={`w-1.5 h-1.5 rounded-full ${isConnected ? 'bg-teal-500 glow-teal' : 'bg-red-500'}`}></div>
+                      <div className={`w-1.5 h-1.5 rounded-full ${uplinkStatus.service ? 'bg-teal-500 glow-teal' : 'bg-red-500'}`}></div>
                       <span className="text-[8px] font-black uppercase text-zinc-600">Service_Link</span>
                   </div>
                   <div className="flex items-center gap-2">
-                      <div className={`w-1.5 h-1.5 rounded-full ${latestCoreProbeResult ? 'bg-purple-500 glow-purple' : 'bg-zinc-800'}`}></div>
+                      <div className={`w-1.5 h-1.5 rounded-full ${uplinkStatus.neural ? 'bg-purple-500 glow-purple' : 'bg-red-500'}`}></div>
                       <span className="text-[8px] font-black uppercase text-zinc-600">Neural_Uplink</span>
                   </div>
               </div>

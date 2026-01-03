@@ -64,17 +64,19 @@ export async function performNeuralProbe(
   config: AIConfig,
   panelName: string,
   metrics: any,
-  context: { sessionId: string; mode: OperationalMode }
+  context: { sessionId: string; mode: OperationalMode; serviceStatus: 'ONLINE' | 'OFFLINE' }
 ) {
   const isMainProbe = panelName === 'GLOBAL_SYSTEM_PROBE';
   const contract = PROBE_CONTRACTS[panelName];
   
-  // Platform awareness
+  // Platform and Source awareness injected from App.tsx
   const platform = metrics?.platform || Platform.LINUX;
+  const source = metrics?.source || "UNKNOWN";
+  
   const isEmpty = metrics?.status === 'empty' || contract?.buildPayload(metrics)?.status === 'empty';
 
   let systemInstruction = `You are the ${isMainProbe ? 'Main Neural Core' : 'Panel Diagnostic Core'} for the PiSentinel SOC monitor.
-Target Platform: ${platform}.
+Target Platform: ${platform} (${source} Source).
 Analyze the provided probe data and return a structured report for security professionals.
 `;
 
@@ -84,8 +86,12 @@ Analyze the provided probe data and return a structured report for security prof
     systemInstruction += `Context: Remote Linux/Pi SSH Telemetry. Focus on kernel logs, SSH intrusion attempts, and daemon stability.\n`;
   }
 
+  if (context.serviceStatus === 'OFFLINE') {
+    systemInstruction += `WARNING: SERVICE UPLINK IS OFFLINE. The provided telemetry dataset may be stale, incomplete, or empty. Advise the operator to check the physical connection or the Sentinel daemon on the target node.\n`;
+  }
+
   if (isEmpty) {
-    systemInstruction += `CRITICAL: The probe dataset is EMPTY or UNREACHABLE. Indicate this clearly in the description and recommend checking connectivity or launcher configuration.\n`;
+    systemInstruction += `CRITICAL: The probe dataset is EMPTY. Indicate this clearly in the description and recommend checking connectivity or launcher configuration.\n`;
   }
 
   systemInstruction += `STRICT RULES:
@@ -109,21 +115,21 @@ Schema:
     panel: panelName, 
     operational_mode: context.mode,
     platform: platform,
+    source_origin: source,
+    service_uplink: context.serviceStatus,
     payload: payload
   }));
 
-  if (config.provider === AIProvider.GEMINI) {
-    const ai = getAiClient(config);
-    try {
+  try {
+    if (config.provider === AIProvider.GEMINI) {
+      const ai = getAiClient(config);
       const response = await ai.models.generateContent({
         model: 'gemini-3-flash-preview',
         contents: systemInstruction + "\n\n" + userPrompt,
         config: { responseMimeType: "application/json" }
       });
       return JSON.parse(response.text || "{}");
-    } catch { return fallbackProbe(panelName, context.mode); }
-  } else {
-    try {
+    } else {
       const baseUrl = config.endpoint.replace(/\/$/, "");
       const endpoint = baseUrl.includes('/chat/completions') ? baseUrl : `${baseUrl}/chat/completions`;
       
@@ -143,10 +149,19 @@ Schema:
       const data = await response.json();
       if (data.error) throw new Error(data.error.message);
       return extractJsonLoose(data.choices[0].message.content);
-    } catch (e) { 
-      console.error("Local Neural Probe Error:", e);
-      return fallbackProbe(panelName, context.mode); 
     }
+  } catch (e: any) {
+    console.error("Neural Probe Error:", e);
+    // Return a structured error response that fits the schema so the UI doesn't crash
+    return {
+      description: `Neural Link Failure: ${e.message}`,
+      recommendation: "Check AI Configuration and Connectivity.",
+      status: context.mode,
+      elementType: panelName,
+      elementId: "ERROR",
+      anomalies: ["AI_UNREACHABLE"],
+      threatLevel: "UNKNOWN"
+    };
   }
 }
 

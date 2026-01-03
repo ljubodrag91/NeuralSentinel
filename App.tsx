@@ -11,7 +11,8 @@ import {
   NeuralNetworkConfig, 
   AppSettings, 
   Launcher,
-  Platform
+  Platform,
+  DataSourceMode
 } from './types';
 import Dashboard from './components/Dashboard';
 import CoreStatsView from './components/CoreStatsView';
@@ -31,6 +32,8 @@ import { serverService } from './services/serverService';
 import { PROBE_CONTRACTS } from './services/probeContracts';
 import { HistoryStorage } from './services/historyStorage';
 import { sessionManager } from './services/sessionManager';
+import { LOCAL_MODELS } from './services/config';
+import { testAiAvailability } from './services/aiService';
 
 const SETTINGS_KEY = 'neural_sentinel_app_settings';
 
@@ -71,6 +74,8 @@ const App: React.FC = () => {
   const [coreStats, setCoreStats] = useState<CoreStats | null>(null);
   const [activeTelemetry, setActiveTelemetry] = useState<Set<string>>(new Set(['cpu']));
   
+  const [uplinkStatus, setUplinkStatus] = useState({ neural: false, service: false });
+
   const [terminalHistory, setTerminalHistory] = useState<string[]>([]);
   const [launcherPickerModal, setLauncherPickerModal] = useState<{panelId: string, type: 'core' | 'neural'} | null>(null);
 
@@ -103,7 +108,8 @@ const App: React.FC = () => {
       },
       telemetryEnabled: true,
       neuralUplinkEnabled: true,
-      platform: Platform.LINUX
+      platform: Platform.WINDOWS, // Default to Windows
+      dataSourceMode: 'LOCAL' as DataSourceMode // Default to Local
     };
   });
 
@@ -168,33 +174,88 @@ const App: React.FC = () => {
     }
   }, [addLog]);
 
-  const getEffectiveTarget = useCallback(() => {
-    if (settings.platform === Platform.WINDOWS) return '127.0.0.1';
-    return session.targetIp;
-  }, [settings.platform, session.targetIp]);
-
+  // Handle Mode Switch Logic
   useEffect(() => {
-    const heartbeat = setInterval(async () => {
-      // Respect Telemetry Enabled Flag
-      if (!settings.telemetryEnabled) return;
+    if (settings.dataSourceMode === 'LOCAL') {
+      // Ensure we are in REAL mode and ACTIVE when LOCAL is selected.
+      // We do NOT overwrite targetIp to preserve remote config.
+      if (session.status !== 'ACTIVE') {
+        setMode(OperationalMode.REAL);
+        setSession(s => ({ ...s, status: 'ACTIVE', authHash: 'LOCAL_BYPASS' }));
+        addLog('LOCAL_SOURCE_ACTIVE: Listening on 127.0.0.1 (Windows Default)', LogLevel.SYSTEM, 'system');
+      }
+    }
+  }, [settings.dataSourceMode]);
 
-      const target = getEffectiveTarget();
-      // If Windows, assume local polling even if session.targetIp is null (treating as local agent)
-      if ((mode === OperationalMode.REAL && target) || settings.platform === Platform.WINDOWS) {
-        try {
-          const host = target || '127.0.0.1';
-          const res = await fetch(`http://${host}:5050/stats`, { signal: AbortSignal.timeout(3000) });
-          const stats = await res.json();
-          setCoreStats(stats);
-          setSession(s => ({ ...s, status: 'ACTIVE' }));
-        } catch {
-          setSession(s => ({ ...s, status: 'TERMINATED' }));
-          setCoreStats(null);
+  // Core Backend Redesign: Determine effective target IP based on Data Source Mode
+  const getEffectiveTarget = useCallback(() => {
+    if (settings.dataSourceMode === 'LOCAL') return '127.0.0.1';
+    // REMOTE mode: Return configured IP or null if not set
+    return session.targetIp;
+  }, [settings.dataSourceMode, session.targetIp]);
+
+  // Unified Heartbeat & Real-State Detection
+  useEffect(() => {
+    // Initial check on mount or config change
+    const checkNeuralStatus = async () => {
+      if (settings.neuralUplinkEnabled) {
+        const isUp = await testAiAvailability(neuralConfig);
+        setUplinkStatus(prev => ({ ...prev, neural: isUp }));
+      } else {
+        setUplinkStatus(prev => ({ ...prev, neural: false }));
+      }
+    };
+    checkNeuralStatus();
+
+    const heartbeat = setInterval(async () => {
+      // 1. Service Uplink Check (Telemetry)
+      if (settings.telemetryEnabled) {
+        const target = getEffectiveTarget();
+        
+        // We only fetch if we have a target (Local always returns 127.0.0.1, Remote returns null if no session)
+        if (target) {
+          try {
+            const res = await fetch(`http://${target}:5050/stats`, { signal: AbortSignal.timeout(3000) });
+            if (res.ok) {
+              const stats = await res.json();
+              
+              // Backend Redesign: Inject Platform and Source Context if missing
+              // This ensures frontend components always know the true origin of data
+              stats.platform = settings.platform; 
+              stats.source = settings.dataSourceMode;
+
+              setCoreStats(stats);
+              setSession(s => ({ ...s, status: 'ACTIVE' }));
+              setUplinkStatus(prev => ({ ...prev, service: true }));
+            } else {
+              throw new Error('Non-200');
+            }
+          } catch {
+             // Only terminate session if we expected a connection but failed (e.g. Remote Drop)
+             // In Local mode, we might just mark service offline but keep UI active
+             if (settings.dataSourceMode === 'REMOTE') {
+               setSession(s => ({ ...s, status: 'TERMINATED' }));
+             }
+             setCoreStats(null);
+             setUplinkStatus(prev => ({ ...prev, service: false }));
+          }
+        } else {
+          // No target defined in REMOTE mode
+          setUplinkStatus(prev => ({ ...prev, service: false }));
         }
-      } 
+      } else {
+        setUplinkStatus(prev => ({ ...prev, service: false }));
+      }
+
+      // 2. Neural Uplink Check (Periodically ping)
+      if (settings.neuralUplinkEnabled) {
+         const isUp = await testAiAvailability(neuralConfig);
+         setUplinkStatus(prev => ({ ...prev, neural: isUp }));
+      }
+
     }, settings.pollInterval * 1000);
     return () => clearInterval(heartbeat);
-  }, [mode, getEffectiveTarget, settings.pollInterval, settings.telemetryEnabled, settings.platform]);
+  }, [mode, getEffectiveTarget, settings.pollInterval, settings.telemetryEnabled, settings.neuralUplinkEnabled, settings.platform, settings.dataSourceMode, neuralConfig]);
 
   const handleNeuralProbe = async (panelName: string, metrics: any) => {
     if (processingId) return;
@@ -220,28 +281,33 @@ const App: React.FC = () => {
     setProcessingId(panelName);
 
     const history = contract?.isDataProbe ? HistoryStorage.getCSV('stats', 'CPU,MEM,TEMP') : '';
-    const systemInstruction = `You are a professional ${settings.platform} SOC analyst. Analyze the provided probe data.
-RESPONSE FORMAT:
-You must return a single valid JSON object. Do not include any markdown formatting.
-The JSON object must have exactly these fields:
-{
-  "status": "A short status string (e.g., SYSTEMS NOMINAL, THREAT DETECTED)",
-  "description": "A detailed technical breakdown of the system state, mentioning specific metrics.",
-  "recommendation": "A clear, actionable next step for the operator.",
-  "threatLevel": "LOW", "MEDIUM", "HIGH", or "CRITICAL"
-}`;
-    // Inject platform context into metrics payload
-    const platformMetrics = { ...metrics, platform: settings.platform };
     
-    const response = await aiTransport.fetch(neuralConfig, systemInstruction, JSON.stringify(contract.buildPayload(platformMetrics, history)), !!contract?.isDataProbe);
+    // Inject backend context into metrics payload
+    const platformMetrics = { 
+        ...metrics, 
+        platform: settings.platform, 
+        source: settings.dataSourceMode, // Explicit source injection
+        uplink_status: uplinkStatus 
+    };
     
-    if (response.success) {
-      if (panelName === 'GLOBAL_SYSTEM_PROBE') setLatestCoreProbeResult(response.data);
+    const serviceStatus = uplinkStatus.service ? 'ONLINE' : 'OFFLINE';
+
+    // Import aiService dynamically to avoid circular dependencies
+    const { performNeuralProbe } = await import('./services/aiService');
+
+    const result = await performNeuralProbe(neuralConfig, panelName, platformMetrics, { 
+      sessionId: session.id, 
+      mode, 
+      serviceStatus 
+    });
+    
+    if (result && result.description) {
+      if (panelName === 'GLOBAL_SYSTEM_PROBE') setLatestCoreProbeResult(result);
       addLog(`Probe executed: ${panelName}`, LogLevel.SUCCESS, 'neural', { 
-        type: 'PROBE_RESULT', title: panelName, data: response.data, requestBody: response.requestBody, launcherId 
+        type: 'PROBE_RESULT', title: panelName, data: result, requestBody: { /* abbreviated */ }, launcherId 
       });
     } else {
-      addLog(`Probe failure: ${response.error}`, LogLevel.ERROR, 'neural');
+      addLog(`Probe failure: Invalid response`, LogLevel.ERROR, 'neural');
     }
     setProcessingId(undefined);
   };
@@ -259,13 +325,22 @@ The JSON object must have exactly these fields:
       return;
     }
     setProcessingId(id);
-    const systemInstruction = `Inference engine. Provide concise security insight for ${settings.platform}. JSON: {"description": "...", "recommendation": "..."}`;
-    const response = await aiTransport.fetch(neuralConfig, systemInstruction, JSON.stringify({id, metrics, platform: settings.platform}), false);
+    const systemInstruction = `Inference engine. Provide concise security insight for ${settings.platform} running on ${settings.dataSourceMode} source. JSON: {"description": "...", "recommendation": "..."}`;
+    
+    if (!uplinkStatus.neural) {
+       addLog(`NEURAL_OFFLINE: Uplink unreachable.`, LogLevel.ERROR, 'neural');
+       setProcessingId(undefined);
+       return;
+    }
+
+    const response = await aiTransport.fetch(neuralConfig, systemInstruction, JSON.stringify({id, metrics, platform: settings.platform, source: settings.dataSourceMode}), false);
     if (response.success) {
       addLog(`Inference Sync: ${id}`, LogLevel.NEURAL, 'neural', {
         type: 'PROBE_RESULT', title: `Brain: ${id}`, data: response.data, requestBody: response.requestBody, launcherId
       });
       setProbeContextModal({ title: `BRAIN_INSIGHT: ${id}`, payload: response.data });
+    } else {
+      addLog(`NEURAL_FAILURE: ${response.error || 'Unknown Error'}`, LogLevel.ERROR, 'neural');
     }
     setProcessingId(undefined);
   };
@@ -274,12 +349,10 @@ The JSON object must have exactly these fields:
     addLog(`INITIATING HANDSHAKE: ${user}@${ip}:${port}`, LogLevel.SYSTEM, 'system');
     setSession(s => ({ ...s, targetIp: ip, status: 'IDLE' }));
     
-    // Simulate auth token generation (secure storage mock)
     const token = btoa(`${user}:${Date.now()}`);
     sessionManager.saveSession(ip, user, token, port);
     setMode(OperationalMode.REAL);
     
-    // Immediate activation attempt
     setSession(s => ({ ...s, status: 'ACTIVE', authHash: token }));
     addLog(`HANDSHAKE ESTABLISHED: Link stable.`, LogLevel.SUCCESS, 'system');
   };
@@ -287,6 +360,8 @@ The JSON object must have exactly these fields:
   const handleDisconnect = () => {
     setSession(s => ({ ...s, targetIp: null, status: 'IDLE', authHash: undefined }));
     setCoreStats(null);
+    // If in LOCAL mode, disconnecting switches mode back to OFFLINE unless auto-reconnect logic exists
+    // But conceptually, LOCAL "Disconnect" stops the stream.
     setMode(OperationalMode.OFFLINE);
     sessionManager.clearSession();
     addLog(`SESSION TERMINATED: Handshake dissolved.`, LogLevel.WARNING, 'system');
@@ -298,20 +373,24 @@ The JSON object must have exactly these fields:
     setTerminalHistory(prev => [...prev, `${prompt} ${cmd}`]);
     
     const target = getEffectiveTarget();
-    if (target || settings.platform === Platform.WINDOWS) {
-      const host = target || '127.0.0.1';
+    if (target) {
       try {
-        const res = await fetch(`http://${host}:5050/exec`, {
+        const res = await fetch(`http://${target}:5050/exec`, {
           method: 'POST',
           body: JSON.stringify({ command: cmd, platform: settings.platform }),
           headers: { 'Content-Type': 'application/json' }
         });
+        
+        if (!res.ok) throw new Error(`Status ${res.status}`);
+        
         const data = await res.json();
         setTerminalHistory(prev => [...prev, data.output || "Execution completed."]);
       } catch (e: any) {
+        addLog(`COMMAND_FAILED: ${e.message}`, LogLevel.ERROR, 'console');
         setTerminalHistory(prev => [...prev, `[ERROR] COMMS_ERR: ${e.message}`]);
       }
     } else {
+       addLog(`COMMAND_ABORTED: No active target.`, LogLevel.ERROR, 'console');
        setTerminalHistory(prev => [...prev, `[ERROR] NO_LINK: Target unreachable.`]);
     }
   };
@@ -345,9 +424,90 @@ The JSON object must have exactly these fields:
     .map(id => launcherSystem.getById(id))
     .filter((l): l is Launcher => l !== undefined);
 
-  // Link Status Helpers
-  const isNeuralAvailable = true; // Always available
-  const isServiceAvailable = session.status === 'ACTIVE';
+  // Helper to render structured probe content in Modal
+  const renderProbeContent = (payload: any) => {
+    if (!payload) return null;
+    
+    const isInteraction = payload.REQUEST && payload.RESPONSE;
+    const timestamp = payload.timestamp || new Date().toLocaleTimeString();
+    
+    // Determine status and style based on payload data
+    let status = "INFO";
+    let statusColor = "text-blue-400";
+    let statusIcon = "ℹ";
+    
+    const dataToCheck = isInteraction ? payload.RESPONSE : payload;
+    
+    if (dataToCheck?.status === 'OFFLINE' || dataToCheck?.error) {
+      status = "FAILURE";
+      statusColor = "text-red-500";
+      statusIcon = "❌";
+    } else if (dataToCheck?.threatLevel === 'HIGH' || dataToCheck?.threatLevel === 'CRITICAL' || dataToCheck?.threatLevel === 'ELEVATED') {
+      status = "WARNING";
+      statusColor = "text-yellow-500";
+      statusIcon = "⚠️";
+    } else if (dataToCheck?.status === 'REAL' || dataToCheck?.success === true || dataToCheck?.status === 'ONLINE' || dataToCheck?.status === 'ACTIVE') {
+      status = "SUCCESS";
+      statusColor = "text-green-500";
+      statusIcon = "✅";
+    }
+
+    const json = (data: any) => JSON.stringify(data, null, 2);
+
+    return (
+      <div className="flex flex-col gap-4 font-mono">
+        <div className="flex justify-between items-start border-b border-zinc-800 pb-3 bg-zinc-900/20 p-2 rounded-sm">
+          <div className="flex flex-col gap-1">
+            <span className="text-[8px] text-zinc-500 uppercase font-black tracking-[0.2em]">Timestamp</span>
+            <span className="text-[11px] text-zinc-300">{timestamp}</span>
+          </div>
+          <div className="flex flex-col gap-1 items-end">
+            <span className="text-[8px] text-zinc-500 uppercase font-black tracking-[0.2em]">Result_Status</span>
+            <span className={`text-[11px] font-black uppercase ${statusColor} flex items-center gap-2`}>
+              {statusIcon} {status}
+            </span>
+          </div>
+        </div>
+
+        {isInteraction ? (
+          <>
+            <div className="space-y-2 animate-in fade-in slide-in-from-left-2 duration-300">
+              <div className="flex items-center gap-2">
+                <div className="w-1 h-3 bg-purple-500"></div>
+                <h4 className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">Neural_Request_Vector</h4>
+              </div>
+              <pre className="p-3 bg-black/40 border border-zinc-900 text-zinc-400 text-[10px] overflow-auto max-h-32 whitespace-pre-wrap scrollbar-thin scrollbar-thumb-zinc-800">
+                {json(payload.REQUEST)}
+              </pre>
+            </div>
+            <div className="space-y-2 animate-in fade-in slide-in-from-left-2 duration-500 delay-75">
+              <div className="flex items-center gap-2">
+                <div className="w-1 h-3 bg-teal-500"></div>
+                <h4 className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">Neural_Response_Core</h4>
+              </div>
+              <pre className="p-3 bg-black/40 border border-zinc-900 text-teal-400/90 text-[10px] overflow-auto max-h-96 whitespace-pre-wrap scrollbar-thin scrollbar-thumb-zinc-800 shadow-[inset_0_0_20px_rgba(0,0,0,0.5)]">
+                {json(payload.RESPONSE)}
+              </pre>
+            </div>
+          </>
+        ) : (
+          <div className="space-y-2 animate-in fade-in zoom-in-95 duration-300">
+             <div className="flex items-center gap-2">
+                <div className="w-1 h-3 bg-blue-500"></div>
+                <h4 className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">Payload_Data_Snapshot</h4>
+             </div>
+             <pre className="p-3 bg-black/40 border border-zinc-900 text-blue-400/90 text-[10px] overflow-auto max-h-[500px] whitespace-pre-wrap scrollbar-thin scrollbar-thumb-zinc-800">
+                {json(payload)}
+             </pre>
+          </div>
+        )}
+
+        <div className="mt-4 pt-4 border-t border-dashed border-zinc-800 text-center">
+          <p className="text-[9px] text-zinc-600 italic">"Click Payload Audit dot on modules to inspect raw JSON structure"</p>
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div className={`flex flex-col h-screen overflow-hidden ${mode === OperationalMode.REAL ? 'mode-real' : 'mode-sim'}`}>
@@ -365,45 +525,58 @@ The JSON object must have exactly these fields:
             <h1 className="text-lg md:text-2xl font-black tracking-[0.4em] md:tracking-[0.6em] text-white uppercase chromatic-aberration ml-2 md:ml-4">Sentinel</h1>
             {/* STATUS DIV WITH INTERACTIVE LINKS */}
             <div className="flex gap-4 md:gap-6 mt-1 items-center ml-2 md:ml-4">
-              <span className="text-[8px] md:text-[10px] font-black uppercase tracking-widest hidden md:block" style={{ color: currentAccent }}>{mode} PROTOCOL</span>
+              <span 
+                onClick={() => setSettings(s => ({
+                  ...s, 
+                  dataSourceMode: s.dataSourceMode === 'LOCAL' ? 'REMOTE' : 'LOCAL',
+                  platform: s.dataSourceMode === 'LOCAL' ? Platform.LINUX : Platform.WINDOWS
+                }))}
+                className="text-[8px] md:text-[10px] font-black uppercase tracking-widest hidden md:block cursor-pointer hover:underline" 
+                style={{ color: currentAccent }}
+              >
+                {settings.dataSourceMode} SOURCE
+              </span>
               <div className="flex gap-4 ml-0 md:ml-4">
                 
-                {/* Neural Uplink - TEAL when Enabled */}
+                {/* Neural Uplink */}
                 <Tooltip 
                   name="NEURAL_UPLINK" 
-                  source={settings.platform} 
-                  desc={`STATUS: ${settings.neuralUplinkEnabled ? 'ACTIVE' : 'DISABLED'}\nPLATFORM: ${settings.platform}\nCHARGES: ${serverService.getCharges(settings.probeLaunchers['brain_tooltip'] || 'std-neural')}`}
+                  source={settings.dataSourceMode} 
+                  desc={`STATUS: ${settings.neuralUplinkEnabled ? (uplinkStatus.neural ? 'ONLINE' : 'OFFLINE') : 'DISABLED'}\nPROVIDER: ${neuralConfig.provider}\nMODEL: ${neuralConfig.model}`}
                 >
                   <div onClick={() => setSettings(s => ({...s, neuralUplinkEnabled: !s.neuralUplinkEnabled, globalDistortion: !s.neuralUplinkEnabled}))} className="block cursor-pointer relative group">
-                    <div className={`w-4 h-4 rounded-full border border-black transition-all ${settings.neuralUplinkEnabled ? 'bg-teal-500 glow-teal' : 'bg-zinc-800'}`}></div>
-                    {/* Rotating Indicator when Disabled but Available */}
-                    {!settings.neuralUplinkEnabled && isNeuralAvailable && (
-                       <div className="absolute -inset-1 border border-transparent border-t-teal-500 rounded-full animate-spin opacity-50"></div>
+                    <div className={`w-4 h-4 rounded-full border border-black transition-all ${
+                      settings.neuralUplinkEnabled 
+                        ? (uplinkStatus.neural ? 'bg-teal-500 glow-teal' : 'bg-red-500') 
+                        : 'bg-zinc-800'
+                    }`}></div>
+                    {!settings.neuralUplinkEnabled && (
+                       <div className="absolute -inset-1 border border-transparent border-t-zinc-600 rounded-full opacity-50"></div>
                     )}
                   </div>
                 </Tooltip>
 
-                {/* Service Link - PURPLE when Enabled */}
+                {/* Service Link */}
                 <Tooltip 
                   name="SERVICE_LINK" 
-                  source={settings.platform} 
-                  desc={`STATUS: ${settings.telemetryEnabled ? 'ACTIVE' : 'DISABLED'}\nPLATFORM: ${settings.platform}\nAVAILABILITY: ${session.status}\n${settings.telemetryEnabled ? 'Telemetry stream active.' : 'Telemetry stream paused.'}`}
+                  source={settings.dataSourceMode} 
+                  desc={`STATUS: ${settings.telemetryEnabled ? (uplinkStatus.service ? 'ONLINE' : 'OFFLINE') : 'DISABLED'}\nTARGET: ${getEffectiveTarget() || 'DISCONNECTED'}\nPLATFORM: ${settings.platform}`}
                 >
                   <div onClick={() => setSettings(s => ({...s, telemetryEnabled: !s.telemetryEnabled}))} className="block cursor-pointer relative group">
                     <div className={`w-4 h-4 rounded-full border border-black transition-all ${
-                      settings.telemetryEnabled && isServiceAvailable ? 'bg-purple-500 glow-purple' : 
-                      (!isServiceAvailable ? 'bg-red-500' : 'bg-zinc-800') // Grey if disabled but available, Red if unavailable
+                      settings.telemetryEnabled
+                        ? (uplinkStatus.service ? 'bg-purple-500 glow-purple' : 'bg-red-500')
+                        : 'bg-zinc-800'
                     }`}></div>
-                     {/* Rotating Indicator when Disabled but Available */}
-                    {!settings.telemetryEnabled && isServiceAvailable && (
-                       <div className="absolute -inset-1 border border-transparent border-t-purple-500 rounded-full animate-spin opacity-50"></div>
+                    {!settings.telemetryEnabled && (
+                       <div className="absolute -inset-1 border border-transparent border-t-zinc-600 rounded-full opacity-50"></div>
                     )}
                   </div>
                 </Tooltip>
 
               </div>
               <span className="text-[8px] md:text-[10px] font-black uppercase tracking-widest text-zinc-500 border-l border-zinc-900 pl-4 hidden md:block">
-                {coreStats?.system?.hostname ? `HOST@${coreStats.system.hostname}` : 'HOST@OFFLINE'}
+                {coreStats?.system?.hostname ? `HOST@${coreStats.system.hostname}` : 'HOST@VOID'}
               </span>
             </div>
           </div>
@@ -491,15 +664,15 @@ The JSON object must have exactly these fields:
             ))}
           </nav>
           <div className="flex-1 overflow-y-auto p-4 md:p-10 no-scroll">
-            {activeTab === 'dashboard' && <Dashboard stats={coreStats} mode={mode} session={session} settings={settings} terminalHistory={terminalHistory} onHandshake={handleHandshake} onDisconnect={handleDisconnect} onLog={addLog} onBrainClick={handleBrainRequest} onProbeClick={handleNeuralProbe} onProbeInfo={(title, payload) => setProbeContextModal({title, payload})} onLauncherSelect={(id, type) => setLauncherPickerModal({panelId: id, type})} onAdapterCommand={handleCommand} onRefresh={() => {}} processingId={processingId} latestCoreProbeResult={latestCoreProbeResult} activeTelemetry={activeTelemetry} />}
-            {activeTab === 'core_stats' && <CoreStatsView stats={coreStats} mode={mode} timeframe="1m" settings={settings} onProbeClick={handleNeuralProbe} onBrainClick={handleBrainRequest} onProbeInfo={(title, payload) => setProbeContextModal({title, payload})} onLauncherSelect={(id, type) => setLauncherPickerModal({panelId: id, type})} activeTelemetry={activeTelemetry} setActiveTelemetry={setActiveTelemetry} />}
+            {activeTab === 'dashboard' && <Dashboard stats={coreStats} mode={mode} session={session} settings={settings} terminalHistory={terminalHistory} onHandshake={handleHandshake} onDisconnect={handleDisconnect} onLog={addLog} onBrainClick={handleBrainRequest} onProbeClick={handleNeuralProbe} onProbeInfo={(title, payload) => setProbeContextModal({title, payload})} onLauncherSelect={(id, type) => setLauncherPickerModal({panelId: id, type})} onAdapterCommand={handleCommand} onRefresh={() => {}} processingId={processingId} latestCoreProbeResult={latestCoreProbeResult} activeTelemetry={activeTelemetry} uplinkStatus={uplinkStatus} />}
+            {activeTab === 'core_stats' && <CoreStatsView stats={coreStats} mode={mode} timeframe="1m" settings={settings} onProbeClick={handleNeuralProbe} onBrainClick={handleBrainRequest} onProbeInfo={(title, payload) => setProbeContextModal({title, payload})} onLauncherSelect={(id, type) => setLauncherPickerModal({panelId: id, type})} onCommand={handleCommand} activeTelemetry={activeTelemetry} setActiveTelemetry={setActiveTelemetry} />}
             {activeTab === 'telemetry' && <TelemetryGraphs timeframe="1m" isSimulated={mode === OperationalMode.SIMULATED} isConnected={!!session.targetIp} onProbe={handleNeuralProbe} onProbeInfo={(title, payload) => setProbeContextModal({title, payload})} onBrainClick={handleBrainRequest} />}
             {activeTab === 'history' && <History data={historyData} onProbe={handleNeuralProbe} onProbeInfo={(title, payload) => setProbeContextModal({title, payload})} onBrainClick={handleBrainRequest} />}
             {activeTab === 'admin' && <AdminPanel />}
           </div>
         </div>
         
-        {/* LOG PANEL WITH WATCHER AND PROBES */}
+        {/* LOG PANEL */}
         <div className="w-full md:w-[30%] flex flex-col bg-[#020406] border-t md:border-t-0 md:border-l border-[#1a1e24] overflow-hidden relative h-[300px] md:h-auto">
           <div className="h-10 md:h-14 border-b border-zinc-900 px-4 flex items-center justify-between bg-[#0a0c0f] z-10">
              <div className="flex h-full overflow-x-auto no-scroll">
@@ -525,7 +698,7 @@ The JSON object must have exactly these fields:
           </div>
 
           <div className="relative flex-1 overflow-hidden flex flex-col">
-             {/* WATCHER BACKGROUND FLASH - Only shows when processing OR toggled via settings.showAsciiBg AND neural tab */}
+             {/* WATCHER BACKGROUND FLASH */}
              {(processingId || (settings.showAsciiBg && !processingId)) && activeLogTab === 'neural' && (
                 <div className={`absolute inset-0 flex items-center justify-center pointer-events-none z-0 overflow-hidden ${!processingId ? 'opacity-20' : ''}`}>
                   <pre className="text-[4px] md:text-[6px] leading-[1] font-bold select-none neural-bg-flash whitespace-pre text-center" style={{ color: settings.frogColor, opacity: settings.frogIntensity }}>
@@ -539,20 +712,18 @@ The JSON object must have exactly these fields:
                  const isAiLog = log.metadata?.type === 'PROBE_RESULT';
                  const isWatcher = log.metadata?.type === 'WATCHER_SYNC';
                  
-                 // DYNAMIC COLOR RESOLUTION
-                 let accentColor = '#a1a1aa'; // Default zinc-400
-                 let borderColor = '#27272a'; // Default zinc-800
+                 let accentColor = '#a1a1aa'; 
+                 let borderColor = '#27272a'; 
 
                  if (log.level === LogLevel.ERROR) {
-                    accentColor = '#f87171'; // red-400
-                    borderColor = '#7f1d1d'; // red-900
+                    accentColor = '#f87171'; 
+                    borderColor = '#7f1d1d'; 
                  } else if (isWatcher) {
                     accentColor = settings.frogColor;
                     borderColor = settings.frogColor; 
                  } else if (isAiLog) {
                     let lId = log.metadata?.launcherId;
                     if (!lId) {
-                       // Fallback heuristic if launcherId missing
                        if (log.metadata?.title?.includes('Brain')) lId = settings.probeLaunchers['brain_tooltip'] || 'std-neural';
                        else lId = settings.probeLaunchers[log.metadata?.title || ''] || 'std-core';
                     }
@@ -619,6 +790,20 @@ The JSON object must have exactly these fields:
              <button onClick={() => setNeuralConfig(c => ({...c, provider: NeuralNetworkProvider.LOCAL}))} className={`p-4 border ${neuralConfig.provider === 'LOCAL' ? 'border-teal-500 text-teal-400 bg-teal-500/10' : 'border-zinc-900 text-zinc-700'} font-black text-[10px]`}>LOCAL_ENDPOINT</button>
            </div>
            
+           {/* DATA SOURCE CONFIGURATION */}
+           <div className="space-y-4 p-6 border border-zinc-900 bg-black/40">
+              <h3 className="text-[10px] font-black text-zinc-500 uppercase tracking-widest border-b border-zinc-900 pb-2 mb-4">Telemetry_Source_Config</h3>
+              <div className="grid grid-cols-2 gap-4">
+                 <button onClick={() => setSettings(s => ({...s, dataSourceMode: 'LOCAL'}))} className={`p-4 border ${settings.dataSourceMode === 'LOCAL' ? 'border-teal-500 text-teal-400 bg-teal-500/10' : 'border-zinc-900 text-zinc-700'} font-black text-[10px] uppercase`}>SOURCE: LOCAL (127.0.0.1)</button>
+                 <button onClick={() => setSettings(s => ({...s, dataSourceMode: 'REMOTE'}))} className={`p-4 border ${settings.dataSourceMode === 'REMOTE' ? 'border-teal-500 text-teal-400 bg-teal-500/10' : 'border-zinc-900 text-zinc-700'} font-black text-[10px] uppercase`}>SOURCE: REMOTE NODE</button>
+              </div>
+              <p className="text-[9px] text-zinc-600 italic">
+                {settings.dataSourceMode === 'LOCAL' 
+                  ? "Direct localhost telemetry pipe. Suitable for local Windows/Linux deployments or SSH tunnels mapped to port 5050."
+                  : "Remote network retrieval. Requires Handshake authentication for secure session establishment."}
+              </p>
+           </div>
+
            <div className="space-y-4 p-6 border border-zinc-900 bg-black/40">
               <h3 className="text-[10px] font-black text-zinc-500 uppercase tracking-widest border-b border-zinc-900 pb-2 mb-4">Watcher_Subsystem_Configuration</h3>
               <div className="grid grid-cols-2 gap-6">
@@ -635,7 +820,19 @@ The JSON object must have exactly these fields:
 
            <div className="space-y-4">
              <label className="text-[9px] text-zinc-700 uppercase font-black tracking-widest">Model_Vector</label>
-             <input value={neuralConfig.model} onChange={e => setNeuralConfig(c => ({...c, model: e.target.value}))} className="w-full bg-black border border-zinc-900 p-3 text-[11px] font-mono text-white outline-none focus:border-teal-500/30" />
+             {neuralConfig.provider === NeuralNetworkProvider.LOCAL ? (
+               <select 
+                 value={neuralConfig.model} 
+                 onChange={e => setNeuralConfig(c => ({...c, model: e.target.value}))}
+                 className="w-full bg-black border border-zinc-900 p-3 text-[11px] font-mono text-white outline-none focus:border-teal-500/30"
+               >
+                 {LOCAL_MODELS.map(model => (
+                   <option key={model} value={model}>{model}</option>
+                 ))}
+               </select>
+             ) : (
+               <input value={neuralConfig.model} onChange={e => setNeuralConfig(c => ({...c, model: e.target.value}))} className="w-full bg-black border border-zinc-900 p-3 text-[11px] font-mono text-white outline-none focus:border-teal-500/30" />
+             )}
            </div>
 
            {neuralConfig.provider === NeuralNetworkProvider.LOCAL && (
@@ -682,7 +879,7 @@ The JSON object must have exactly these fields:
 
       <InventoryDialog isOpen={showInventory} onClose={() => setShowInventory(false)} onSwap={() => {}} />
       <Modal isOpen={!!probeContextModal} onClose={() => setProbeContextModal(null)} title={`${probeContextModal?.title}`} variant="purple">
-         {probeContextModal && <pre className="p-6 bg-black border border-zinc-900 text-purple-400 overflow-auto text-[10px] whitespace-pre-wrap">{JSON.stringify(probeContextModal.payload, null, 2)}</pre>}
+         {probeContextModal && renderProbeContent(probeContextModal.payload)}
       </Modal>
     </div>
   );

@@ -14,3 +14,11 @@ export const APP_CONFIG = {
     DEFAULT_USER: "kali"
   }
 };
+
+export const LOCAL_MODELS = [
+  "GPT-OSS 20B",
+  "LLaMA-Open 7B",
+  "Mistral-7B",
+  "Phi-2",
+  "Alpaca/Vicuna"
+];
