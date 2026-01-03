@@ -14,7 +14,7 @@ interface PiStatsViewProps {
 }
 
 const PiStatsView: React.FC<PiStatsViewProps> = ({ stats, mode, timeframe, onProbeClick, onBrainClick, processingId }) => {
-  const [activeMetrics, setActiveMetrics] = useState<Set<string>>(new Set());
+  const [activeMetrics, setActiveMetrics] = useState<Set<string>>(new Set(['cpu']));
 
   const toggleMetric = (id: string) => {
     const next = new Set(activeMetrics);
@@ -32,7 +32,7 @@ const PiStatsView: React.FC<PiStatsViewProps> = ({ stats, mode, timeframe, onPro
   const sourceState = !isDataActive && mode === OperationalMode.REAL ? 'OFFLINE' : mode as string;
 
   return (
-    <div className="space-y-10 animate-in fade-in duration-700 pb-20 no-scroll h-full">
+    <div className="space-y-10 animate-in fade-in duration-700 pb-20 no-scroll h-full overflow-y-auto">
       <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
         {/* CPU TOGGLE */}
         <div 
@@ -48,10 +48,10 @@ const PiStatsView: React.FC<PiStatsViewProps> = ({ stats, mode, timeframe, onPro
             <div className={`w-2 h-2 rounded-full ${activeMetrics.has('cpu') ? 'bg-green-500 glow-green' : 'bg-zinc-900'}`}></div>
           </div>
           <div className="flex items-baseline gap-6">
-            <Tooltip name="CPU_LOAD" unit="Percentage (%)" source={sourceState} rate="3000ms" desc="Current processor cycle saturation across all logical cores.">
+            <Tooltip name="CPU_LOAD" unit="Percentage (%)" source={sourceState} rate="3000ms" desc="Current processor cycle saturation.">
               <span className={`text-3xl font-black ${isDataActive ? 'text-zinc-200' : 'text-zinc-900'}`}>{safe(stats?.cpu?.usage, 1, '%')}</span>
             </Tooltip>
-            <Tooltip name="CORE_TEMP" unit="Celsius (°C)" source={sourceState} rate="3000ms" desc="Die temperature measured by the Broadcom thermal sensor.">
+            <Tooltip name="CORE_TEMP" unit="Celsius (°C)" source={sourceState} rate="3000ms" desc="Measured die temperature.">
               <span className={`text-xl font-bold ${isDataActive ? 'text-zinc-500' : 'text-zinc-950'}`}>{safe(stats?.cpu?.temp, 1, '°C')}</span>
             </Tooltip>
           </div>
@@ -66,16 +66,16 @@ const PiStatsView: React.FC<PiStatsViewProps> = ({ stats, mode, timeframe, onPro
           }`}
         >
           <div className="flex justify-between items-center">
-            <Tooltip name="MEMORY_POOL_LABEL" source={sourceState} desc="Monitoring of physical RAM usage and swap buffer pressure.">
+            <Tooltip name="MEMORY_POOL_LABEL" source={sourceState} desc="Monitoring of physical RAM usage.">
               <span className="text-[10px] font-black text-zinc-700 uppercase tracking-widest group-hover:text-zinc-500 transition-colors">MEMORY_POOL</span>
             </Tooltip>
             <div className={`w-2 h-2 rounded-full ${activeMetrics.has('ram') ? 'bg-blue-500 glow-blue' : 'bg-zinc-900'}`}></div>
           </div>
           <div className="flex items-baseline gap-6">
-            <Tooltip name="RAM_ALLOC" unit="Gigabytes (GB)" source={sourceState} rate="3000ms" desc="Total volatile memory currently mapped by the kernel.">
+            <Tooltip name="RAM_ALLOC" unit="Gigabytes (GB)" source={sourceState} rate="3000ms" desc="Total volatile memory currently mapped.">
               <span className={`text-3xl font-black ${isDataActive ? 'text-zinc-200' : 'text-zinc-900'}`}>{safe(stats?.memory?.used, 2, 'G')}</span>
             </Tooltip>
-            <Tooltip name="RAM_SATURATION" unit="Percentage (%)" source={sourceState} rate="3000ms" desc="Ratio of used physical memory to total addressable RAM.">
+            <Tooltip name="RAM_SATURATION" unit="Percentage (%)" source={sourceState} rate="3000ms" desc="Memory saturation ratio.">
               <span className={`text-xl font-bold ${isDataActive ? 'text-zinc-500' : 'text-zinc-950'}`}>{safe(stats?.memory?.usage, 1, '%')}</span>
             </Tooltip>
           </div>
@@ -90,16 +90,16 @@ const PiStatsView: React.FC<PiStatsViewProps> = ({ stats, mode, timeframe, onPro
           }`}
         >
           <div className="flex justify-between items-center">
-            <Tooltip name="IO_ADAPTER_LABEL" source={sourceState} desc="Real-time network traffic volume monitoring on the primary adapter.">
+            <Tooltip name="IO_ADAPTER_LABEL" source={sourceState} desc="Real-time network traffic volume.">
               <span className="text-[10px] font-black text-zinc-700 uppercase tracking-widest group-hover:text-zinc-500 transition-colors">IO_ADAPTER</span>
             </Tooltip>
             <div className={`w-2 h-2 rounded-full ${activeMetrics.has('net') ? 'bg-purple-500 glow-purple' : 'bg-zinc-900'}`}></div>
           </div>
           <div className="flex items-baseline gap-6">
-            <Tooltip name="NET_RX" unit="Kilobytes (KB/s)" source={sourceState} rate="3000ms" desc="Ingress packet flow detected on the primary interface.">
+            <Tooltip name="NET_RX" unit="Kilobytes (KB/s)" source={sourceState} rate="3000ms" desc="Ingress packet flow.">
               <span className={`text-3xl font-black ${isDataActive ? 'text-zinc-200' : 'text-zinc-900'}`}>RX {stats?.network?.interfaces?.wlan0?.rx || 0}K</span>
             </Tooltip>
-            <Tooltip name="NET_TX" unit="Kilobytes (KB/s)" source={sourceState} rate="3000ms" desc="Egress packet flow initiated by local applications.">
+            <Tooltip name="NET_TX" unit="Kilobytes (KB/s)" source={sourceState} rate="3000ms" desc="Egress packet flow.">
               <span className={`text-xl font-bold ${isDataActive ? 'text-zinc-500' : 'text-zinc-950'}`}>TX {stats?.network?.interfaces?.wlan0?.tx || 0}K</span>
             </Tooltip>
           </div>
@@ -119,7 +119,7 @@ const PiStatsView: React.FC<PiStatsViewProps> = ({ stats, mode, timeframe, onPro
           >
             <div className="grid grid-cols-2 gap-8 py-4">
               <div className="p-4 bg-zinc-950/50 border border-zinc-900">
-                <Tooltip name="UTILIZATION_FLOW_LABEL" source={sourceState} desc="Visual representation of current compute resource allocation.">
+                <Tooltip name="UTILIZATION_FLOW_LABEL" source={sourceState} desc="Visual representation of compute resource allocation.">
                   <span className="text-[9px] text-zinc-700 uppercase block mb-3 font-black">Utilization_Flow</span>
                 </Tooltip>
                 <div className="h-2.5 bg-zinc-900 rounded-sm overflow-hidden border border-zinc-800">
@@ -127,7 +127,7 @@ const PiStatsView: React.FC<PiStatsViewProps> = ({ stats, mode, timeframe, onPro
                 </div>
               </div>
               <div className="p-4 bg-zinc-950/50 border border-zinc-900">
-                <Tooltip name="THERMAL_ENVELOPE_LABEL" source={sourceState} desc="Monitoring core die heat against safety shutdown thresholds.">
+                <Tooltip name="THERMAL_ENVELOPE_LABEL" source={sourceState} desc="Monitoring core die heat against safety thresholds.">
                   <span className="text-[9px] text-zinc-700 uppercase block mb-3 font-black">Thermal_Envelope</span>
                 </Tooltip>
                 <div className="h-2.5 bg-zinc-900 rounded-sm overflow-hidden border border-zinc-800">
@@ -137,37 +137,7 @@ const PiStatsView: React.FC<PiStatsViewProps> = ({ stats, mode, timeframe, onPro
             </div>
           </Card>
         )}
-
-        {activeMetrics.has('ram') && (
-          <Card 
-            title={`MEMORY_ALLOCATION_REPORT [${timeframe}]`} 
-            variant="blue"
-            onProbe={() => onProbeClick('MEMORY_REPORT', stats?.memory)}
-            onBrain={() => onBrainClick('ram_panel', 'RAM Engine', stats?.memory)}
-            isProcessing={processingId === 'MEMORY_REPORT' || processingId === 'ram_panel'}
-            className="animate-in slide-in-from-top-4"
-          >
-            <div className="p-6 bg-zinc-950/50 border border-zinc-900">
-              <div className="flex justify-between mb-4">
-                <Tooltip name="BUFFER_SATURATION_LABEL" source={sourceState} desc="Ratio of memory mapping currently holding active application state.">
-                  <span className="text-[10px] text-zinc-700 uppercase font-black">Buffer_Saturation</span>
-                </Tooltip>
-                <span className="text-[10px] text-zinc-400 font-mono font-black">{safe(stats?.memory?.used, 2, ' GB')} / {safe(stats?.memory?.total, 1, ' GB')}</span>
-              </div>
-              <div className="h-4 bg-zinc-900 border border-zinc-800 rounded-sm overflow-hidden">
-                 <div className="h-full bg-blue-500 shadow-[0_0_15px_rgba(0,136,255,0.4)] transition-all duration-1000" style={{ width: `${stats?.memory?.usage || 0}%` }}></div>
-              </div>
-            </div>
-          </Card>
-        )}
       </div>
-
-      {!activeMetrics.size && (
-        <div className="py-20 flex flex-col items-center justify-center opacity-10 select-none grayscale">
-           <svg className="w-16 h-16 text-zinc-800 mb-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
-           <span className="text-[14px] font-black uppercase tracking-[0.5em] text-zinc-800">Diagnostics_Standby</span>
-        </div>
-      )}
     </div>
   );
 };

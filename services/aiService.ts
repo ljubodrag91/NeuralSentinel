@@ -31,6 +31,26 @@ const getAiClient = (config: AIConfig) => {
   return new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
 };
 
+export async function testAiAvailability(config: AIConfig): Promise<boolean> {
+  if (config.provider === AIProvider.GEMINI) {
+    return !!process.env.API_KEY;
+  }
+  try {
+    const response = await fetch(config.endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: config.model,
+        messages: [{ role: 'user', content: 'ping' }],
+        max_tokens: 1
+      })
+    });
+    return response.ok;
+  } catch {
+    return false;
+  }
+}
+
 export async function performNeuralProbe(
   config: AIConfig,
   panelName: string,
@@ -39,20 +59,20 @@ export async function performNeuralProbe(
 ) {
   const systemInstruction = `You are the Neural Intelligence Core for the PiSentinel Kali SOC.
 Analyze metrics and return a high-fidelity JSON diagnostic report.
-Be tactically relevant. Respond with ONLY valid JSON.
+Respond with ONLY valid JSON.
 
 Schema:
 {
   "description": "Deep technical analysis.",
   "recommendation": "Primary tactical action.",
-  "status": "REAL" | "SIMULATED" | "OFFLINE",
-  "elementType": "Component category",
+  "status": "${context.mode}",
+  "elementType": "${panelName}",
   "elementId": "ID",
   "anomalies": ["Detection 1", "Detection 2"],
   "threatLevel": "LOW" | "ELEVATED" | "CRITICAL"
 }`;
 
-  const userPrompt = truncateInput(`[PROBE] PANEL: ${panelName} | MODE: ${context.mode} | DATA: ${JSON.stringify(metrics)} [/PROBE]`);
+  const userPrompt = truncateInput(`[PROBE] PANEL: ${panelName} | DATA: ${JSON.stringify(metrics)} [/PROBE]`);
 
   if (config.provider === AIProvider.GEMINI) {
     const ai = getAiClient(config);
@@ -82,15 +102,11 @@ Schema:
       console.error("Gemini Probe Error:", e);
       return fallbackProbe(panelName, context.mode);
     }
-  } else if (config.provider === AIProvider.LOCAL) {
+  } else {
     try {
-      const endpoint = `${config.endpoint.replace(/\/$/, "")}`;
-      const response = await fetch(endpoint, {
+      const response = await fetch(config.endpoint, {
         method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          'Accept': 'application/json'
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           model: config.model,
           messages: [
@@ -100,18 +116,13 @@ Schema:
           temperature: 0.2
         })
       });
-
-      if (!response.ok) throw new Error(`LOCAL_NODE_HTTP_${response.status}`);
-      
+      if (!response.ok) throw new Error("LOCAL_LINK_OFFLINE");
       const data = await response.json();
-      const content = data.choices[0].message.content;
-      return extractJsonLoose(content);
-    } catch (e: any) {
-      console.error("Local Neural link failed:", e.message);
+      return extractJsonLoose(data.choices[0].message.content);
+    } catch (e) {
       return fallbackProbe(panelName, context.mode);
     }
   }
-  return fallbackProbe(panelName, context.mode);
 }
 
 export async function fetchSmartTooltip(
@@ -120,27 +131,20 @@ export async function fetchSmartTooltip(
   context: { sessionId: string; mode: OperationalMode }
 ): Promise<SmartTooltipData> {
   const systemInstruction = `Analyze component metrics for a SOC console. Return ONLY JSON.
-Schema: { "description": "String", "recommendation": "String", "status": "REAL"|"SIMULATED", "elementType": "String", "elementId": "String" }`;
+Schema: { "description": "String", "recommendation": "String", "status": "${context.mode}", "elementType": "String", "elementId": "String" }`;
 
-  const userPrompt = truncateInput(`ID: ${elementData.elementId} | MODE: ${context.mode} | DATA: ${JSON.stringify(elementData)}`);
+  const userPrompt = truncateInput(`ID: ${elementData.elementId} | DATA: ${JSON.stringify(elementData)}`);
 
-  if (config.provider === AIProvider.GEMINI) {
-    const ai = getAiClient(config);
-    try {
+  try {
+    if (config.provider === AIProvider.GEMINI) {
+      const ai = getAiClient(config);
       const response = await ai.models.generateContent({
         model: 'gemini-3-flash-preview',
         contents: systemInstruction + "\n\n" + userPrompt,
-        config: {
-          responseMimeType: "application/json"
-        }
+        config: { responseMimeType: "application/json" }
       });
       return JSON.parse(response.text || "{}");
-    } catch (e) {
-      return fallbackTooltip(elementData, context.mode);
-    }
-  } else {
-    // Local tooltip fallback
-    try {
+    } else {
       const response = await fetch(config.endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -154,20 +158,20 @@ Schema: { "description": "String", "recommendation": "String", "status": "REAL"|
       });
       const data = await response.json();
       return extractJsonLoose(data.choices[0].message.content);
-    } catch (e) {
-      return fallbackTooltip(elementData, context.mode);
     }
+  } catch {
+    return fallbackTooltip(elementData, context.mode);
   }
 }
 
 function fallbackProbe(panel: string, mode: string) {
   return { 
-    description: "Neural link restricted. Ensure target endpoint is reachable and API key is valid.", 
-    recommendation: "Switch to LOCAL_NODE or validate Gemini credentials.", 
+    description: "Manual assessment required. Local link offline.", 
+    recommendation: "Validate environment variables and local node status.", 
     status: mode as any, 
     elementType: panel, 
     elementId: "LINK_FAIL", 
-    anomalies: ["CONNECTION_REFUSED"], 
+    anomalies: ["AI_NODE_UNREACHABLE"], 
     threatLevel: "ELEVATED" 
   };
 }
@@ -175,7 +179,7 @@ function fallbackProbe(panel: string, mode: string) {
 function fallbackTooltip(data: any, mode: string): SmartTooltipData {
   return {
     description: "Manual assessment required. AI telemetry link is currently buffering.",
-    recommendation: "Check connection status in Neural Core.",
+    recommendation: "Check connection status in Neural Core and Global Settings.",
     status: mode as any,
     elementType: data.elementType || "System",
     elementId: data.elementId || "CORE"

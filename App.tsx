@@ -9,7 +9,7 @@ import History from './components/History';
 import NeuralCore from './components/NeuralCore';
 import Modal from './components/common/Modal';
 import Tooltip from './components/common/Tooltip';
-import { fetchSmartTooltip, performNeuralProbe } from './services/aiService';
+import { fetchSmartTooltip, performNeuralProbe, testAiAvailability } from './services/aiService';
 import { APP_CONFIG } from './services/config';
 
 const App: React.FC = () => {
@@ -32,6 +32,8 @@ const App: React.FC = () => {
     fallbackToLocal: false
   });
 
+  const [aiLinkStable, setAiLinkStable] = useState<boolean>(false);
+  const [isTestingLink, setIsTestingLink] = useState(false);
   const [piStats, setPiStats] = useState<PiStats | null>(null);
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [historyData, setHistoryData] = useState<any[]>([]);
@@ -70,6 +72,20 @@ const App: React.FC = () => {
     }, ...prev].slice(0, 100));
   }, [mode]);
 
+  const testLink = async () => {
+    setIsTestingLink(true);
+    const available = await testAiAvailability(aiConfig);
+    setAiLinkStable(available);
+    setIsTestingLink(false);
+    addLog(`Neural link ${available ? 'established' : 'failed'} for ${aiConfig.provider} provider.`, available ? LogLevel.SUCCESS : LogLevel.ERROR);
+  };
+
+  useEffect(() => {
+    testLink();
+    const linkInterval = setInterval(testLink, 30000);
+    return () => clearInterval(linkInterval);
+  }, [aiConfig.provider, aiConfig.endpoint]);
+
   const fetchStats = useCallback(async (ip: string) => {
     try {
       const res = await fetch(`http://${ip}:5050/stats`);
@@ -93,8 +109,7 @@ const App: React.FC = () => {
           cpu: { usage: 5 + Math.random() * 20, temp: 38 + Math.random() * 10, load: [0.5, 0.4, 0.3] },
           memory: { total: 4.0, used: 1.2 + Math.random(), usage: 30 + Math.random() * 5 },
           network: { interfaces: { 
-            wlan0: { up: true, ip: '192.168.1.104', rx: 1240, tx: 512 },
-            wlan1: { up: false, ip: 'OFFLINE', rx: 0, tx: 0 },
+            wlan0: { up: true, ip: '10.121.41.108', rx: 1240, tx: 512 },
             eth0: { up: true, ip: '10.0.5.2', rx: 4500, tx: 1200 }
           } }
         });
@@ -120,7 +135,7 @@ const App: React.FC = () => {
     fetch(`http://${ip}:5050/stats`).then(res => {
       if (res.ok) addLog(`BRIDGE: HTTP Telemetry established at ${ip}:5050.`, LogLevel.SUCCESS);
     }).catch(() => {
-      addLog(`BRIDGE: HTTP Telemetry service unresponsive at ${ip}:5050. Link logic only.`, LogLevel.WARNING);
+      addLog(`BRIDGE: HTTP Telemetry service unresponsive at ${ip}:5050. Handshake only.`, LogLevel.WARNING);
     });
 
     setTimeout(() => {
@@ -189,8 +204,8 @@ const App: React.FC = () => {
 
   const probeNeuralStream = () => {
     const selection = window.getSelection()?.toString();
-    // Use top-most (latest) logs if no selection
-    const streamContent = selection || logs.slice(0, 10).map(l => `[${l.timestamp}] ${l.level}: ${l.message}`).join('\n');
+    // Latest context or selection
+    const streamContent = selection || logs.slice(0, 15).map(l => `[${l.timestamp}] ${l.level}: ${l.message}`).join('\n');
     handleNeuralProbe('NEURAL_STREAM_ANALYSIS', { content: streamContent, isSelection: !!selection });
   };
 
@@ -211,11 +226,11 @@ const App: React.FC = () => {
               <span className="text-[10px] font-black text-zinc-700 uppercase tracking-widest">Protocol:</span>
               <span className={`text-[10px] font-black uppercase tracking-widest`} style={{ color: currentAccent }}>{mode}</span>
               <div className="flex gap-6 ml-4 items-center border-l border-zinc-900 pl-6">
-                <Tooltip name="NODE_LINK" source={mode} desc="Session availability.">
+                <Tooltip name="NODE_LINK" source={mode} desc="Pi Target availability.">
                   <div className={`w-3 h-3 rounded-full ${session.targetIp ? 'bg-[#22c55e] glow-green' : 'bg-red-500 glow-red'}`}></div>
                 </Tooltip>
-                <Tooltip name="NEURAL_CORE" source={mode} desc="AI link status.">
-                  <div className={`w-3 h-3 rounded-full ${aiConfig.provider === AIProvider.GEMINI ? 'bg-[#bd00ff] glow-purple' : 'bg-zinc-800'}`}></div>
+                <Tooltip name="NEURAL_CORE" source={mode} desc="AI link status. Gray if offline.">
+                  <div className={`w-3 h-3 rounded-full ${aiLinkStable ? 'bg-[#bd00ff] glow-purple' : 'bg-zinc-800'}`}></div>
                 </Tooltip>
               </div>
             </div>
@@ -286,27 +301,34 @@ const App: React.FC = () => {
          <div className="space-y-6">
             <div className="flex flex-col gap-3">
               <label className="text-[11px] font-black text-zinc-700 uppercase">Provider</label>
-              <select 
-                value={aiConfig.provider} 
-                onChange={e => setAiConfig(prev => ({ ...prev, provider: e.target.value as AIProvider }))} 
-                className="bg-black border border-zinc-900 p-3 text-white font-mono text-sm"
-              >
-                 <option value={AIProvider.GEMINI}>Google Gemini (Cloud)</option>
-                 <option value={AIProvider.LOCAL}>Neural Link (Local API)</option>
-              </select>
+              <div className="flex gap-4">
+                {Object.values(AIProvider).map(p => (
+                  <button key={p} onClick={() => setAiConfig(prev => ({ ...prev, provider: p }))} className={`flex-1 py-3 text-[10px] font-black border transition-all ${aiConfig.provider === p ? 'bg-purple-500/10 border-purple-500 text-purple-400' : 'border-zinc-900 text-zinc-700 hover:border-zinc-700'}`}>
+                    {p}
+                  </button>
+                ))}
+              </div>
             </div>
             
             <div className="flex flex-col gap-3">
               <label className="text-[11px] font-black text-zinc-700 uppercase tracking-widest">Model_API_Endpoint</label>
-              <input 
-                type="text"
-                value={aiConfig.endpoint}
-                onChange={e => setAiConfig(prev => ({ ...prev, endpoint: e.target.value }))}
-                className={`bg-black border p-4 text-[13px] text-white outline-none font-mono shadow-inner ${aiConfig.endpoint && !validateUrl(aiConfig.endpoint) ? 'border-red-500' : 'border-zinc-900 focus:border-purple-500/40'}`}
-                placeholder="http://localhost:1234/v1/chat/completions"
-              />
-              {aiConfig.endpoint && !validateUrl(aiConfig.endpoint) && <span className="text-[8px] text-red-500 uppercase">Invalid URL format.</span>}
-              <span className="text-[9px] text-zinc-600 uppercase">Configures the neural routing for AI diagnostic requests. Recommended: /v1/chat/completions for local endpoints.</span>
+              <div className="flex gap-2">
+                <input 
+                  type="text"
+                  value={aiConfig.endpoint}
+                  onChange={e => setAiConfig(prev => ({ ...prev, endpoint: e.target.value }))}
+                  className={`flex-1 bg-black border p-4 text-[13px] text-white outline-none font-mono shadow-inner ${aiConfig.endpoint && !validateUrl(aiConfig.endpoint) ? 'border-red-500' : 'border-zinc-900 focus:border-purple-500/40'}`}
+                  placeholder="http://localhost:1234/v1/chat/completions"
+                />
+                <button 
+                  onClick={testLink}
+                  disabled={isTestingLink}
+                  className="px-6 bg-zinc-950 border border-zinc-900 text-[9px] font-black uppercase tracking-widest hover:text-white transition-all disabled:opacity-20"
+                >
+                  {isTestingLink ? '...' : 'TEST_LINK'}
+                </button>
+              </div>
+              <span className="text-[9px] text-zinc-600 uppercase">Neural routing for AI diagnostic requests. Status: {aiLinkStable ? 'ONLINE' : 'OFFLINE'}</span>
             </div>
 
             <div className="flex flex-col gap-3">

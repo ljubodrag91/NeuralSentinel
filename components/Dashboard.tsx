@@ -20,12 +20,12 @@ interface DashboardProps {
 const Dashboard: React.FC<DashboardProps> = ({ 
   mode, session, stats, onHandshake, onDisconnect, onLog, onBrainClick, onProbeClick, onRefresh, processingId 
 }) => {
-  const [ipInput, setIpInput] = useState('10.121.41.108'); // Direct target per user requirement
+  const [ipInput, setIpInput] = useState('10.121.41.108');
   const [user, setUser] = useState('kali');
   const [pass, setPass] = useState('');
   const [port, setPort] = useState(22);
   
-  const defaultInterfaces = ['eth0', 'wlan0', 'wlan1'];
+  const defaultInterfaces = ['wlan0', 'eth0', 'lo'];
 
   useEffect(() => {
     if (session.targetIp) {
@@ -36,20 +36,19 @@ const Dashboard: React.FC<DashboardProps> = ({
   const getInterfaceData = (name: string) => {
     if (mode === OperationalMode.SIMULATED) {
       return { 
-        up: name === 'wlan0' || name === 'eth0', 
-        ip: name === 'eth0' ? '10.0.5.12' : (name === 'wlan0' ? '192.168.1.104' : 'OFFLINE') 
+        up: name === 'wlan0' || name === 'eth0' || name === 'lo', 
+        ip: name === 'wlan0' ? '10.121.41.108' : (name === 'eth0' ? '10.0.5.12' : '127.0.0.1') 
       };
     }
     
-    // Improved logic: even if stats are null, if we have a target IP and it's wlan0 or eth0, assume connected status
     const realData = stats?.network?.interfaces?.[name];
     const isSessionActive = !!session.targetIp;
-    const isLikelyUp = name === 'wlan0' && isSessionActive; // Common case for Pi Kali
     
-    return { 
-      up: realData?.up || isLikelyUp, 
-      ip: realData?.ip || (isSessionActive ? 'SYNC_HUB...' : 'OFFLINE') 
-    };
+    // PiSentinel style mapping for Kali network interfaces
+    const isUp = realData?.isUp || (isSessionActive && name === 'wlan0');
+    const displayIp = realData?.ipv4?.[0] || (isSessionActive && name === 'wlan0' ? session.targetIp : 'OFFLINE');
+    
+    return { up: isUp, ip: displayIp };
   };
 
   const isConnected = !!session.targetIp;
