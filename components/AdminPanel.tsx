@@ -5,7 +5,11 @@ import { launcherSystem } from '../services/launcherService';
 import { serverService } from '../services/serverService';
 import Card from './common/Card';
 
-const AdminPanel: React.FC = () => {
+interface AdminPanelProps {
+  allowDistortion?: boolean;
+}
+
+const AdminPanel: React.FC<AdminPanelProps> = ({ allowDistortion }) => {
   const [launchers, setLaunchers] = useState<Launcher[]>(launcherSystem.getAll());
   const [editingId, setEditingId] = useState<string | null>(null);
   const [formData, setFormData] = useState<Partial<Launcher>>({
@@ -16,7 +20,8 @@ const AdminPanel: React.FC = () => {
     maxCharges: 5,
     rechargeRate: 60,
     color: '#00ffd5',
-    compatibleProbes: ['*']
+    compatibleProbes: ['*'],
+    tokens: 2000
   });
 
   const handleEdit = (l: Launcher) => {
@@ -39,7 +44,8 @@ const AdminPanel: React.FC = () => {
       maxCharges: 5,
       rechargeRate: 60,
       color: '#00ffd5',
-      compatibleProbes: ['*']
+      compatibleProbes: ['*'],
+      tokens: 2000
     });
   };
 
@@ -60,7 +66,7 @@ const AdminPanel: React.FC = () => {
       <div className="flex gap-8 flex-1 overflow-hidden">
         {/* Editor */}
         <div className="w-1/3 border-r border-zinc-900 pr-8 overflow-y-auto no-scroll">
-          <Card id="admin_editor" title={editingId ? 'EDIT_MODULE' : 'NEW_MODULE'} variant="teal">
+          <Card id="admin_editor" title={editingId ? 'EDIT_MODULE' : 'NEW_MODULE'} variant="teal" allowDistortion={allowDistortion}>
             <div className="space-y-4">
               <div className="flex flex-col gap-1">
                 <label className="text-[8px] text-zinc-700 uppercase font-black">ID_Vector</label>
@@ -122,6 +128,15 @@ const AdminPanel: React.FC = () => {
                 </div>
               </div>
               <div className="flex flex-col gap-1">
+                <label className="text-[8px] text-zinc-700 uppercase font-black">Token_Limit (Core: Chars, Neural: Tokens)</label>
+                <input 
+                  type="number" 
+                  value={formData.tokens} 
+                  onChange={e => setFormData({...formData, tokens: parseInt(e.target.value)})} 
+                  className="bg-black border border-zinc-900 p-2 text-[10px] text-zinc-400 font-mono outline-none" 
+                />
+              </div>
+              <div className="flex flex-col gap-1">
                 <label className="text-[8px] text-zinc-700 uppercase font-black">Tactical_Description</label>
                 <textarea 
                   value={formData.description} 
@@ -165,6 +180,7 @@ const AdminPanel: React.FC = () => {
                 <div className="flex gap-6 text-[8px] font-mono text-zinc-800">
                   <span>CAPACITY: {l.maxCharges}</span>
                   <span>SYNC_TIME: {l.rechargeRate}s</span>
+                  <span>TOKENS: {l.tokens}</span>
                 </div>
               </div>
             ))}

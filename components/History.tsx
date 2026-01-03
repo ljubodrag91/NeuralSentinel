@@ -7,10 +7,12 @@ interface HistoryProps {
   onProbe: (panel: string, data: any) => void;
   onProbeInfo: (panel: string, data: any) => void;
   onBrainClick: (id: string, type: string, metrics: any) => void;
+  onLauncherSelect: (id: string, type: 'data' | 'neural') => void;
   processingId?: string;
+  allowDistortion?: boolean;
 }
 
-const History: React.FC<HistoryProps> = ({ data, onProbe, onProbeInfo, onBrainClick, processingId }) => {
+const History: React.FC<HistoryProps> = ({ data, onProbe, onProbeInfo, onBrainClick, onLauncherSelect, processingId, allowDistortion }) => {
   const getArchivePayload = () => {
     const csvHeaders = "TIMESTAMP,ACTION,TARGET,RESULT";
     const csvRows = data.map(h => `${h.timestamp},${h.action},${h.target},${h.result}`).join("\n");
@@ -28,13 +30,16 @@ const History: React.FC<HistoryProps> = ({ data, onProbe, onProbeInfo, onBrainCl
   return (
     <div className="animate-in fade-in duration-600">
       <Card 
+        id="SESSION_ARCHIVE"
         title="SESSION_ARCHIVE_PERSISTENCE" 
-        titleTooltip="Archive of all tactical actions executed during the current neural session."
+        titleTooltip="Encrypted persistence log of all tactical session actions. Holistic session probe for long-term tactical persistence and operational pattern detection."
         variant="default" 
         onProbe={handleProbe}
         onProbeInfo={handleProbeInfo}
-        onBrain={() => onBrainClick('history_archive', 'Probe Database', { logCount: data.length })}
+        onBrain={() => onBrainClick('SESSION_ARCHIVE', 'Probe Database', { logCount: data.length })}
+        onLauncherSelect={(_, type) => onLauncherSelect('SESSION_ARCHIVE', type)}
         isProcessing={processingId === 'SESSION_ARCHIVE' || processingId === 'history_archive'}
+        allowDistortion={allowDistortion}
       >
         <div className="overflow-x-auto p-2">
           <table className="w-full font-mono text-[11px] text-[#4a726f] border-collapse">

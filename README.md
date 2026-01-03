@@ -1,81 +1,81 @@
 
-# Neural Sentinel - Kali SOC Console v.2.9.9
+# Neural Sentinel - Kali SOC Console v.3.1.0
 
 Neural Sentinel is a high-fidelity Security Operations Center (SOC) interface designed for managing remote Kali Linux deployments on Raspberry Pi devices and local Windows hosts. It bridges the gap between raw command-line tools and tactical intelligence through an integrated AI Neural Engine.
 
 ---
 
-## 🚀 App Functionality
+## 🚀 Core Architecture
 
-### 1. Multi-Window Command Center
-The application is structured into five core tactical modules:
-- **Dashboard**: Handshake bridge for SSH tunnel establishment and network interface matrix. Includes an interactive Bash Terminal overlay.
-- **Telemetry**: Real-time RF and spectral density analysis using Recharts.
-- **Core Stats**: Deep-dive system monitoring (CPU, RAM, Disk, Temp) with process probing.
-- **Toolkit**: A tiered arsenal of penetration testing modules including Guided Wizards for Nmap and Wireless Deauthentication.
-- **History**: An encrypted persistence log of all tactical session actions.
+### 1. Data Source Modes
+The system operates in two distinct modes, toggled via the header "SOURCE" switch:
 
-### 2. Neural Intelligence Engine
-- **Core Probes**: System-wide probes that analyze complex telemetry to find security anomalies.
-- **Neural Ling Probes**: On-demand smart inference on specific metrics or logs via tooltips or small interactions.
-- **Payload Audit (Audit Dots)**: Next to every probe button is a small interactive dot. Clicking this opens a "Payload Audit" dialog, revealing the exact JSON packet being transmitted to the AI engine for transparency.
-- **Unified Charge System**: Tactical AI actions are governed by Core and Neural chargers in the header, simulating hardware constraints.
+*   **LOCAL SOURCE (Default)**:
+    *   **Target**: Localhost (127.0.0.1)
+    *   **Platform**: Windows NT (Auto-detected)
+    *   **Behavior**: Handshake panel is **LOCKED**. Telemetry is pulled directly from the local server daemon.
+    *   **Visual Indicator**: **Blue/Cyan** System Status.
 
-### 3. Visual & Aesthetic Identity
-- **CRT / HUD Aesthetics**: Scanlines, chromatic aberration, and holographic haze create a professional "Cyber-Tactical" environment.
-- **Real-Time Link Monitoring**: The main "Sentinel Core" logo dynamically updates its state based on heartbeats from the remote node, turning red immediately if the connection is lost.
+*   **REMOTE SOURCE**:
+    *   **Target**: User-Configurable IP (e.g., 192.168.1.x)
+    *   **Platform**: Kali Linux (Auto-switched)
+    *   **Behavior**: Handshake panel is **UNLOCKED**. Requires valid credentials to establish SSH/HTTP link.
+    *   **Visual Indicator**: **Green** System Status.
+
+### 2. Multi-Window Command Center
+*   **Dashboard**: Central hub for Link Status, Handshake (Remote only), and Network Matrix. Includes interactive Terminal Overlay.
+*   **Telemetry**: Real-time RF signal analysis and spectral density visualization.
+*   **Core Stats**: Deep-dive system monitoring (CPU, RAM, Disk, Thermal) with Process Probing.
+*   **Toolkit**: Tiered arsenal of penetration testing modules (Nmap, Deauth, etc.).
+*   **History**: Encrypted persistence log of all tactical session actions.
+
+### 3. Neural Intelligence Engine
+*   **Core Probes**: System-wide probes that analyze complex telemetry to find security anomalies.
+*   **Neural Tooltips**: On-demand smart inference on specific metrics via right-click or hover.
+*   **Payload Audit**: "Audit Dots" next to probes allow inspection of the raw JSON packet transmitted to the AI.
+*   **Launchers**: Modular configuration for AI requests. Each launcher (`std-core`, `ext-neural`) has specific Charge capacities and Token limits to optimize throughput.
 
 ---
 
-## 🛠 Developer Perspective
+## 💾 Data Persistence
 
-### Technical Architecture
-- **Framework**: React 19.x with TypeScript for strict type safety.
-- **AI Connectivity**: Supports both **Google Gemini** and **Local OpenAI-compatible** endpoints (Ollama/LM Studio).
-- **Resilience**: Implements AbortControllers for fetch timeouts to ensure the connection status remains accurate.
+*   **Format**: Session data is persisted locally in CSV format via the `HistoryStorage` engine.
+*   **Scope**: Critical actions (Neural Probes, Handshakes, Command Executions) are automatically archived.
+*   **Retention**: Data is retained for a maximum of 24 hours on a sliding window basis.
+*   **Storage**: Browser `localStorage` is used as the backing store for the CSV blobs.
 
-### Probing Terminology
-The system uses "Probing" to describe active data gathering and analysis.
-- **Core Data Probes**: Large, expensive AI requests analyzing full panel datasets.
-- **Neural Ling Probes**: Lightweight requests for tooltips and quick insights.
-- **Exceptions**: "Packet Audit" and "Log Audit" terms are retained for specific historical review functions.
+---
 
-### Telemetry JSON Format
-The backend (port 5050) expected JSON structure:
-```json
-{
-  "cpu": { "usage": 0.5, "temperature": 45, "cpuCores": 4 },
-  "memory": { "ramUsed": 2.1, "ramTotal": 8.0 },
-  "disk": { "partitions": [...] },
-  "network": { "interfaces": { ... } },
-  "platform": "LINUX" | "WINDOWS"
-}
-```
+## 🛠 Operational Status Indicators
 
-### Historical Data
-- Max retention: 24 hours.
-- Stored in-memory or local storage csv format.
-- Cleared on application startup.
+| State | Color | Meaning |
+| :--- | :--- | :--- |
+| **LOCAL ACTIVE** | **Blue / Cyan** | Localhost telemetry stream active. Stable. |
+| **REMOTE ACTIVE** | **Green** | Remote SSH/HTTP link established. Secure. |
+| **DISCONNECTED** | **Red** | Link lost, heartbeat failed, or service offline. |
+| **NEURAL SYNC** | **Purple** | AI Inference in progress. |
 
 ---
 
 ## 📖 User Guide
 
-### Initial Setup
-1. **AI Bridge**: Open **Global Settings** (cog icon). Choose your engine.
-2. **Platform**: Select **TARGET: KALI_LINUX** (SSH/Pi) or **TARGET: WINDOWS_NT** (Localhost).
-3. **Handshake**: Navigate to the **Dashboard**. Enter target IP and auth details.
+### Startup Behavior
+1.  **Boot**: App initializes in **LOCAL** mode.
+2.  **Telemetry**: Immediately attempts to poll `http://127.0.0.1:5050/stats`.
+3.  **AI Check**: Verifies API Key presence for Neural Uplink.
 
-### Operational Procedures
-- **System Probe**: Click the large **CORE PROBE** transistor in the Dashboard to run a systemic health check.
-- **Payload Audit**: Click the small dot next to any PROBE button to inspect the raw data being sent to the AI.
-- **Terminal Overlay**: Toggle **ENGAGE_TERMINAL** for direct bash interaction with the remote node.
+### Switching to Remote Target
+1.  Click the **SOURCE** toggle in the top header.
+2.  Status indicator turns **Green** (if connected) or **Red** (if pending).
+3.  Navigate to **Dashboard** -> **HANDSHAKE_NODE**.
+4.  Enter Target IP, User, and Port. Click **INITIALIZE_HANDSHAKE**.
 
 ### Troubleshooting
-- **Empty Dataset**: If a probe returns "No data", ensure the telemetry service (port 5050) is running on the target and accessible.
-- **Connectivity**: Verify the IP address in the Handshake panel matches your target. Use "127.0.0.1" for Windows localhost testing.
+*   **"LOCKED_LOCAL_HOST_ACTIVE"**: You are in Local Mode. Toggle the Source switch in the header to enable the Handshake panel.
+*   **Red "DISCONNECTED" Core**: The backend service (port 5050) is unreachable. Check if the python server is running.
+*   **Graphs Flatline**: Ensure `process.env.API_KEY` is set for AI features, or check network connectivity for Telemetry.
 
 ---
-*Build: Neural_Sentinel_v2.9.9_STABLE*
+*Build: Neural_Sentinel_v3.1.0_OPTIMIZED*
 *Developer: Neural W Monitor Team*
-*Security Clearance: LEVEL_04_SOC_OP*
+*Clearance: LEVEL_04_SOC_OP*

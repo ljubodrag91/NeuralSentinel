@@ -1,10 +1,14 @@
-import React from 'react';
+
+import React, { memo } from 'react';
 
 export type CoreState = 'disconnected' | 'simulated' | 'connected';
 
-interface NeuralCoreProps { state: CoreState; }
+interface NeuralCoreProps { 
+  state: CoreState; 
+  onClick?: () => void;
+}
 
-const NeuralCore: React.FC<NeuralCoreProps> = ({ state }) => {
+const NeuralCore: React.FC<NeuralCoreProps> = memo(({ state, onClick }) => {
   const getTheme = () => {
     switch (state) {
       case 'connected': return { color: '#22c55e', glow: 'glow-green', accent: '#4ade80' };
@@ -17,7 +21,10 @@ const NeuralCore: React.FC<NeuralCoreProps> = ({ state }) => {
   const { color, accent } = getTheme();
 
   return (
-    <div className={`relative w-40 h-16 flex items-center justify-center transition-all duration-700 cursor-pointer group`}>
+    <div 
+      onClick={onClick}
+      className={`relative w-40 h-16 flex items-center justify-center transition-all duration-700 cursor-pointer group`}
+    >
       {/* Schematic Background Glow */}
       <div 
         className="absolute inset-0 opacity-10 group-hover:opacity-25 transition-opacity duration-1000 blur-xl pointer-events-none"
@@ -35,7 +42,7 @@ const NeuralCore: React.FC<NeuralCoreProps> = ({ state }) => {
           </filter>
         </defs>
 
-        {/* Outer Frame - Simplified Schematic style (User Requested) */}
+        {/* Outer Frame - Simplified Schematic style */}
         <rect 
           x="35" y="5" width="30" height="30" rx="1" 
           stroke={color} strokeWidth="0.5" strokeDasharray="2 1" opacity="0.3" 
@@ -76,6 +83,6 @@ const NeuralCore: React.FC<NeuralCoreProps> = ({ state }) => {
       `}</style>
     </div>
   );
-};
+});
 
 export default NeuralCore;

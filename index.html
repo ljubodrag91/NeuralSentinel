@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
   <head>
@@ -139,16 +140,18 @@
         display: none;
       }
 
+      /* Enhanced CRT Glitch Animation */
       .core-distortion {
-        animation: core-glitch 2s infinite linear alternate-reverse;
+        animation: core-glitch 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94) both infinite;
+        will-change: transform;
       }
       @keyframes core-glitch {
-        0% { transform: scale(1) translate(0); }
-        20% { transform: scale(1.02) translate(-1px, 1px); }
-        40% { transform: scale(0.98) translate(1px, -1px); }
-        60% { transform: scale(1.01) translate(-1px, -1px); }
-        80% { transform: scale(0.99) translate(1px, 1px); }
-        100% { transform: scale(1) translate(0); }
+        0% { transform: translate(0); opacity: 1; }
+        20% { transform: translate(-2px, 2px) skewX(2deg); opacity: 0.98; }
+        40% { transform: translate(-2px, -2px) skewX(-2deg); filter: brightness(1.2) contrast(1.1); opacity: 0.95; }
+        60% { transform: translate(2px, 2px) skewX(1deg); opacity: 0.98; }
+        80% { transform: translate(2px, -2px) skewX(-1deg); opacity: 1; }
+        100% { transform: translate(0); opacity: 1; }
       }
 
       .neural-bg-flash {

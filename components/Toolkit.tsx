@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { TOOLS } from '../constants';
 import { ToolDefinition, OperationalMode } from '../types';
 import { APP_CONFIG } from '../services/config';
@@ -10,11 +10,12 @@ interface ToolkitProps {
   onRunCommand: (command: string) => void;
   onBreakdown: (topic: string, query?: string) => void;
   mode: OperationalMode;
+  allowDistortion?: boolean;
 }
 
 type WizardStep = 'PREPARE' | 'DISCOVER' | 'SELECT' | 'INTENSITY' | 'CONFIRM' | 'EXECUTE';
 
-const Toolkit: React.FC<ToolkitProps> = ({ onRunCommand, onBreakdown, mode }) => {
+const Toolkit: React.FC<ToolkitProps> = ({ onRunCommand, onBreakdown, mode, allowDistortion }) => {
   const [selectedTool, setSelectedTool] = useState<ToolDefinition | null>(null);
   const [params, setParams] = useState<Record<string, string | number | boolean>>({});
   const [expandedCats, setExpandedCats] = useState<Set<string>>(new Set(['Reconnaissance', 'Wireless Attacks', 'Network Scanning']));
@@ -25,6 +26,24 @@ const Toolkit: React.FC<ToolkitProps> = ({ onRunCommand, onBreakdown, mode }) =>
   const [selectedTarget, setSelectedTarget] = useState<any | null>(null);
   const [intensity, setIntensity] = useState<string>('Standard');
   const [isProcessing, setIsProcessing] = useState(false);
+  const [isGlitching, setIsGlitching] = useState(false);
+
+  useEffect(() => {
+    if (!allowDistortion) return;
+    
+    let timeoutId: ReturnType<typeof setTimeout>;
+    
+    const triggerGlitch = () => {
+      setIsGlitching(true);
+      setTimeout(() => setIsGlitching(false), 150 + Math.random() * 150);
+      // Sync with Card timing: 2s - 8s
+      const nextDelay = Math.random() * 6000 + 2000;
+      timeoutId = setTimeout(triggerGlitch, nextDelay);
+    };
+
+    timeoutId = setTimeout(triggerGlitch, Math.random() * 2000 + 1000);
+    return () => clearTimeout(timeoutId);
+  }, [allowDistortion]);
 
   const categories = Array.from(new Set(TOOLS.map(t => t.category)));
 
@@ -232,7 +251,7 @@ const Toolkit: React.FC<ToolkitProps> = ({ onRunCommand, onBreakdown, mode }) =>
   };
 
   return (
-    <div className="flex flex-col h-full animate-in fade-in duration-500 bg-[#050608]/20 p-4 rounded-sm border border-zinc-900/60 overflow-hidden">
+    <div className={`flex flex-col h-full animate-in fade-in duration-500 bg-[#050608]/20 p-4 rounded-sm border border-zinc-900/60 overflow-hidden ${isGlitching ? 'core-distortion' : ''}`}>
       <header className="flex justify-between items-center mb-6 px-4 border-b border-zinc-900/40 pb-4">
         <div className="flex flex-col">
           <Tooltip name="TOOLKIT_STATUS" source="SYSTEM" desc="Interface status for the arming and deployment of tactical modules.">

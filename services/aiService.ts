@@ -3,6 +3,7 @@ import { GoogleGenAI } from "@google/genai";
 // Fixed missing exported members by aliasing existing types from types.ts
 import { NeuralNetworkProvider as AIProvider, NeuralNetworkConfig as AIConfig, OperationalMode, SmartTooltipData, Platform } from "../types";
 import { PROBE_CONTRACTS } from "./probeContracts";
+import { aiTransport } from "./aiTransport";
 
 function truncateInputStrict(text: string, maxChars: number = 10000): string {
   if (text.length <= maxChars) return text;
@@ -22,7 +23,9 @@ function extractJsonLoose(text: string): any {
 
 // Ensure initialization uses process.env.API_KEY directly and cast to string
 const getAiClient = (config: AIConfig) => {
-  return new GoogleGenAI({ apiKey: process.env.API_KEY as string });
+  const key = process.env.API_KEY;
+  if (!key) throw new Error("API_KEY_MISSING: Neural Link credentials not found in environment.");
+  return new GoogleGenAI({ apiKey: key as string });
 };
 
 /**
@@ -60,43 +63,149 @@ export async function testAiAvailability(config: AIConfig): Promise<boolean> {
   } catch { return false; }
 }
 
+export async function fetchLocalModels(endpoint: string): Promise<string[]> {
+  try {
+    // Construct models endpoint from the base configuration endpoint
+    // Removes /v1 or /chat/completions suffix if present to find the root, then appends /v1/models
+    let baseUrl = endpoint.replace('localhost', '127.0.0.1');
+    baseUrl = baseUrl.replace(/\/chat\/completions$/, '').replace(/\/v1$/, '').replace(/\/$/, '');
+    
+    const url = `${baseUrl}/v1/models`; 
+
+    const response = await fetch(url, {
+      method: 'GET',
+      mode: 'cors'
+    });
+
+    if (!response.ok) return [];
+
+    const data = await response.json();
+    if (!data.data || !Array.isArray(data.data)) return [];
+
+    return data.data
+      .filter((m: any) => {
+        const id = m.id.toLowerCase();
+        // Filter out embedding models or known non-chat models
+        return !id.includes('embedding') && !id.includes('audio') && !id.includes('tts');
+      })
+      .map((m: any) => m.id);
+  } catch (e) {
+    console.warn("Failed to fetch local models:", e);
+    return [];
+  }
+}
+
+/**
+ * Shared Data Preparation Pipeline
+ * Transmorphs raw payload based on launcher token attributes (Character Limit).
+ */
+function transmorphPayload(payload: any, charLimit: number): any {
+  let maxArrayItems = 50;
+  let maxStringLength = 5000;
+
+  if (charLimit <= 1000) {
+    maxArrayItems = 3;
+    maxStringLength = 200;
+  } else if (charLimit <= 5000) {
+    maxArrayItems = 10;
+    maxStringLength = 1000;
+  } else {
+    maxArrayItems = 100;
+    maxStringLength = 8000; // Allow more history
+  }
+
+  const process = (item: any): any => {
+    if (Array.isArray(item)) {
+      return item.slice(0, maxArrayItems).map(process);
+    } else if (typeof item === 'string') {
+      // Special handling for CSV history blobs which can be massive
+      if (item.includes('TIMESTAMP,') || item.length > maxStringLength) {
+         // If string is too long, take the END (most recent history)
+         if (item.length > maxStringLength) {
+             const truncated = "...[TRUNCATED_HISTORY]\n" + item.slice(-(maxStringLength - 50));
+             return truncated;
+         }
+      }
+      if (item.length > maxStringLength) {
+        return item.substring(0, maxStringLength) + '...[TRUNC]';
+      }
+      return item;
+    } else if (item && typeof item === 'object') {
+      const res: any = {};
+      for (const key in item) {
+        if (Object.prototype.hasOwnProperty.call(item, key)) {
+          res[key] = process(item[key]);
+        }
+      }
+      return res;
+    }
+    return item;
+  };
+
+  return process(payload);
+}
+
 export async function performNeuralProbe(
   config: AIConfig,
   panelName: string,
   metrics: any,
-  context: { sessionId: string; mode: OperationalMode; serviceStatus: 'ONLINE' | 'OFFLINE' }
+  context: { sessionId: string; mode: OperationalMode; serviceStatus: 'ONLINE' | 'OFFLINE'; tokenLimit: number }
 ) {
-  const isMainProbe = panelName === 'GLOBAL_SYSTEM_PROBE';
   const contract = PROBE_CONTRACTS[panelName];
   
   // Platform and Source awareness injected from App.tsx
   const platform = metrics?.platform || Platform.LINUX;
   const source = metrics?.source || "UNKNOWN";
   
-  const isEmpty = metrics?.status === 'empty' || contract?.buildPayload(metrics)?.status === 'empty';
+  const rawPayload = contract ? contract.buildPayload(metrics) : { telemetry: metrics };
+  const isEmpty = metrics?.status === 'empty' || rawPayload?.status === 'empty';
 
-  let systemInstruction = `You are the ${isMainProbe ? 'Main Neural Core' : 'Panel Diagnostic Core'} for the PiSentinel SOC monitor.
+  // Transmorph payload based on Launcher Token Limit
+  const payload = transmorphPayload(rawPayload, context.tokenLimit);
+
+  // Capture the Exact Payload Structure for Audit Logging
+  const _sentPayload = { 
+    panel: panelName, 
+    operational_mode: context.mode,
+    platform: platform,
+    source_origin: source,
+    service_uplink: context.serviceStatus,
+    payload: payload,
+    meta: {
+        token_limit: context.tokenLimit,
+        probe_type: contract?.isDataProbe ? 'DATA_PROBE' : 'NEURAL_LOGIC',
+        timestamp: new Date().toISOString()
+    }
+  };
+
+  // Construct System Instruction using Unified Probe Contract
+  let systemInstruction = `You are the ${contract?.id || 'Neural'} Diagnostic Core for the PiSentinel SOC monitor.
 Target Platform: ${platform} (${source} Source).
-Analyze the provided probe data and return a structured report for security professionals.
+
+PROBE MISSION:
+${contract?.description || 'Analyze the provided data for security anomalies.'}
+
+EXPECTED OUTPUT:
+${contract?.expectedResponse || 'Provide a security assessment in JSON format.'}
 `;
 
   if (platform === Platform.WINDOWS) {
-    systemInstruction += `Context: Local Windows Host Telemetry. Focus on OS-level anomalies, local network services, and process integrity.\n`;
+    systemInstruction += `\nContext: Local Windows Host Telemetry. Focus on OS-level anomalies, local network services, and process integrity.`;
   } else {
-    systemInstruction += `Context: Remote Linux/Pi SSH Telemetry. Focus on kernel logs, SSH intrusion attempts, and daemon stability.\n`;
+    systemInstruction += `\nContext: Remote Linux/Pi SSH Telemetry. Focus on kernel logs, SSH intrusion attempts, and daemon stability.`;
   }
 
   if (context.serviceStatus === 'OFFLINE') {
-    systemInstruction += `WARNING: SERVICE UPLINK IS OFFLINE. The provided telemetry dataset may be stale, incomplete, or empty. Advise the operator to check the physical connection or the Sentinel daemon on the target node.\n`;
+    systemInstruction += `\nWARNING: SERVICE UPLINK IS OFFLINE. The provided telemetry dataset may be stale, incomplete, or empty. Advise the operator to check the physical connection or the Sentinel daemon on the target node.`;
   }
 
   if (isEmpty) {
-    systemInstruction += `CRITICAL: The probe dataset is EMPTY. Indicate this clearly in the description and recommend checking connectivity or launcher configuration.\n`;
+    systemInstruction += `\nCRITICAL: The probe dataset is EMPTY. Indicate this clearly in the description and recommend checking connectivity or launcher configuration.`;
   }
 
-  systemInstruction += `STRICT RULES:
+  systemInstruction += `\n\nSTRICT RULES:
 - Respond ONLY with a valid JSON object.
-- No markdown formatting.
+- No markdown formatting or code blocks.
 - Include actionable security recommendations.
 
 Schema:
@@ -110,49 +219,18 @@ Schema:
   "threatLevel": "LOW" | "MEDIUM" | "HIGH" | "CRITICAL"
 }`;
 
-  const payload = contract ? contract.buildPayload(metrics) : { telemetry: metrics };
-  const userPrompt = truncateInputStrict(JSON.stringify({ 
-    panel: panelName, 
-    operational_mode: context.mode,
-    platform: platform,
-    source_origin: source,
-    service_uplink: context.serviceStatus,
-    payload: payload
-  }));
+  const userPrompt = truncateInputStrict(JSON.stringify(_sentPayload));
 
   try {
-    if (config.provider === AIProvider.GEMINI) {
-      const ai = getAiClient(config);
-      const response = await ai.models.generateContent({
-        model: 'gemini-3-flash-preview',
-        contents: systemInstruction + "\n\n" + userPrompt,
-        config: { responseMimeType: "application/json" }
-      });
-      return JSON.parse(response.text || "{}");
-    } else {
-      const baseUrl = config.endpoint.replace(/\/$/, "");
-      const endpoint = baseUrl.includes('/chat/completions') ? baseUrl : `${baseUrl}/chat/completions`;
-      
-      const response = await secureLocalFetch(endpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: config.model,
-          messages: [
-            { role: 'system', content: systemInstruction }, 
-            { role: 'user', content: userPrompt }
-          ],
-          temperature: 0.1,
-          max_tokens: 512
-        })
-      });
-      const data = await response.json();
-      if (data.error) throw new Error(data.error.message);
-      return extractJsonLoose(data.choices[0].message.content);
-    }
+    // Pass isDataProbe=true for standard probes to utilize logic in transport if needed
+    const result = await aiTransport.fetch(config, systemInstruction, userPrompt, true, context.tokenLimit);
+    if (!result.success) throw new Error(result.error);
+    
+    // Attach the captured payload to the result for logging
+    return { ...result.data, _sentPayload };
   } catch (e: any) {
     console.error("Neural Probe Error:", e);
-    // Return a structured error response that fits the schema so the UI doesn't crash
+    // Return a structured error response that fits the schema so the UI doesn't crash, including the sent payload for audit
     return {
       description: `Neural Link Failure: ${e.message}`,
       recommendation: "Check AI Configuration and Connectivity.",
@@ -160,7 +238,8 @@ Schema:
       elementType: panelName,
       elementId: "ERROR",
       anomalies: ["AI_UNREACHABLE"],
-      threatLevel: "UNKNOWN"
+      threatLevel: "UNKNOWN",
+      _sentPayload
     };
   }
 }
@@ -168,10 +247,13 @@ Schema:
 export async function fetchSmartTooltip(
   config: AIConfig,
   elementData: any,
-  context: { sessionId: string; mode: OperationalMode }
+  context: { sessionId: string; mode: OperationalMode; tokenLimit: number }
 ): Promise<SmartTooltipData> {
   const platform = elementData.metrics?.platform || "UNKNOWN";
   
+  // Transmorph metric data for tooltip as well
+  const safeMetrics = transmorphPayload(elementData.metrics, context.tokenLimit);
+
   const systemInstruction = `You are a ${platform} cyber dashboard smart tooltip engine.
 STRICT RULES:
 - Respond ONLY with a valid JSON object.
@@ -191,42 +273,16 @@ Schema:
     elementId: elementData.elementId, 
     status: context.mode, 
     platform: platform,
-    metrics: elementData.metrics,
+    metrics: safeMetrics,
     context: "Dashboard - Real-time Probe Overview"
   }));
 
   try {
-    if (config.provider === AIProvider.GEMINI) {
-      const ai = getAiClient(config);
-      const response = await ai.models.generateContent({
-        model: 'gemini-3-flash-preview',
-        contents: systemInstruction + "\n\n" + userPrompt,
-        config: { responseMimeType: "application/json" }
-      });
-      return JSON.parse(response.text || "{}");
-    } else {
-      const baseUrl = config.endpoint.replace(/\/$/, "");
-      const endpoint = baseUrl.includes('/chat/completions') ? baseUrl : `${baseUrl}/chat/completions`;
-      
-      const response = await secureLocalFetch(endpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          model: config.model, 
-          messages: [
-            { role: 'system', content: systemInstruction }, 
-            { role: 'user', content: userPrompt }
-          ], 
-          temperature: 0.1,
-          max_tokens: 300
-        })
-      });
-      const data = await response.json();
-      if (data.error) throw new Error(data.error.message);
-      return extractJsonLoose(data.choices[0].message.content);
-    }
+    const result = await aiTransport.fetch(config, systemInstruction, userPrompt, false, context.tokenLimit);
+    if (!result.success) throw new Error(result.error);
+    return result.data;
   } catch (e) { 
-    console.error("Local Tooltip Error:", e);
+    console.error("Neural Tooltip Error:", e);
     return fallbackTooltip(elementData, context.mode); 
   }
 }

@@ -14,9 +14,24 @@ export const aiTransport = {
     config: AIConfig, 
     systemInstruction: string, 
     prompt: string, 
-    isDataProbe: boolean
+    isDataProbe: boolean,
+    tokenLimit: number = 2000 // Launcher attribute (Characters)
   ): Promise<TransportResponse> {
-    const maxTokens = isDataProbe ? 2000 : 800;
+    
+    // STRICT INPUT ENFORCEMENT:
+    // Truncate the input string to the launcher's character limit.
+    // This prevents "token limit exceeded" errors on local models and context overflow on cloud.
+    let effectivePrompt = prompt;
+    if (effectivePrompt.length > tokenLimit) {
+        effectivePrompt = effectivePrompt.substring(0, tokenLimit) + "... [PROMPT_TRUNCATED_BY_LAUNCHER_LIMIT]";
+    }
+
+    // OUTPUT SIZING:
+    // Derive output token limit from the launcher's input character limit.
+    // Heuristic: 1 token ~= 4 chars. We allow output to be ~25% of input capacity, 
+    // clamped between 256 (min for JSON) and 2048 (max for detailed report).
+    const derivedOutputTokens = Math.max(256, Math.min(2048, Math.floor(tokenLimit / 4)));
+
     let requestBody: any = {};
 
     try {
@@ -25,11 +40,13 @@ export const aiTransport = {
         
         requestBody = {
           model: modelName,
-          contents: [{ parts: [{ text: prompt }] }],
+          contents: [{ parts: [{ text: effectivePrompt }] }],
           config: { 
             systemInstruction: systemInstruction,
             responseMimeType: "application/json",
-            thinkingConfig: { thinkingBudget: isDataProbe ? 1024 : 0 },
+            // Thinking budget only for complex probes if capacity allows
+            thinkingConfig: { thinkingBudget: isDataProbe && tokenLimit > 2000 ? 1024 : 0 },
+            maxOutputTokens: derivedOutputTokens,
             temperature: 0.1,
           }
         };
@@ -54,10 +71,10 @@ export const aiTransport = {
           model: config.model,
           messages: [
             { role: 'system', content: systemInstruction }, 
-            { role: 'user', content: prompt }
+            { role: 'user', content: effectivePrompt }
           ],
           temperature: 0.1,
-          max_tokens: maxTokens
+          max_tokens: derivedOutputTokens
         };
 
         const response = await fetch(endpoint, {

@@ -1,4 +1,5 @@
-import React from 'react';
+
+import React, { memo } from 'react';
 
 interface TacticalButtonProps {
   label: string;
@@ -11,7 +12,7 @@ interface TacticalButtonProps {
   hasTopPins?: boolean;
 }
 
-const TacticalButton: React.FC<TacticalButtonProps> = ({ 
+const TacticalButton: React.FC<TacticalButtonProps> = memo(({ 
   label, onClick, onContextMenu, disabled, color = '#00ffd5', size = 'md', className = '', hasTopPins = false 
 }) => {
   const isSm = size === 'sm';
@@ -71,6 +72,6 @@ const TacticalButton: React.FC<TacticalButtonProps> = ({
       </div>
     </div>
   );
-};
+});
 
 export default TacticalButton;

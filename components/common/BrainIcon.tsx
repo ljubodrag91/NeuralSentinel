@@ -1,4 +1,5 @@
-import React from 'react';
+
+import React, { memo } from 'react';
 
 interface BrainIconProps {
   onClick: () => void;
@@ -7,7 +8,7 @@ interface BrainIconProps {
   color?: string;
 }
 
-const BrainIcon: React.FC<BrainIconProps> = ({ onClick, className = '', isProcessing = false, color = '#00ffd5' }) => {
+const BrainIcon: React.FC<BrainIconProps> = memo(({ onClick, className = '', isProcessing = false, color = '#00ffd5' }) => {
   return (
     <button 
       onClick={(e) => {
@@ -16,7 +17,7 @@ const BrainIcon: React.FC<BrainIconProps> = ({ onClick, className = '', isProces
       }}
       className={`brain-icon-btn p-3 rounded-md transition-all flex items-center justify-center ${className} ${isProcessing ? 'animate-pulse' : ''}`}
       style={{ color: isProcessing ? color : '#52525b' }}
-      onMouseEnter={(e) => e.currentTarget.style.color = color}
+      onMouseEnter={(e) => e.currentTarget.style.color = color || '#00ffd5'}
       onMouseLeave={(e) => !isProcessing && (e.currentTarget.style.color = '#52525b')}
     >
       <svg className="w-9 h-9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -30,6 +31,6 @@ const BrainIcon: React.FC<BrainIconProps> = ({ onClick, className = '', isProces
       </svg>
     </button>
   );
-};
+});
 
 export default BrainIcon;

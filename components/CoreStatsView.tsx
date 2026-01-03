@@ -15,20 +15,22 @@ interface CoreStatsViewProps {
   onProbeClick: (panel: string, metrics: any) => void;
   onProbeInfo: (title: string, payload: any) => void;
   onBrainClick: (id: string, type: string, metrics: any) => void;
-  onLauncherSelect: (id: string, type: 'core' | 'neural') => void;
+  onLauncherSelect: (id: string, type: 'data' | 'neural') => void;
   onCommand: (cmd: string) => void;
+  onHistoryShow?: (panelId: string, title: string, headers: string[]) => void;
   processingId?: string;
   activeTelemetry: Set<string>;
   setActiveTelemetry: (s: Set<string>) => void;
 }
 
-const CoreStatsView: React.FC<CoreStatsViewProps> = ({ stats, mode, settings, onProbeClick, onProbeInfo, onBrainClick, onLauncherSelect, onCommand, processingId, activeTelemetry, setActiveTelemetry }) => {
+const CoreStatsView: React.FC<CoreStatsViewProps> = ({ stats, mode, settings, onProbeClick, onProbeInfo, onBrainClick, onLauncherSelect, onCommand, onHistoryShow, processingId, activeTelemetry, setActiveTelemetry }) => {
   const [showInfo, setShowInfo] = useState(false);
   const [tempHistory, setTempHistory] = useState<{time: string, temp: number}[]>([]);
   
   // Process Viewer State
   const [procSort, setProcSort] = useState<'cpu' | 'mem'>('cpu');
   const [procFilter, setProcFilter] = useState('');
+  const [killingPids, setKillingPids] = useState<Set<number>>(new Set());
 
   useEffect(() => {
     if (stats?.sensors?.cpu_thermal_temp1) {
@@ -55,16 +57,33 @@ const CoreStatsView: React.FC<CoreStatsViewProps> = ({ stats, mode, settings, on
   const sourceState = isDataActive ? 'REAL' : 'OFFLINE';
 
   const getLauncherColor = (panelId: string) => {
-    const id = settings.probeLaunchers[panelId];
+    const slot = settings.panelSlots[panelId]?.dataSlot;
+    const id = slot?.launcherId || 'std-core';
     return launcherSystem.getById(id)?.color || '#bd00ff';
   };
 
   const handleKillProcess = (pid: number) => {
     if (mode !== OperationalMode.REAL) return;
+    
+    setKillingPids(prev => {
+      const next = new Set(prev);
+      next.add(pid);
+      return next;
+    });
+
     const cmd = settings.platform === Platform.WINDOWS 
       ? `Stop-Process -Id ${pid} -Force` 
       : `kill -9 ${pid}`;
     onCommand(cmd);
+
+    // Simulate feedback delay / wait for next poll
+    setTimeout(() => {
+      setKillingPids(prev => {
+        const next = new Set(prev);
+        next.delete(pid);
+        return next;
+      });
+    }, 1500);
   };
 
   const filteredProcesses = useMemo(() => {
@@ -98,10 +117,10 @@ const CoreStatsView: React.FC<CoreStatsViewProps> = ({ stats, mode, settings, on
       {/* Primary Telemetry Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 items-stretch">
         {/* CPU */}
-        <Tooltip name="CPU_MATRIX" source={sourceState} desc="Click to HIGHLIGHT. Right-click for NEURAL probe." className="h-full">
+        <Tooltip name="CPU_MATRIX" source={sourceState} desc="Thermal and computational load monitoring. Detects crypto-mining signatures or runaway processes via thermal spikes. Click to HIGHLIGHT. Right-click to CONFIGURE NEURAL LAUNCHER." className="h-full">
           <div 
             onClick={() => toggleMetric('cpu')}
-            onContextMenu={(e) => { e.preventDefault(); onBrainClick('CPU_CARD', 'Telemetry Card', stats?.cpu); }}
+            onContextMenu={(e) => { e.preventDefault(); onLauncherSelect('GLOBAL_SYSTEM_PROBE', 'neural'); }}
             className={`cursor-pointer border p-5 flex flex-col gap-3 transition-all group h-full ${
               activeTelemetry.has('cpu') ? 'bg-zinc-900/80 border-purple-500/50 shadow-[0_0_15px_rgba(168,85,247,0.1)]' : 'bg-black border-zinc-900 hover:border-zinc-800'
             }`}
@@ -124,10 +143,10 @@ const CoreStatsView: React.FC<CoreStatsViewProps> = ({ stats, mode, settings, on
         </Tooltip>
 
         {/* RAM */}
-        <Tooltip name="MEMORY_POOL" source={sourceState} desc="Click to HIGHLIGHT. Right-click for NEURAL probe." className="h-full">
+        <Tooltip name="MEMORY_POOL" source={sourceState} desc="Volatile memory usage analysis. Monitors RAM allocation and Swap usage to detect buffer overflow attempts or leaks. Click to HIGHLIGHT. Right-click to CONFIGURE NEURAL LAUNCHER." className="h-full">
           <div 
             onClick={() => toggleMetric('ram')}
-            onContextMenu={(e) => { e.preventDefault(); onBrainClick('RAM_CARD', 'Telemetry Card', stats?.memory); }}
+            onContextMenu={(e) => { e.preventDefault(); onLauncherSelect('GLOBAL_SYSTEM_PROBE', 'neural'); }}
             className={`cursor-pointer border p-5 flex flex-col gap-3 transition-all group h-full ${
               activeTelemetry.has('ram') ? 'bg-zinc-900/80 border-purple-500/50 shadow-[0_0_15px_rgba(168,85,247,0.1)]' : 'bg-black border-zinc-900 hover:border-zinc-800'
             }`}
@@ -150,10 +169,10 @@ const CoreStatsView: React.FC<CoreStatsViewProps> = ({ stats, mode, settings, on
         </Tooltip>
 
         {/* DISK */}
-        <Tooltip name="DISK_VOLUMES" source={sourceState} desc="Click to HIGHLIGHT. Right-click for NEURAL probe." className="h-full">
+        <Tooltip name="DISK_VOLUMES" source={sourceState} desc="Storage filesystem integrity monitor. Tracks partition usage and I/O rates to identify data exfiltration or ransomware activity. Click to HIGHLIGHT. Right-click to CONFIGURE NEURAL LAUNCHER." className="h-full">
           <div 
             onClick={() => toggleMetric('disk')}
-            onContextMenu={(e) => { e.preventDefault(); onBrainClick('DISK_CARD', 'Telemetry Card', stats?.disk); }}
+            onContextMenu={(e) => { e.preventDefault(); onLauncherSelect('GLOBAL_SYSTEM_PROBE', 'neural'); }}
             className={`cursor-pointer border p-5 flex flex-col gap-3 transition-all group h-full ${
               activeTelemetry.has('disk') ? 'bg-zinc-900/80 border-purple-500/50 shadow-[0_0_15px_rgba(168,85,247,0.1)]' : 'bg-black border-zinc-900 hover:border-zinc-800'
             }`}
@@ -175,10 +194,10 @@ const CoreStatsView: React.FC<CoreStatsViewProps> = ({ stats, mode, settings, on
         </Tooltip>
 
         {/* NETWORK */}
-        <Tooltip name="IO_LINK" source={sourceState} desc="Click to HIGHLIGHT. Right-click for NEURAL probe." className="h-full">
+        <Tooltip name="IO_LINK" source={sourceState} desc="Network throughput analyzer. Measures RX/TX rates to detect C2 beacons or unauthorized large file transfers. Click to HIGHLIGHT. Right-click to CONFIGURE NEURAL LAUNCHER." className="h-full">
           <div 
             onClick={() => toggleMetric('net')}
-            onContextMenu={(e) => { e.preventDefault(); onBrainClick('NET_CARD', 'Telemetry Card', stats?.network); }}
+            onContextMenu={(e) => { e.preventDefault(); onLauncherSelect('GLOBAL_SYSTEM_PROBE', 'neural'); }}
             className={`cursor-pointer border p-5 flex flex-col gap-3 transition-all group h-full ${
               activeTelemetry.has('net') ? 'bg-zinc-900/80 border-purple-500/50 shadow-[0_0_15px_rgba(168,85,247,0.1)]' : 'bg-black border-zinc-900 hover:border-zinc-800'
             }`}
@@ -204,13 +223,16 @@ const CoreStatsView: React.FC<CoreStatsViewProps> = ({ stats, mode, settings, on
         <Card 
           id="NODE_DIAGNOSTICS"
           title="NODE_DIAGNOSTICS" 
+          titleTooltip="Deep-dive environmental probe of OS kernel, disk partitions, and hardware sensors. Checks for uptime anomalies and mounting errors."
           variant="real" 
           probeColor={getLauncherColor('NODE_DIAGNOSTICS')}
           onProbe={() => onProbeClick('NODE_DIAGNOSTICS', stats)} 
           onProbeInfo={() => onProbeInfo('NODE_DIAGNOSTICS', stats)}
-          onBrain={() => onBrainClick('node_diag_panel', 'Environment Audit', stats)} 
+          onBrain={() => onBrainClick('NODE_DIAGNOSTICS', 'Environment Audit', stats)} 
           onLauncherSelect={(type) => onLauncherSelect('NODE_DIAGNOSTICS', type)}
+          onHistory={() => onHistoryShow?.('NODE_DIAGNOSTICS', 'ENVIRONMENTAL_LOGS', ['TEMP', 'LOAD', 'UPTIME'])}
           isProcessing={processingId === 'NODE_DIAGNOSTICS'}
+          allowDistortion={settings.panelDistortion}
         >
           <div className="space-y-4 font-mono text-[11px]">
              <div className="flex justify-between border-b border-zinc-900 pb-2"><span className="text-zinc-600 uppercase">Hostname</span><span className="text-teal-500 uppercase font-black">{stats?.system?.hostname || 'SENTINEL_NULL'}</span></div>
@@ -251,13 +273,16 @@ const CoreStatsView: React.FC<CoreStatsViewProps> = ({ stats, mode, settings, on
         <Card 
           id="PROCESS_PROBE"
           title="ACTIVE_PROCESS_MATRIX" 
+          titleTooltip="Probe of active system processes and resource consumption patterns. Identifies suspicious processes or resource-exhaustion vectors."
           variant="purple" 
           probeColor={getLauncherColor('PROCESS_PROBE')}
           onProbe={() => onProbeClick('PROCESS_PROBE', stats?.processes)} 
           onProbeInfo={() => onProbeInfo('PROCESS_PROBE', stats?.processes)}
-          onBrain={() => onBrainClick('process_audit_panel', 'Process Probe', stats?.processes)} 
+          onBrain={() => onBrainClick('PROCESS_PROBE', 'Process Probe', stats?.processes)} 
           onLauncherSelect={(type) => onLauncherSelect('PROCESS_PROBE', type)}
+          onHistory={() => onHistoryShow?.('PROCESS_PROBE', 'PROCESS_SNAPSHOTS', ['PID', 'NAME', 'CPU%', 'MEM%'])}
           isProcessing={processingId === 'PROCESS_PROBE'}
+          allowDistortion={settings.panelDistortion}
         >
           <div className="flex flex-col h-full">
             {/* Process Controls */}
@@ -306,9 +331,14 @@ const CoreStatsView: React.FC<CoreStatsViewProps> = ({ stats, mode, settings, on
                     {mode === OperationalMode.REAL && (
                       <button 
                         onClick={() => handleKillProcess(p.pid)}
-                        className="text-[8px] text-red-900 hover:text-red-500 font-black uppercase border border-transparent hover:border-red-900/50 px-1 transition-all opacity-0 group-hover:opacity-100"
+                        disabled={killingPids.has(p.pid)}
+                        className={`text-[8px] font-black uppercase border px-1 transition-all ${
+                          killingPids.has(p.pid)
+                            ? 'text-red-400 border-red-900/50 opacity-100 bg-red-950/20 cursor-wait'
+                            : 'text-red-900 hover:text-red-500 border-transparent hover:border-red-900/50 opacity-0 group-hover:opacity-100'
+                        }`}
                       >
-                        KILL
+                        {killingPids.has(p.pid) ? 'TERM...' : 'KILL'}
                       </button>
                     )}
                   </div>
@@ -328,7 +358,8 @@ const CoreStatsView: React.FC<CoreStatsViewProps> = ({ stats, mode, settings, on
           <section className="space-y-2">
             <h4 className="text-teal-500 font-black uppercase text-[12px]">Metrics Origin: {stats?.system?.hostname || 'UNKNOWN'}</h4>
             <p className="text-zinc-400 text-[11px] leading-relaxed">
-              Consolidated telemetry feed via Sentinel Port 5050. Data is normalized from {settings.platform} specific counters.
+              Direct System Acquisition Strategy. Metrics are collected via Native OS Calls (Local) or SSH Secure Shell (Remote). 
+              This data path is direct and does not rely on the external 5050 Telemetry Service.
             </p>
           </section>
           

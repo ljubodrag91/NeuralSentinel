@@ -1,35 +1,61 @@
-Project Name: Neural W Monitor - Kali Linux Interface for Penetration Testing
 
-Project Overview:
-Create a multi-window, high-fidelity security dashboard designed for remote management of Kali Linux on Raspberry Pi devices. The UI must follow a "Cyber-Tactical HUD" aesthetic with scanlines, CRT flicker, and chromatic aberration effects.
+Role: Expert Frontend & Security Engineer
+Context: Neural Sentinel SOC Console (React 19, TypeScript, Tailwind, Gemini AI)
 
-Core Requirements:
-1. Multi-Tab Interface:
-   - Dashboard (Link status, Handshake config, Network adapters)
-   - Telemetry (Live AreaCharts for RF Signal and Spectral Density)
-   - Pi Stats (CPU, RAM, Disk, Thermal monitoring, Process list)
-   - Toolkit (Categorized tool selection: Recon, Wireless, Web)
-   - History (Tactical log archive)
+CORE OBJECTIVE:
+Maintain stability, correctness, and operator clarity in a high-fidelity Cyber-Tactical Dashboard. 
+The application manages both Local (Windows) and Remote (Linux/Pi) telemetry sources.
 
-2. Neural Intelligence Engine Integration:
-   - Integrate Google Gemini API for "Neural Probes" and "Smart Tooltips".
-   - Support for Local LLM endpoints (Ollama/LM Studio) via OpenAI-compatible chat/completions.
-   - Implement a "Charges" system (Core Charges and Neural Charges) with reload timers for AI actions.
-   - AI must respond with strictly formatted JSON for UI-integrated reports.
+---
 
-3. Visual Design:
-   - Colors: #00ffd5 (Teal), #bd00ff (Purple), #ff3e3e (Red), #020406 (Deep BG).
-   - Component styles: Transistor-inspired buttons with "leads/pins", HUD rect frames, blurring background haze.
-   - Animated Logo: A simplified schematic CPU/Core package with a pulsing status die.
+1. ARCHITECTURAL INVARIANTS (DO NOT BREAK)
+- State Management: React useState/useEffect for real-time telemetry. No external state libs (Redux/Zustand).
+- Data Source Routing: 
+  - LOCAL mode = 127.0.0.1 (Windows HUD).
+  - REMOTE mode = User-defined IP (Linux HUD).
+  - Toggle MUST switch effectively without reload.
+- AI Integration: 
+  - Gemini (Cloud) and Local LLM (OpenAI-compatible) support.
+  - "Probes" = Heavy data analysis requests (Core Charges, Token Limit: 4000-8000 Chars).
+  - "Neural Tooltips" = Lightweight inference (Neural Charges, Token Limit: 400-800 Tokens).
+- Data Persistence:
+  - All critical session actions (Probes, Handshakes, Commands) must be persisted to CSV in localStorage via `HistoryStorage`.
+  - Retention: 24-hour sliding window.
 
-4. Functionality:
-   - Guided Wizards for complex tools like Nmap and Deauthentication.
-   - Interactive Bash Terminal overlay for direct command injection.
-   - Unified tactical log stream with source-specific filtering (Kernel, Neural, Console, System).
-   - "Audit Dots": Integrated small dots next to AI probe buttons that, when clicked, open a dialog to inspect the raw JSON packet analyzed by the engine.
-   - Real-time Connection Monitoring: Interface must visually respond to node health status, switching to a disconnected state (Red Core) if the heartbeat fetch fails or times out.
+2. STRICT DATA & ERROR HANDLING
+- Null Safety: Always check `stats`, `session`, and `metrics` before access.
+- Error Boundaries: AI failures must return fallback JSON, never crash the UI.
+- Networking: Use `AbortController` for all polling intervals.
+- Telemetry:
+  - If source is OFFLINE, show "VOID" or "DISCONNECTED" markers.
+  - Do not hallucinate data. If a metric is missing, display "—".
 
-5. Developer Specs:
-   - React 19, TypeScript, Tailwind CSS, Recharts.
-   - Robust error handling for AI endpoints (400/500 errors).
-   - Mocked simulation mode for offline testing.
+3. VISUAL & UI RULES
+- Aesthetics: Cyber-Tactical HUD (Scanlines, CRT flicker, Chromatic Aberration).
+- Color Coding (Strict):
+  - BLUE/CYAN (#00f2ff) -> Local Host / Simulation / Info
+  - GREEN (#22c55e) -> Remote Host / Success / Active Link
+  - RED (#ff3e3e) -> Offline / Error / Critical Threat
+  - PURPLE (#bd00ff) -> Neural/AI Activity
+- Typography: JetBrains Mono (primary), Share Tech Mono (headers).
+- Icons: Lucide-React or SVG equivalents.
+
+4. FEATURE CONSTRAINTS
+- Handshake Node: Must be GATED (Disabled) when in LOCAL mode.
+- Neural Logs: 
+  - Button text: "PROBE" (Action), "Audit" (Inspection).
+  - Dialog title: "FULL_NEURAL_AUDIT".
+- Toolkit: Only execute commands if a session is ACTIVE (Local or Remote).
+- Launchers: Enforce token limits on AI prompts to prevent context overflow.
+
+5. NEGATIVE CONSTRAINTS (NEVER DO THIS)
+- Do not introduce Redux, Context API, or new dependencies.
+- Do not remove the "FROG_ASCII" easter egg.
+- Do not change the JSON schema expected by the 5050 backend.
+- Do not make the UI responsive for mobile unless explicitly asked (Desktop-first SOC).
+- Do not rename "Brain Probe" back to "Brain" (Use "Neural Probe").
+
+6. PROMPT ADHERENCE
+- If asked to fix a bug, fix ONLY that bug.
+- If asked to refactor, ensure 100% feature parity.
+- Always validate `process.env.API_KEY` existence before AI calls.

@@ -41,6 +41,10 @@ export interface LogEntry {
     data?: any;
     launcherId?: string;
     probeType?: 'NEURAL' | 'DATA';
+    contract?: {
+        description: string;
+        expectation: string;
+    };
   };
 }
 
@@ -154,6 +158,16 @@ export interface NeuralNetworkConfig {
   fallbackToLocal: boolean;
 }
 
+export interface SlotConfig {
+  launcherId: string;
+  ammoId: string;
+}
+
+export interface PanelSlotConfig {
+  dataSlot: SlotConfig;
+  neuralSlot: SlotConfig;
+}
+
 export interface AppSettings {
   showAsciiBg: boolean;
   globalDistortion: boolean;
@@ -167,8 +181,9 @@ export interface AppSettings {
   neuralRechargeRate: number; 
   maxCoreCharges: number;
   maxNeuralCharges: number;
-  // Per-probe launcher mappings
-  probeLaunchers: Record<string, string>;
+  // Deprecated: probeLaunchers: Record<string, string>;
+  // New per-panel dual-slot configuration
+  panelSlots: Record<string, PanelSlotConfig>;
   telemetryEnabled: boolean;
   neuralUplinkEnabled: boolean;
   platform: Platform;
@@ -194,6 +209,20 @@ export interface Launcher {
   rechargeRate: number; // seconds
   compatibleProbes: string[]; // probe types or ids
   color: string;
+  tokens: number; // Max chars for core, max output tokens for neural
+}
+
+export interface ProbeAmmunition {
+  id: string;
+  name: string;
+  type: 'data' | 'neural';
+  description: string;
+  compatibleLaunchers: ('core' | 'neural')[];
+  cost: number;
+  features: string[]; // e.g., 'HISTORY', 'THERMAL'
+  disabled?: boolean;
+  unlimited?: boolean;
+  maxStack?: number;
 }
 
 export interface ModuleDefinition {

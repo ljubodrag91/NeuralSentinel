@@ -3,10 +3,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { OperationalMode, SessionInfo, CoreStats, AppSettings, Platform } from '../types';
 import Card from './common/Card';
 import Tooltip from './common/Tooltip';
-import TacticalButton from './common/TacticalButton';
-import BrainIcon from './common/BrainIcon';
 import { launcherSystem } from '../services/launcherService';
-import { platformService } from '../services/platformService';
 
 interface DashboardProps {
   mode: OperationalMode;
@@ -23,39 +20,32 @@ interface DashboardProps {
   onLauncherSelect: (id: string, type: 'core' | 'neural') => void;
   onAdapterCommand: (cmd: string) => void;
   onRefresh: () => void;
+  onHistoryShow?: (panelId: string, title: string, headers: string[]) => void;
   processingId?: string;
   latestCoreProbeResult?: any;
   activeTelemetry?: Set<string>;
-  uplinkStatus: { neural: boolean; service: boolean };
 }
 
 const Dashboard: React.FC<DashboardProps> = ({ 
-  mode, session, stats, settings, terminalHistory, onHandshake, onDisconnect, onLog, onBrainClick, onProbeClick, onProbeInfo, onLauncherSelect, onAdapterCommand, processingId, latestCoreProbeResult, activeTelemetry, uplinkStatus
+  mode, session, stats, settings, terminalHistory, onHandshake, onDisconnect, onBrainClick, onProbeClick, onProbeInfo, onLauncherSelect, onAdapterCommand, onHistoryShow, processingId, latestCoreProbeResult, activeTelemetry
 }) => {
-  const [ipInput, setIpInput] = useState(session.targetIp || '10.121.41.108');
-  const [user, setUser] = useState('kali'); 
+  // Removed hardcoded placeholders. Remote connections require manual entry.
+  const [ipInput, setIpInput] = useState('');
+  const [user, setUser] = useState('');
   const [pass, setPass] = useState('');
   const [port, setPort] = useState(22);
-  
   const [terminalMode, setTerminalMode] = useState(false);
   const [consoleInput, setConsoleInput] = useState('');
   const consoleInputRef = useRef<HTMLInputElement>(null);
   const terminalEndRef = useRef<HTMLDivElement>(null);
   
-  useEffect(() => {
-    if (session.targetIp) setIpInput(session.targetIp);
-  }, [session.targetIp]);
-
   const adapters = useMemo(() => {
-    const base = settings.platform === Platform.WINDOWS 
-      ? ['Ethernet0', 'Wi-Fi', 'Loopback Pseudo-Interface 1'] 
-      : ['wlan0', 'wlan1', 'eth0', 'lo'];
-      
+    const base = ['wlan0', 'wlan1', 'eth0', 'lo'];
     if (stats?.network?.interfaces) {
       return Array.from(new Set([...base, ...Object.keys(stats.network.interfaces)]));
     }
     return base;
-  }, [stats, settings.platform]);
+  }, [stats]);
 
   useEffect(() => {
     if (terminalEndRef.current) terminalEndRef.current.scrollIntoView({ behavior: 'smooth' });
@@ -64,13 +54,17 @@ const Dashboard: React.FC<DashboardProps> = ({
   const getInterfaceData = (name: string) => {
     if (mode === OperationalMode.SIMULATED) return { up: true, ip: '192.168.1.104' };
     const realData = stats?.network?.interfaces?.[name];
-    const ip = realData?.ipv4?.[0] || realData?.ipv6?.[0] || 'NO_IP';
-    return { up: realData?.isUp || false, ip: ip };
+    return { up: realData?.up || false, ip: realData?.ip || 'OFFLINE' };
   };
 
   const isConnected = session.status === 'ACTIVE';
+  const isRemote = settings.dataSourceMode === 'REMOTE';
+  const isLocal = settings.dataSourceMode === 'LOCAL';
   const isProbeActive = processingId === 'GLOBAL_SYSTEM_PROBE';
-  const promptString = platformService.getPrompt(settings.platform, user);
+
+  // Determine Local Identity based on Platform (Windows vs Linux)
+  const localIdentity = settings.platform === Platform.WINDOWS ? 'Administrator' : 'root';
+  const prompt = settings.platform === Platform.WINDOWS ? 'PS C:\\Users\\Admin>' : 'root@kali:~#';
 
   const handleConsoleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -85,15 +79,27 @@ const Dashboard: React.FC<DashboardProps> = ({
   }, [terminalMode]);
 
   const getLauncherColor = (panelId: string) => {
-    const id = settings.probeLaunchers[panelId];
+    const slot = settings.panelSlots[panelId]?.dataSlot;
+    const id = slot?.launcherId || 'std-core';
     return launcherSystem.getById(id)?.color || '#bd00ff';
   };
 
-  const handleAdapterClick = (name: string) => {
-    setTerminalMode(true);
-    const cmd = platformService.getAdapterCommand(settings.platform, name);
-    onAdapterCommand(cmd);
-  };
+  // Logic for Handshake Panel Visuals
+  // Local: Blue if stats present (online), Red if not. Always disabled.
+  // Remote: Green if connected, Red if disconnected. Enabled when disconnected.
+  let handshakeVariant: 'real' | 'sim' | 'offline' | 'blue' | 'green' = 'offline';
+  let isHandshakeInputDisabled = false;
+  let handshakeButtonText = "INITIALIZE_HANDSHAKE";
+  
+  if (isLocal) {
+    handshakeVariant = stats ? 'blue' : 'offline';
+    isHandshakeInputDisabled = true;
+    handshakeButtonText = stats ? "LOCAL_LINK_ACTIVE" : "LOCAL_DATA_OFFLINE";
+  } else {
+    handshakeVariant = isConnected ? 'green' : 'offline';
+    isHandshakeInputDisabled = isConnected;
+    handshakeButtonText = isConnected ? "TERMINATE_SESSION" : "INITIALIZE_HANDSHAKE";
+  }
 
   return (
     <div className="space-y-6 h-full flex flex-col no-scroll overflow-hidden pb-4">
@@ -112,7 +118,7 @@ const Dashboard: React.FC<DashboardProps> = ({
           )}
         </div>
         <div className="flex items-center gap-3">
-          <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`}></div>
+          <div className={`w-2 h-2 rounded-full ${isConnected ? (isRemote ? 'bg-green-500 animate-pulse' : 'bg-blue-500 animate-pulse') : 'bg-red-500'}`}></div>
           <div className="text-[9px] font-mono text-zinc-800 uppercase">STN_NODE: {isConnected ? 'LINKED' : 'VOID'}</div>
         </div>
       </div>
@@ -123,26 +129,63 @@ const Dashboard: React.FC<DashboardProps> = ({
             <Card 
               id="HANDSHAKE_CORE"
               title="HANDSHAKE_NODE" 
-              variant={isConnected ? 'real' : 'offline'}
-              onProbe={() => onProbeClick('HANDSHAKE_CORE', { ipInput, user, port, platform: settings.platform })}
-              onProbeInfo={() => onProbeInfo('HANDSHAKE_CORE', { ipInput, user, port, platform: settings.platform })}
-              onBrain={() => onBrainClick('handshake_panel', 'Connection Link', { ipInput, user, status: session.status, platform: settings.platform })}
-              onLauncherSelect={(type) => onLauncherSelect('HANDSHAKE_CORE', type)}
+              variant={handshakeVariant}
+              onProbe={() => onProbeClick('HANDSHAKE_CORE', { ipInput: isLocal ? '127.0.0.1' : ipInput, user: isLocal ? localIdentity : user, port })}
+              onProbeInfo={() => onProbeInfo('HANDSHAKE_CORE', { ipInput: isLocal ? '127.0.0.1' : ipInput, user: isLocal ? localIdentity : user, port })}
+              onBrain={() => onBrainClick('HANDSHAKE_CORE', 'Connection Link', { ipInput: isLocal ? '127.0.0.1' : ipInput, user, status: session.status })}
+              onLauncherSelect={(_, type) => onLauncherSelect('HANDSHAKE_CORE', type)}
+              onHistory={() => onHistoryShow?.('HANDSHAKE_CORE', 'CONNECTION_ATTEMPTS', ['IP', 'USER', 'PORT', 'STATUS'])}
               isProcessing={processingId === 'HANDSHAKE_CORE'}
               probeColor={getLauncherColor('HANDSHAKE_CORE')}
             >
               <div className="space-y-4">
-                <input value={ipInput} onChange={e => setIpInput(e.target.value)} disabled={isConnected} className={`bg-black/50 border border-zinc-900 p-2 text-[11px] font-mono outline-none w-full ${isConnected ? 'text-teal-500/50' : 'text-white'}`} placeholder="0.0.0.0" />
+                <input 
+                  value={isLocal ? 'LOCALHOST [127.0.0.1]' : ipInput} 
+                  onChange={e => setIpInput(e.target.value)} 
+                  disabled={isHandshakeInputDisabled} 
+                  className={`bg-black/50 border p-2 text-[11px] font-mono outline-none w-full transition-colors ${
+                    isLocal 
+                      ? 'border-zinc-900 text-blue-500/50 cursor-not-allowed' 
+                      : (isConnected ? 'border-green-900/50 text-green-500/50' : 'border-zinc-800 text-white focus:border-green-500')
+                  }`} 
+                  placeholder={isLocal ? "" : "Target IP Address..."} 
+                />
                 <div className="grid grid-cols-3 gap-3">
-                  <input value={user} onChange={e => setUser(e.target.value)} disabled={isConnected} className="bg-black/50 border border-zinc-900 p-1.5 text-[10px] font-mono outline-none" placeholder="user" />
-                  <input type="password" value={pass} onChange={e => setPass(e.target.value)} disabled={isConnected} className="bg-black/50 border border-zinc-900 p-1.5 text-[10px] font-mono outline-none" placeholder="pass" />
-                  <input type="number" value={port} onChange={e => setPort(Number(e.target.value))} disabled={isConnected} className="bg-black/50 border border-zinc-900 p-1.5 text-[10px] font-mono outline-none" />
+                  <input 
+                    value={isLocal ? localIdentity : user} 
+                    onChange={e => setUser(e.target.value)} 
+                    disabled={isHandshakeInputDisabled} 
+                    className={`bg-black/50 border p-1.5 text-[10px] font-mono outline-none ${isLocal ? 'border-zinc-900 text-blue-500/50' : 'border-zinc-900 text-zinc-300 focus:border-green-500'}`} 
+                    placeholder="user" 
+                  />
+                  <input 
+                    type={isLocal ? "text" : "password"}
+                    value={isLocal ? '******' : pass} 
+                    onChange={e => setPass(e.target.value)} 
+                    disabled={isHandshakeInputDisabled} 
+                    className={`bg-black/50 border p-1.5 text-[10px] font-mono outline-none ${isLocal ? 'border-zinc-900 text-blue-500/50' : 'border-zinc-900 text-zinc-300 focus:border-green-500'}`} 
+                    placeholder="pass" 
+                  />
+                  <input 
+                    type={isLocal ? "text" : "number"}
+                    value={isLocal ? 'N/A' : port} 
+                    onChange={e => setPort(Number(e.target.value))} 
+                    disabled={isHandshakeInputDisabled} 
+                    className={`bg-black/50 border p-1.5 text-[10px] font-mono outline-none ${isLocal ? 'border-zinc-900 text-blue-500/50' : 'border-zinc-900 text-zinc-300 focus:border-green-500'}`} 
+                  />
                 </div>
                 <button 
-                  onClick={isConnected ? onDisconnect : () => onHandshake(ipInput, user, pass, port)} 
-                  className={`w-full py-3 text-[10px] font-black border transition-all tracking-widest uppercase ${isConnected ? 'border-red-900/40 text-red-500 hover:bg-red-500/10' : 'border-zinc-800 text-zinc-600 hover:text-white'}`}
+                  onClick={isLocal ? undefined : (isConnected ? onDisconnect : () => onHandshake(ipInput, user, pass, port))} 
+                  disabled={isLocal}
+                  className={`w-full py-3 text-[10px] font-black border transition-all tracking-widest uppercase ${
+                    isLocal 
+                      ? 'border-zinc-900 text-zinc-700 bg-zinc-950 cursor-not-allowed'
+                      : isConnected 
+                        ? 'border-red-900/40 text-red-500 hover:bg-red-500/10' 
+                        : 'border-green-900/40 text-green-500 hover:bg-green-500/10'
+                  }`}
                 >
-                  {isConnected ? 'TERMINATE_SESSION' : 'INITIALIZE_HANDSHAKE'}
+                  {handshakeButtonText}
                 </button>
               </div>
             </Card>
@@ -150,11 +193,12 @@ const Dashboard: React.FC<DashboardProps> = ({
             <Card 
               id="ADAPTER_HUB"
               title="ADAPTER_MATRIX" 
-              variant={isConnected ? 'real' : 'offline'} 
-              onProbe={() => onProbeClick('ADAPTER_HUB', { stats, platform: settings.platform })} 
-              onProbeInfo={() => onProbeInfo('ADAPTER_HUB', { stats, platform: settings.platform })}
-              onBrain={() => onBrainClick('adapter_hub', 'Network Matrix', { stats, platform: settings.platform })} 
-              onLauncherSelect={(type) => onLauncherSelect('ADAPTER_HUB', type)}
+              variant={handshakeVariant} 
+              onProbe={() => onProbeClick('ADAPTER_HUB', { stats })} 
+              onProbeInfo={() => onProbeInfo('ADAPTER_HUB', { stats })}
+              onBrain={() => onBrainClick('ADAPTER_HUB', 'Network Matrix', { stats })} 
+              onLauncherSelect={(_, type) => onLauncherSelect('ADAPTER_HUB', type)}
+              onHistory={() => onHistoryShow?.('ADAPTER_HUB', 'INTERFACE_TRAFFIC', ['CONNS', 'RX(KB)', 'TX(KB)'])}
               isProcessing={processingId === 'ADAPTER_HUB'}
               probeColor={getLauncherColor('ADAPTER_HUB')}
             >
@@ -162,7 +206,7 @@ const Dashboard: React.FC<DashboardProps> = ({
                 {adapters.map(name => {
                   const data = getInterfaceData(name);
                   return (
-                    <div key={name} onClick={() => handleAdapterClick(name)} className="px-4 py-2 border border-zinc-900/40 bg-black/20 flex justify-between items-center group hover:bg-teal-500/5 transition-all cursor-pointer">
+                    <div key={name} className="px-4 py-2 border border-zinc-900/40 bg-black/20 flex justify-between items-center group hover:bg-teal-500/5 transition-all">
                       <div className="flex items-center gap-3">
                         <div className={`w-1.5 h-1.5 rounded-full ${data.up ? 'bg-green-500 glow-green' : 'bg-red-500'}`}></div>
                         <span className="text-[10px] font-black text-zinc-500 uppercase tracking-widest group-hover:text-teal-400">{name}</span>
@@ -181,19 +225,20 @@ const Dashboard: React.FC<DashboardProps> = ({
             variant="purple" 
             className="relative overflow-visible shrink-0 pb-6 flex-1 max-h-[350px]"
             // Header actions: Brain and Launcher Config restored
-            onBrain={() => onBrainClick('MASTER_LINK', 'Neural Hub Intelligence', { latestResult: latestCoreProbeResult })}
-            onLauncherSelect={(type) => onLauncherSelect('GLOBAL_SYSTEM_PROBE', type)}
+            onBrain={() => onBrainClick('GLOBAL_SYSTEM_PROBE', 'Neural Hub Intelligence', { latestResult: latestCoreProbeResult })}
+            onLauncherSelect={(_, type) => onLauncherSelect('GLOBAL_SYSTEM_PROBE', type)}
+            onHistory={() => onHistoryShow?.('GLOBAL_SYSTEM_PROBE', 'CORE_METRICS', ['CPU%', 'RAM%', 'DISK%'])}
             probeColor={getLauncherColor('GLOBAL_SYSTEM_PROBE')}
           >
             <div className="flex flex-col h-full">
-              {/* STATUS CIRCLES RESTORED WITH REAL UPLINK STATUS */}
+              {/* STATUS CIRCLES RESTORED */}
               <div className="flex justify-center gap-6 mb-4 border-b border-zinc-900/30 pb-2 shrink-0">
                   <div className="flex items-center gap-2">
-                      <div className={`w-1.5 h-1.5 rounded-full ${uplinkStatus.service ? 'bg-teal-500 glow-teal' : 'bg-red-500'}`}></div>
+                      <div className={`w-1.5 h-1.5 rounded-full ${isConnected ? (isRemote ? 'bg-green-500 glow-green' : 'bg-blue-500 glow-blue') : 'bg-red-500'}`}></div>
                       <span className="text-[8px] font-black uppercase text-zinc-600">Service_Link</span>
                   </div>
                   <div className="flex items-center gap-2">
-                      <div className={`w-1.5 h-1.5 rounded-full ${uplinkStatus.neural ? 'bg-purple-500 glow-purple' : 'bg-red-500'}`}></div>
+                      <div className={`w-1.5 h-1.5 rounded-full ${latestCoreProbeResult ? 'bg-purple-500 glow-purple' : 'bg-zinc-800'}`}></div>
                       <span className="text-[8px] font-black uppercase text-zinc-600">Neural_Uplink</span>
                   </div>
               </div>
@@ -226,7 +271,7 @@ const Dashboard: React.FC<DashboardProps> = ({
                   <div className="relative z-10">
                     <div className="block cursor-help">
                       <button 
-                        onClick={() => onProbeClick('GLOBAL_SYSTEM_PROBE', { stats, mode, activeFocus: Array.from(activeTelemetry || []), platform: settings.platform })}
+                        onClick={() => onProbeClick('GLOBAL_SYSTEM_PROBE', { stats, mode, activeFocus: Array.from(activeTelemetry || []) })}
                         disabled={isProbeActive}
                         className="relative w-64 h-20 bg-[#050608] border-x border-b border-purple-500/60 shadow-2xl flex flex-col items-center justify-center transition-all group-hover:border-purple-400 group-hover:shadow-[0_0_30px_rgba(189,0,255,0.2)] disabled:opacity-50 overflow-hidden cursor-pointer"
                       >
@@ -275,25 +320,25 @@ const Dashboard: React.FC<DashboardProps> = ({
       ) : (
         <div className="flex-1 flex flex-col bg-black/60 border border-zinc-900/60 rounded-sm relative overflow-hidden">
            <div className="h-10 border-b border-zinc-900 bg-zinc-950/40 flex items-center justify-between px-6">
-              <span className="text-[10px] font-black text-teal-500 uppercase tracking-widest">{settings.platform}_INTERACTIVE_CONSOLE</span>
+              <span className="text-[10px] font-black text-teal-500 uppercase tracking-widest">KALI_INTERACTIVE_CONSOLE</span>
               <button 
-                onClick={() => onProbeClick('CONSOLE_DATA_PROBE', { lastCommand: consoleInput, platform: settings.platform })} 
+                onClick={() => onProbeClick('TERMINAL_COMMAND_AUDIT', { lastCommand: consoleInput })} 
                 className="text-purple-500 text-[9px] font-black border border-purple-500/20 px-3 py-1 hover:bg-purple-500/10 transition-colors"
               >
-                CONSOLE_DATA_PROBE
+                PROBE_CMD
               </button>
            </div>
            <div className="flex-1 p-6 font-mono text-[13px] overflow-y-auto no-scroll bg-black/80 space-y-1">
               {terminalHistory.map((line, i) => (
                 <div key={i} className="whitespace-pre-wrap">
-                  {line.startsWith('root@kali') || line.startsWith('PS C:') ? <span className="text-green-500 font-bold">{line}</span> : line.startsWith('[ERROR]') ? <span className="text-red-500 font-bold">{line}</span> : <span className="text-zinc-300">{line}</span>}
+                  {line.startsWith('root@kali') ? <span className="text-green-500 font-bold">{line}</span> : line.startsWith('[ERROR]') ? <span className="text-red-500 font-bold">{line}</span> : <span className="text-zinc-300">{line}</span>}
                 </div>
               ))}
               <div ref={terminalEndRef} />
            </div>
            <div className="h-12 border-t border-zinc-900 bg-black/40 flex items-center px-6">
               <form onSubmit={handleConsoleSubmit} className="flex-1 flex items-center gap-3">
-                 <span className="text-teal-500 font-black whitespace-nowrap">{promptString}</span>
+                 <span className="text-teal-500 font-black">{prompt}</span>
                  <input 
                     ref={consoleInputRef} value={consoleInput} onChange={e => setConsoleInput(e.target.value)}
                     className="flex-1 bg-transparent border-none outline-none text-white selection:bg-teal-500/30 placeholder-zinc-800"
