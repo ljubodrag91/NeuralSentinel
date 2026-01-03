@@ -16,7 +16,7 @@ interface TelemetryProps {
 
 const TelemetryGraphs: React.FC<TelemetryProps> = ({ onProbe, onBrainClick, isSimulated, isConnected, timeframe, processingId }) => {
   const [rssiData, setRssiData] = useState<any[]>([]);
-  const [activeMetrics, setActiveMetrics] = useState<Set<string>>(new Set());
+  const [activeMetrics, setActiveMetrics] = useState<Set<string>>(new Set(['rssi']));
 
   const windowSize = useMemo(() => {
     switch (timeframe) {
@@ -61,9 +61,7 @@ const TelemetryGraphs: React.FC<TelemetryProps> = ({ onProbe, onBrainClick, isSi
 
   return (
     <div className="space-y-10 animate-in fade-in duration-500 pb-20 no-scroll h-full">
-      {/* TELEMETRY TOGGLES */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-        {/* RSSI TOGGLE */}
         <div 
           onClick={() => toggleMetric('rssi')}
           className={`cursor-pointer border p-8 flex flex-col gap-4 transition-all group ${
@@ -75,17 +73,16 @@ const TelemetryGraphs: React.FC<TelemetryProps> = ({ onProbe, onBrainClick, isSi
             <div className={`w-2.5 h-2.5 rounded-full ${activeMetrics.has('rssi') ? 'bg-teal-500 glow-teal' : 'bg-zinc-900'}`}></div>
           </div>
           <div className="flex items-baseline gap-6">
-            <Tooltip name="SIGNAL_INTEGRITY" unit="Decibels (dBm)" source={sourceState} rate="1000ms" desc="Relative Signal Strength Indicator. Decibel-milliwatts scale where -30 is perfect, -90 is non-functional.">
+            <Tooltip name="SIGNAL_INTEGRITY" unit="Decibels (dBm)" source={sourceState} rate="1000ms" desc="Relative Signal Strength Indicator. Decibel-milliwatts scale.">
               <span className={`text-3xl font-black ${isDataActive ? 'text-zinc-200' : 'text-zinc-900'}`}>{currentRssi} dBm</span>
             </Tooltip>
-            <Tooltip name="LINK_STABILITY" unit="Percentage (%)" source={sourceState} rate="1000ms" desc="Measured consistency of the carrier wave against known noise floor.">
+            <Tooltip name="LINK_STABILITY" unit="Percentage (%)" source={sourceState} rate="1000ms" desc="Measured consistency of the carrier wave.">
               <span className="text-[10px] text-zinc-600 font-mono uppercase">Stability: {isDataActive ? '98.2%' : 'VOID'}</span>
             </Tooltip>
           </div>
           <div className="text-[9px] text-zinc-800 font-mono tracking-tighter uppercase">Carrier: 2.4GHz_Node_Active</div>
         </div>
 
-        {/* SPECTRUM TOGGLE */}
         <div 
           onClick={() => toggleMetric('spectrum')}
           className={`cursor-pointer border p-8 flex flex-col gap-4 transition-all group ${
@@ -97,10 +94,10 @@ const TelemetryGraphs: React.FC<TelemetryProps> = ({ onProbe, onBrainClick, isSi
             <div className={`w-2.5 h-2.5 rounded-full ${activeMetrics.has('spectrum') ? 'bg-purple-500 glow-purple' : 'bg-zinc-900'}`}></div>
           </div>
           <div className="flex items-baseline gap-6">
-            <Tooltip name="PEAK_CHANNEL" unit="Frequency Band" source={sourceState} rate="Static" desc="The current high-traffic channel identified by the spectral scan.">
+            <Tooltip name="PEAK_CHANNEL" unit="Frequency Band" source={sourceState} rate="Static" desc="Displays spectrum analysis of neural signals over time. Useful for detecting anomalies and trends in neural activity.">
               <span className={`text-3xl font-black ${isDataActive ? 'text-zinc-200' : 'text-zinc-900'}`}>CH 6</span>
             </Tooltip>
-            <Tooltip name="NOISE_FLOOR" unit="Decibels (dBm)" source={sourceState} rate="Static" desc="The level of background radio frequency energy inhibiting clean signal reception.">
+            <Tooltip name="NOISE_FLOOR" unit="Decibels (dBm)" source={sourceState} rate="Static" desc="Level of background RF energy.">
               <span className="text-[10px] text-zinc-600 font-mono uppercase">Noise_Floor: {isDataActive ? '-102 dBm' : 'VOID'}</span>
             </Tooltip>
           </div>
@@ -128,7 +125,13 @@ const TelemetryGraphs: React.FC<TelemetryProps> = ({ onProbe, onBrainClick, isSi
                     </linearGradient>
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" stroke="#111" vertical={false} />
-                  <XAxis dataKey="time" hide />
+                  <XAxis 
+                    dataKey="time" 
+                    stroke="#444" 
+                    fontSize={14} 
+                    fontWeight="bold" 
+                    tickFormatter={(val) => val.split(':').slice(0, 2).join(':')}
+                  />
                   <YAxis domain={[-100, 0]} stroke="#333" fontSize={10} fontWeight="black" />
                   <RechartsTooltip contentStyle={{ backgroundColor: '#020405', border: '1px solid #1a2f2c', fontSize: '10px' }} />
                   <Area type="monotone" dataKey="val" stroke={themeColor} strokeWidth={2} fill="url(#colorMain)" isAnimationActive={false} />
@@ -155,7 +158,7 @@ const TelemetryGraphs: React.FC<TelemetryProps> = ({ onProbe, onBrainClick, isSi
                   { chan: '11', usage: 24 + Math.random() * 15 }
                 ]}>
                   <CartesianGrid strokeDasharray="2 2" stroke="#111" vertical={false} />
-                  <XAxis dataKey="chan" stroke="#444" fontSize={11} fontWeight="black" />
+                  <XAxis dataKey="chan" stroke="#444" fontSize={14} fontWeight="bold" />
                   <YAxis hide />
                   <Bar dataKey="usage" fill="#bd00ff" radius={[1, 1, 0, 0]} />
                 </BarChart>

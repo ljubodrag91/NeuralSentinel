@@ -22,7 +22,7 @@ export interface LogEntry {
   message: string;
   source: OperationalMode;
   details?: string;
-  metadata?: any; // Stores probe results or context for interactivity
+  metadata?: any; 
 }
 
 export interface SessionInfo {

@@ -19,8 +19,23 @@ const Tooltip: React.FC<TooltipProps> = ({ name, unit, desc, source, rate, child
     if (!el || !tooltip) return;
 
     const handleMouseMove = (e: MouseEvent) => {
-      tooltip.style.left = `${e.clientX + 15}px`;
-      tooltip.style.top = `${e.clientY + 15}px`;
+      const tooltipRect = tooltip.getBoundingClientRect();
+      const viewportWidth = window.innerWidth;
+      const viewportHeight = window.innerHeight;
+      
+      let left = e.clientX + 15;
+      let top = e.clientY + 15;
+
+      // Ensure tooltip stays on screen
+      if (left + tooltipRect.width > viewportWidth) {
+        left = e.clientX - tooltipRect.width - 15;
+      }
+      if (top + tooltipRect.height > viewportHeight) {
+        top = e.clientY - tooltipRect.height - 15;
+      }
+
+      tooltip.style.left = `${Math.max(10, left)}px`;
+      tooltip.style.top = `${Math.max(10, top)}px`;
     };
 
     const handleMouseEnter = () => {

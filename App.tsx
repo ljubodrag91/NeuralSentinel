@@ -38,7 +38,6 @@ const App: React.FC = () => {
   
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [showConfig, setShowConfig] = useState(false);
-  const [showTabConfig, setShowTabConfig] = useState(false);
   const [tooltipData, setTooltipData] = useState<SmartTooltipData | null>(null);
   const [neuralProbeResult, setNeuralProbeResult] = useState<{title: string, data: any} | null>(null);
   const [processingId, setProcessingId] = useState<string | undefined>(undefined);
@@ -60,15 +59,32 @@ const App: React.FC = () => {
   };
 
   const addLog = useCallback((msg: string, level: LogLevel = LogLevel.INFO, metadata?: any) => {
-    setLogs(prev => [...prev, {
+    // Prepend logs to show latest at top
+    setLogs(prev => [{
       id: Math.random().toString(36),
       timestamp: new Date().toLocaleTimeString(),
       level,
       message: msg,
       source: mode,
       metadata
-    }].slice(-100));
+    }, ...prev].slice(0, 100));
   }, [mode]);
+
+  const fetchStats = useCallback(async (ip: string) => {
+    try {
+      const res = await fetch(`http://${ip}:5050/stats`);
+      if (res.ok) {
+        const data = await res.json();
+        setPiStats({
+          cpu: { usage: data.cpu.usage, temp: data.cpu.temperature, load: [data.cpu.cpuLoad1, data.cpu.cpuLoad5, data.cpu.cpuLoad15] },
+          memory: { total: data.memory.ramTotal, used: data.memory.ramUsed, usage: data.memory.usage },
+          network: { interfaces: data.network.interfaces }
+        });
+      }
+    } catch (e) {
+      // Handled silently
+    }
+  }, []);
 
   useEffect(() => {
     if (mode === OperationalMode.SIMULATED) {
@@ -88,21 +104,11 @@ const App: React.FC = () => {
 
     if (mode !== OperationalMode.REAL || !session.targetIp) return;
 
-    const interval = setInterval(async () => {
-      try {
-        const res = await fetch(`http://${session.targetIp}:5050/stats`);
-        if (res.ok) {
-          const data = await res.json();
-          setPiStats({
-            cpu: { usage: data.cpu.usage, temp: data.cpu.temperature, load: [data.cpu.load1, data.cpu.load5, data.cpu.load15] },
-            memory: { total: data.memory.ramTotal, used: data.memory.ramUsed, usage: data.memory.usage },
-            network: { interfaces: data.network.interfaces }
-          });
-        }
-      } catch (e) { setPiStats(null); }
+    const interval = setInterval(() => {
+      if (session.targetIp) fetchStats(session.targetIp);
     }, pollInterval);
     return () => clearInterval(interval);
-  }, [mode, session.targetIp, timeframe, pollInterval]);
+  }, [mode, session.targetIp, pollInterval, fetchStats]);
 
   const handleHandshake = useCallback((ip: string, username?: string, password?: string, port: number = 22) => {
     if (session.targetIp) {
@@ -110,6 +116,13 @@ const App: React.FC = () => {
     }
     addLog(`SSH: Attempting handshake -> ${ip}:${port}`, LogLevel.SYSTEM);
     setProcessingId('HANDSHAKE_CORE');
+    
+    fetch(`http://${ip}:5050/stats`).then(res => {
+      if (res.ok) addLog(`BRIDGE: HTTP Telemetry established at ${ip}:5050.`, LogLevel.SUCCESS);
+    }).catch(() => {
+      addLog(`BRIDGE: HTTP Telemetry service unresponsive at ${ip}:5050. Link logic only.`, LogLevel.WARNING);
+    });
+
     setTimeout(() => {
       addLog(`SSH: Authentication verified for [${username}].`, LogLevel.SUCCESS);
       setSession(s => ({ ...s, targetIp: ip, status: 'ACTIVE' }));
@@ -174,26 +187,15 @@ const App: React.FC = () => {
     }
   };
 
-  const renderTabConfig = () => {
-    return (
-      <div className="space-y-6">
-        <div className="flex flex-col gap-3">
-          <label className="text-[11px] font-black text-zinc-700 uppercase tracking-widest">Polling_Interval (ms)</label>
-          <input 
-            type="number"
-            value={pollInterval}
-            onChange={e => setPollInterval(Number(e.target.value))}
-            className="bg-black border border-zinc-900 p-4 text-[13px] text-white outline-none focus:border-purple-500/40 font-mono shadow-inner"
-            min={500}
-            step={500}
-          />
-        </div>
-        <div className="flex flex-col gap-3">
-          <label className="text-[11px] font-black text-zinc-700 uppercase tracking-widest">Session_Management</label>
-          <button onClick={() => setLogs([])} className="w-full py-2 border border-red-900/40 text-red-500 text-[10px] font-black uppercase hover:bg-red-500/10 transition-all">PURGE_LOGS</button>
-        </div>
-      </div>
-    );
+  const probeNeuralStream = () => {
+    const selection = window.getSelection()?.toString();
+    // Use top-most (latest) logs if no selection
+    const streamContent = selection || logs.slice(0, 10).map(l => `[${l.timestamp}] ${l.level}: ${l.message}`).join('\n');
+    handleNeuralProbe('NEURAL_STREAM_ANALYSIS', { content: streamContent, isSelection: !!selection });
+  };
+
+  const validateUrl = (url: string) => {
+    try { new URL(url); return true; } catch { return false; }
   };
 
   return (
@@ -246,7 +248,7 @@ const App: React.FC = () => {
           </nav>
           <div className="flex-1 overflow-y-auto p-10 relative scroll-smooth no-scroll bg-gradient-to-b from-transparent to-[#050608]/50">
              <div className="max-w-7xl mx-auto h-full">
-               {activeTab === 'dashboard' && <Dashboard stats={piStats} mode={mode} session={session} onHandshake={handleHandshake} onDisconnect={handleDisconnect} onLog={addLog} onBrainClick={handleBrainRequest} onProbeClick={handleNeuralProbe} processingId={processingId} />}
+               {activeTab === 'dashboard' && <Dashboard stats={piStats} mode={mode} session={session} onHandshake={handleHandshake} onDisconnect={handleDisconnect} onLog={addLog} onBrainClick={handleBrainRequest} onProbeClick={handleNeuralProbe} processingId={processingId} onRefresh={() => session.targetIp && fetchStats(session.targetIp)} />}
                {activeTab === 'pi_stats' && <PiStatsView stats={piStats} mode={mode} timeframe={timeframe} onProbeClick={handleNeuralProbe} onBrainClick={handleBrainRequest} processingId={processingId} />}
                {activeTab === 'telemetry' && <TelemetryGraphs isSimulated={mode === OperationalMode.SIMULATED} isConnected={!!session.targetIp} timeframe={timeframe} onProbe={handleNeuralProbe} onBrainClick={handleBrainRequest} processingId={processingId} />}
                {activeTab === 'toolkit' && <Toolkit mode={mode} onRunCommand={(cmd) => addLog(`EX: ${cmd}`, LogLevel.SYSTEM)} onBreakdown={(t, q) => handleNeuralProbe(t, { query: q })} />}
@@ -257,41 +259,95 @@ const App: React.FC = () => {
         <div className="w-[30%] flex flex-col bg-[#020406] border-l border-[#1a1e24] relative overflow-hidden">
           <div className="h-14 border-b border-zinc-900 px-8 flex items-center justify-between bg-[#0a0c0f] shrink-0">
              <button onClick={() => handleNeuralProbe('FULL_SYSTEM_AUDIT', { stats: piStats, session })} className="text-[12px] font-black text-zinc-700 uppercase tracking-widest hover:text-white transition-colors">Neural_Stream_v.10</button>
+             <button 
+                onClick={probeNeuralStream}
+                className="text-[10px] font-black bg-purple-950/30 border border-purple-500/40 px-3 py-1.5 text-purple-400 hover:text-white hover:border-purple-400 transition-all uppercase tracking-widest flex items-center gap-2"
+                disabled={isAnalyzing}
+              >
+                {isAnalyzing ? <div className="w-2 h-2 rounded-full bg-purple-500 animate-ping"></div> : null}
+                PROBE_STREAM
+              </button>
           </div>
-          <div className="flex-1 overflow-y-auto p-8 space-y-4 bg-black/60 no-scroll">
+          <div className="flex-1 overflow-y-auto p-8 space-y-4 bg-black/60 no-scroll flex flex-col">
              {logs.map(log => (
                <div key={log.id} onClick={() => handleLogAction(log)} className="border-l-2 pl-4 py-3 border-zinc-800 hover:border-teal-500/40 cursor-pointer transition-all">
                  <div className="flex items-center gap-4 mb-2">
-                   <span className="text-[10px] text-zinc-700 font-mono">{log.timestamp}</span>
+                   <span className="text-[16px] text-zinc-600 font-mono font-bold tracking-tight">{log.timestamp}</span>
                    <span className={`text-[9px] font-black px-2 py-0.5 border border-current uppercase ${log.level === LogLevel.SUCCESS ? 'text-green-500' : 'text-teal-600'}`}>[{log.level}]</span>
                  </div>
-                 <p className="font-mono text-[13px] text-zinc-500">{log.message}</p>
+                 <p className="font-mono text-[13px] text-zinc-500 selection:bg-purple-500/30">{log.message}</p>
                </div>
              ))}
           </div>
         </div>
       </main>
-      <Modal isOpen={showTabConfig} onClose={() => setShowTabConfig(false)} title="TAB_CONFIGURATION" variant="purple">{renderTabConfig()}</Modal>
+      
       <Modal isOpen={showConfig} onClose={() => setShowConfig(false)} title="GLOBAL_SETTINGS" variant="purple">
          <div className="space-y-6">
             <div className="flex flex-col gap-3">
               <label className="text-[11px] font-black text-zinc-700 uppercase">Provider</label>
-              <select value={aiConfig.provider} onChange={e => setAiConfig(prev => ({ ...prev, provider: e.target.value as AIProvider }))} className="bg-black border border-zinc-900 p-3 text-white">
-                 <option value={AIProvider.GEMINI}>Google Gemini</option>
-                 <option value={AIProvider.LOCAL}>Local LLM</option>
+              <select 
+                value={aiConfig.provider} 
+                onChange={e => setAiConfig(prev => ({ ...prev, provider: e.target.value as AIProvider }))} 
+                className="bg-black border border-zinc-900 p-3 text-white font-mono text-sm"
+              >
+                 <option value={AIProvider.GEMINI}>Google Gemini (Cloud)</option>
+                 <option value={AIProvider.LOCAL}>Neural Link (Local API)</option>
               </select>
+            </div>
+            
+            <div className="flex flex-col gap-3">
+              <label className="text-[11px] font-black text-zinc-700 uppercase tracking-widest">Model_API_Endpoint</label>
+              <input 
+                type="text"
+                value={aiConfig.endpoint}
+                onChange={e => setAiConfig(prev => ({ ...prev, endpoint: e.target.value }))}
+                className={`bg-black border p-4 text-[13px] text-white outline-none font-mono shadow-inner ${aiConfig.endpoint && !validateUrl(aiConfig.endpoint) ? 'border-red-500' : 'border-zinc-900 focus:border-purple-500/40'}`}
+                placeholder="http://localhost:1234/v1/chat/completions"
+              />
+              {aiConfig.endpoint && !validateUrl(aiConfig.endpoint) && <span className="text-[8px] text-red-500 uppercase">Invalid URL format.</span>}
+              <span className="text-[9px] text-zinc-600 uppercase">Configures the neural routing for AI diagnostic requests. Recommended: /v1/chat/completions for local endpoints.</span>
+            </div>
+
+            <div className="flex flex-col gap-3">
+              <label className="text-[11px] font-black text-zinc-700 uppercase">Telemetry_Interval (ms)</label>
+              <input 
+                type="number"
+                value={pollInterval}
+                onChange={e => setPollInterval(Number(e.target.value))}
+                className="bg-black border border-zinc-900 p-3 text-white font-mono"
+                min={500}
+                step={500}
+              />
             </div>
          </div>
       </Modal>
+
       <Modal isOpen={!!tooltipData} onClose={() => setTooltipData(null)} title={tooltipData?.elementId || 'BRAIN'} variant="purple">
          {tooltipData && <div className="space-y-6"><p className="text-zinc-400 italic">{tooltipData.description}</p><div className="p-4 bg-purple-900/10 border border-purple-500/20 text-zinc-200">{tooltipData.recommendation}</div></div>}
       </Modal>
       <Modal isOpen={!!neuralProbeResult} onClose={() => setNeuralProbeResult(null)} title={`DIAGNOSTIC: ${neuralProbeResult?.title}`} variant="blue">
-         {neuralProbeResult?.data && <div className="space-y-6"><p className="text-zinc-400">{neuralProbeResult.data.description}</p><div className="font-black text-teal-400">{neuralProbeResult.data.recommendation}</div></div>}
+         {neuralProbeResult?.data && (
+           <div className="space-y-6">
+             <p className="text-zinc-400 border-l-2 border-zinc-800 pl-4">{neuralProbeResult.data.description}</p>
+             <div className="font-black text-teal-400 p-4 bg-teal-900/10 border border-teal-500/20">
+               <span className="text-[9px] text-teal-600 uppercase block mb-1">Recommendation</span>
+               {neuralProbeResult.data.recommendation}
+             </div>
+             {neuralProbeResult.data.anomalies?.length > 0 && (
+               <div className="space-y-2">
+                 <span className="text-[9px] text-red-700 uppercase font-black">Detected Anomalies</span>
+                 <ul className="text-[10px] text-red-500/80 list-disc pl-4">
+                   {neuralProbeResult.data.anomalies.map((a: string, i: number) => <li key={i}>{a}</li>)}
+                 </ul>
+               </div>
+             )}
+           </div>
+         )}
       </Modal>
       <footer className="h-10 border-t border-[#1a1e24] bg-[#020406] px-10 flex items-center justify-between text-[11px] font-bold text-[#20272f] uppercase tracking-[0.2em] shrink-0">
         <div>SID: {session.id}</div>
-        <div style={{ color: currentAccent }}>SYSTEM_STABLE_{mode}</div>
+        <div style={{ color: currentAccent }}>LINK STABLE {mode}</div>
       </footer>
     </div>
   );

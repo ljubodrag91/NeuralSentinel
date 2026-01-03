@@ -1,13 +1,34 @@
+
 import { GoogleGenAI, Type } from "@google/genai";
 import { AIProvider, AIConfig, OperationalMode, SmartTooltipData } from "../types";
 import { APP_CONFIG } from "./config";
 
 /**
- * Robust instantiation of the GoogleGenAI client.
- * Always uses process.env.API_KEY as the exclusive source for authentication.
+ * Robust JSON extraction from LLM outputs that might contain markdown or thoughts.
  */
-const getAiClient = () => {
-  return new GoogleGenAI({ apiKey: process.env.API_KEY });
+function extractJsonLoose(text: string): any {
+  const cleaned = text
+    .replace(/```json|```/g, "")
+    .replace(/<\|.*?\|>/g, "")
+    .replace(/<thought>[\s\S]*?<\/thought>/g, "")
+    .trim();
+  
+  const match = cleaned.match(/\{[\s\S]*\}/);
+  if (!match) throw new Error("JSON_NOT_FOUND_IN_OUTPUT");
+  return JSON.parse(match[0]);
+}
+
+/**
+ * Truncates text to prevent context window overflow.
+ */
+function truncateInput(text: string, maxInputTokens: number = 3000): string {
+  const charLimit = maxInputTokens * 3.5;
+  if (text.length <= charLimit) return text;
+  return "..." + text.slice(-Math.floor(charLimit));
+}
+
+const getAiClient = (config: AIConfig) => {
+  return new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
 };
 
 export async function performNeuralProbe(
@@ -18,9 +39,9 @@ export async function performNeuralProbe(
 ) {
   const systemInstruction = `You are the Neural Intelligence Core for the PiSentinel Kali SOC.
 Analyze metrics and return a high-fidelity JSON diagnostic report.
-Be tactically relevant.
+Be tactically relevant. Respond with ONLY valid JSON.
 
-Return exactly this JSON structure:
+Schema:
 {
   "description": "Deep technical analysis.",
   "recommendation": "Primary tactical action.",
@@ -31,17 +52,15 @@ Return exactly this JSON structure:
   "threatLevel": "LOW" | "ELEVATED" | "CRITICAL"
 }`;
 
-  const userPrompt = `[PROBE] PANEL: ${panelName} | MODE: ${context.mode} | DATA: ${JSON.stringify(metrics)} [/PROBE]`;
+  const userPrompt = truncateInput(`[PROBE] PANEL: ${panelName} | MODE: ${context.mode} | DATA: ${JSON.stringify(metrics)} [/PROBE]`);
 
   if (config.provider === AIProvider.GEMINI) {
-    const ai = getAiClient();
+    const ai = getAiClient(config);
     try {
-      // Use gemini-3-pro-preview for complex diagnostic reasoning tasks
       const response = await ai.models.generateContent({
-        model: 'gemini-3-pro-preview',
-        contents: userPrompt,
+        model: 'gemini-3-flash-preview',
+        contents: systemInstruction + "\n\n" + userPrompt,
         config: {
-          systemInstruction,
           responseMimeType: "application/json",
           responseSchema: {
             type: Type.OBJECT,
@@ -60,7 +79,35 @@ Return exactly this JSON structure:
       });
       return JSON.parse(response.text || "{}");
     } catch (e) {
-      console.error("Neural Probe Error:", e);
+      console.error("Gemini Probe Error:", e);
+      return fallbackProbe(panelName, context.mode);
+    }
+  } else if (config.provider === AIProvider.LOCAL) {
+    try {
+      const endpoint = `${config.endpoint.replace(/\/$/, "")}`;
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        body: JSON.stringify({
+          model: config.model,
+          messages: [
+            { role: 'system', content: systemInstruction },
+            { role: 'user', content: userPrompt }
+          ],
+          temperature: 0.2
+        })
+      });
+
+      if (!response.ok) throw new Error(`LOCAL_NODE_HTTP_${response.status}`);
+      
+      const data = await response.json();
+      const content = data.choices[0].message.content;
+      return extractJsonLoose(content);
+    } catch (e: any) {
+      console.error("Local Neural link failed:", e.message);
       return fallbackProbe(panelName, context.mode);
     }
   }
@@ -75,16 +122,15 @@ export async function fetchSmartTooltip(
   const systemInstruction = `Analyze component metrics for a SOC console. Return ONLY JSON.
 Schema: { "description": "String", "recommendation": "String", "status": "REAL"|"SIMULATED", "elementType": "String", "elementId": "String" }`;
 
-  const userPrompt = `ID: ${elementData.elementId} | MODE: ${context.mode} | DATA: ${JSON.stringify(elementData)}`;
+  const userPrompt = truncateInput(`ID: ${elementData.elementId} | MODE: ${context.mode} | DATA: ${JSON.stringify(elementData)}`);
 
   if (config.provider === AIProvider.GEMINI) {
-    const ai = getAiClient();
+    const ai = getAiClient(config);
     try {
       const response = await ai.models.generateContent({
-        model: config.model || APP_CONFIG.DEFAULT_MODEL,
-        contents: userPrompt,
+        model: 'gemini-3-flash-preview',
+        contents: systemInstruction + "\n\n" + userPrompt,
         config: {
-          systemInstruction,
           responseMimeType: "application/json"
         }
       });
@@ -92,26 +138,44 @@ Schema: { "description": "String", "recommendation": "String", "status": "REAL"|
     } catch (e) {
       return fallbackTooltip(elementData, context.mode);
     }
+  } else {
+    // Local tooltip fallback
+    try {
+      const response = await fetch(config.endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: config.model,
+          messages: [
+            { role: 'system', content: systemInstruction },
+            { role: 'user', content: userPrompt }
+          ]
+        })
+      });
+      const data = await response.json();
+      return extractJsonLoose(data.choices[0].message.content);
+    } catch (e) {
+      return fallbackTooltip(elementData, context.mode);
+    }
   }
-  return fallbackTooltip(elementData, context.mode);
 }
 
 function fallbackProbe(panel: string, mode: string) {
   return { 
-    description: "Neural link restricted. Check API_KEY availability in local environment.", 
-    recommendation: "Ensure .env mappings are correct.", 
+    description: "Neural link restricted. Ensure target endpoint is reachable and API key is valid.", 
+    recommendation: "Switch to LOCAL_NODE or validate Gemini credentials.", 
     status: mode as any, 
     elementType: panel, 
     elementId: "LINK_FAIL", 
-    anomalies: ["CORE_INITIALIZATION_ERROR"], 
+    anomalies: ["CONNECTION_REFUSED"], 
     threatLevel: "ELEVATED" 
   };
 }
 
 function fallbackTooltip(data: any, mode: string): SmartTooltipData {
   return {
-    description: "Manual assessment required. Local link offline.",
-    recommendation: "Validate environment variables.",
+    description: "Manual assessment required. AI telemetry link is currently buffering.",
+    recommendation: "Check connection status in Neural Core.",
     status: mode as any,
     elementType: data.elementType || "System",
     elementId: data.elementId || "CORE"
