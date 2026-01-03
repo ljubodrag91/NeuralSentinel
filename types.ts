@@ -106,6 +106,13 @@ export interface AppSettings {
   panelDistortion: boolean;
   pollInterval: number;
   timeframe: Timeframe;
+  frogInterval: number;
+  frogColor: string;
+  frogIntensity: number;
+  coreRechargeRate: number; 
+  neuralRechargeRate: number; 
+  maxCoreCharges: number;
+  maxNeuralCharges: number;
 }
 
 export interface SmartTooltipData {

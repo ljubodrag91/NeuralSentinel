@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="en">
   <head>
@@ -16,7 +15,7 @@
         --accent-teal-dim: #008888;
         --accent-red: #ff3e3e;
         --accent-purple: #bd00ff;
-        --accent-blue: #00f2ff; /* Shifted from deep blue to greenish-cyan */
+        --accent-blue: #00f2ff;
         --accent-green: #22c55e;
         --accent-zinc: #1a232e;
       }
@@ -80,6 +79,25 @@
         21% { opacity: 0.97; filter: brightness(1.05); }
       }
 
+      @keyframes manual-disable-flash {
+        0%, 98%, 100% { box-shadow: 0 0 0px rgba(255, 62, 62, 0); }
+        99% { box-shadow: 0 0 15px rgba(255, 62, 62, 0.8); }
+      }
+
+      .manual-disabled {
+        border: 1px solid #ff3e3e !important;
+        animation: manual-disable-flash 30s infinite;
+      }
+
+      .tab-flash {
+        animation: tactical-flash 0.8s infinite alternate;
+      }
+
+      @keyframes tactical-flash {
+        from { background: transparent; color: #444; }
+        to { background: rgba(0, 255, 213, 0.15); color: #fff; text-shadow: 0 0 5px #00ffd5; }
+      }
+
       .glow-teal { filter: drop-shadow(0 0 8px var(--accent-teal)); }
       .glow-blue { filter: drop-shadow(0 0 8px var(--accent-blue)); }
       .glow-red { filter: drop-shadow(0 0 8px var(--accent-red)); }
@@ -91,24 +109,6 @@
         position: relative;
         backdrop-filter: blur(20px);
         box-shadow: inset 0 0 20px rgba(0,0,0,0.5);
-      }
-
-      .local-scanline {
-        width: 100%;
-        height: 8px;
-        background: linear-gradient(to right, transparent, rgba(0, 255, 213, 0.1), transparent);
-        position: absolute;
-        top: 0; left: 0;
-        animation: scanline-localized 15s linear infinite;
-        pointer-events: none;
-        z-index: 100;
-      }
-
-      @keyframes scanline-localized {
-        0% { transform: translateY(-100%); opacity: 0; }
-        5% { opacity: 1; }
-        95% { opacity: 1; }
-        100% { transform: translateY(100vh); opacity: 0; }
       }
 
       ::-webkit-scrollbar { width: 4px; height: 4px; }
@@ -149,6 +149,14 @@
         60% { transform: scale(1.01) translate(-1px, -1px); }
         80% { transform: scale(0.99) translate(1px, 1px); }
         100% { transform: scale(1) translate(0); }
+      }
+
+      .neural-bg-flash {
+        animation: subtle-pulse 4s infinite alternate;
+      }
+      @keyframes subtle-pulse {
+        from { opacity: 0.03; }
+        to { opacity: 0.08; }
       }
     </style>
     <script type="importmap">

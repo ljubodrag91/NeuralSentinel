@@ -1,69 +1,39 @@
-
 import { GoogleGenAI, Type } from "@google/genai";
 import { AIProvider, AIConfig, OperationalMode, SmartTooltipData } from "../types";
 import { APP_CONFIG } from "./config";
 
-/**
- * Robust JSON extraction from LLM outputs that might contain markdown, thought tags, or other wrappers.
- */
+function truncateInputStrict(text: string, maxChars: number = 14000): string {
+  if (text.length <= maxChars) return text;
+  return "[TRUNCATED_START]..." + text.slice(-maxChars);
+}
+
 function extractJsonLoose(text: string): any {
   const cleaned = text
     .replace(/```json|```/g, "")
     .replace(/<\|.*?\|>/g, "")
     .replace(/<thought>[\s\S]*?<\/thought>/g, "")
     .trim();
-  
   const match = cleaned.match(/\{[\s\S]*\}/);
   if (!match) throw new Error("JSON_NOT_FOUND_IN_OUTPUT");
   return JSON.parse(match[0]);
-}
-
-/**
- * Truncates text to a safe character limit to avoid exceeding model context windows.
- */
-function truncateInput(text: string, maxInputTokens: number = 3000): string {
-  const charLimit = maxInputTokens * 3.5;
-  if (text.length <= charLimit) return text;
-  return "..." + text.slice(-Math.floor(charLimit));
 }
 
 const getAiClient = (config: AIConfig) => {
   return new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
 };
 
-/**
- * Validates the availability of the configured AI provider.
- */
 export async function testAiAvailability(config: AIConfig): Promise<boolean> {
-  if (config.provider === AIProvider.GEMINI) {
-    return !!process.env.API_KEY;
-  }
-  
+  if (config.provider === AIProvider.GEMINI) return !!process.env.API_KEY;
   try {
-    // Standardize endpoint - ensure it has the correct completions suffix if not provided
-    const endpoint = config.endpoint.includes('/chat/completions') 
-      ? config.endpoint 
-      : `${config.endpoint.replace(/\/$/, "")}/chat/completions`;
-
+    const endpoint = config.endpoint.includes('/chat/completions') ? config.endpoint : `${config.endpoint.replace(/\/$/, "")}/chat/completions`;
     const response = await fetch(endpoint, {
       method: 'POST',
-      headers: { 
-        'Content-Type': 'application/json',
-        'Accept': 'application/json'
-      },
-      body: JSON.stringify({
-        model: config.model,
-        messages: [{ role: 'user', content: 'ping' }],
-        max_tokens: 5,
-        temperature: 0.1
-      }),
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: config.model, messages: [{ role: 'user', content: 'ping' }], max_tokens: 5 }),
       signal: AbortSignal.timeout(4000)
     });
     return response.ok;
-  } catch (e) {
-    console.debug("Local node probe failed:", e);
-    return false;
-  }
+  } catch { return false; }
 }
 
 export async function performNeuralProbe(
@@ -72,22 +42,15 @@ export async function performNeuralProbe(
   metrics: any,
   context: { sessionId: string; mode: OperationalMode }
 ) {
-  const systemInstruction = `You are the Neural Intelligence Core for the PiSentinel Kali SOC.
-Analyze the provided metrics and return a high-fidelity diagnostic report.
-STRICT RULE: Respond with ONLY a valid JSON object.
+  const isMainProbe = panelName === 'GLOBAL_SYSTEM_AUDIT';
+  
+  const systemInstruction = `You are the ${isMainProbe ? 'Main Neural Core' : 'Panel Diagnostic Core'} for the PiSentinel SOC.
+Analyze the provided telemetry and return a structured report. Respond ONLY with valid JSON.
+Main Core Probe focus: Holistic system integrity, threat detection, and operational optimization.
+Panel Probe focus: Localized anomaly detection and specific component health.
+JSON Schema: { "description": string, "recommendation": string, "status": string, "elementType": string, "elementId": string, "anomalies": string[], "threatLevel": "LOW"|"MEDIUM"|"HIGH"|"CRITICAL" }`;
 
-Schema:
-{
-  "description": "Deep technical analysis of the telemetry.",
-  "recommendation": "Primary tactical action suggested.",
-  "status": "${context.mode}",
-  "elementType": "${panelName}",
-  "elementId": "PROBE_${context.sessionId}",
-  "anomalies": ["Detection A", "Detection B"],
-  "threatLevel": "LOW" | "ELEVATED" | "CRITICAL"
-}`;
-
-  const userPrompt = truncateInput(`[PROBE_REQUEST] PANEL: ${panelName} | TELEMETRY: ${JSON.stringify(metrics)} [/PROBE_REQUEST]`);
+  const userPrompt = truncateInputStrict(`[${isMainProbe ? 'MAIN_AUDIT' : 'PANEL_PROBE'}] PANEL: ${panelName} | DATA: ${JSON.stringify(metrics)} [/REQUEST]`);
 
   if (config.provider === AIProvider.GEMINI) {
     const ai = getAiClient(config);
@@ -95,27 +58,10 @@ Schema:
       const response = await ai.models.generateContent({
         model: 'gemini-3-flash-preview',
         contents: systemInstruction + "\n\n" + userPrompt,
-        config: {
-          responseMimeType: "application/json",
-          responseSchema: {
-            type: Type.OBJECT,
-            properties: {
-              description: { type: Type.STRING },
-              recommendation: { type: Type.STRING },
-              status: { type: Type.STRING },
-              elementType: { type: Type.STRING },
-              elementId: { type: Type.STRING },
-              anomalies: { type: Type.ARRAY, items: { type: Type.STRING } },
-              threatLevel: { type: Type.STRING }
-            },
-            required: ["description", "recommendation", "status", "elementType", "elementId", "anomalies", "threatLevel"]
-          }
-        }
+        config: { responseMimeType: "application/json" }
       });
       return JSON.parse(response.text || "{}");
-    } catch (e) {
-      return fallbackProbe(panelName, context.mode);
-    }
+    } catch { return fallbackProbe(panelName, context.mode); }
   } else {
     try {
       const endpoint = config.endpoint.includes('/chat/completions') ? config.endpoint : `${config.endpoint.replace(/\/$/, "")}/chat/completions`;
@@ -124,20 +70,13 @@ Schema:
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           model: config.model,
-          messages: [
-            { role: 'system', content: systemInstruction },
-            { role: 'user', content: userPrompt }
-          ],
-          temperature: 0.1,
-          max_tokens: 1024
+          messages: [{ role: 'system', content: systemInstruction }, { role: 'user', content: userPrompt }],
+          temperature: 0.1
         })
       });
-      if (!response.ok) throw new Error("LOCAL_LINK_OFFLINE");
       const data = await response.json();
       return extractJsonLoose(data.choices[0].message.content);
-    } catch (e) {
-      return fallbackProbe(panelName, context.mode);
-    }
+    } catch { return fallbackProbe(panelName, context.mode); }
   }
 }
 
@@ -146,27 +85,15 @@ export async function fetchSmartTooltip(
   elementData: any,
   context: { sessionId: string; mode: OperationalMode }
 ): Promise<SmartTooltipData> {
-  const systemInstruction = `You are a Raspberry Pi cyber dashboard smart tooltip engine.
-STRICT RULES:
-- Respond ONLY with a valid JSON object
-- No markdown, no explanations, no chat tokens
+  const systemInstruction = `You are a tactical smart tooltip engine. Provide deep technical insight into specific SOC components or metrics. Respond ONLY with valid JSON.
+Schema: { "description": string, "recommendation": string, "status": "REAL"|"SIMULATED"|"OFFLINE", "elementType": string, "elementId": string }`;
 
-Schema:
-{
-  "description": string,
-  "recommendation": string,
-  "status": "REAL" | "SIMULATED" | "OFFLINE",
-  "elementType": string,
-  "elementId": string
-}`;
-
-  const userPrompt = JSON.stringify({
-    elementType: elementData.elementType,
-    elementId: elementData.elementId,
-    status: context.mode,
-    metrics: elementData.metrics,
-    context: "Dashboard - System Overview"
-  });
+  const userPrompt = truncateInputStrict(JSON.stringify({ 
+    elementType: elementData.elementType, 
+    elementId: elementData.elementId, 
+    status: context.mode, 
+    metrics: elementData.metrics 
+  }));
 
   try {
     if (config.provider === AIProvider.GEMINI) {
@@ -182,43 +109,13 @@ Schema:
       const response = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: config.model,
-          messages: [
-            { role: 'system', content: systemInstruction },
-            { role: 'user', content: userPrompt }
-          ],
-          temperature: 0.1,
-          max_tokens: 300
-        })
+        body: JSON.stringify({ model: config.model, messages: [{ role: 'system', content: systemInstruction }, { role: 'user', content: userPrompt }], temperature: 0.1 })
       });
-      if (!response.ok) throw new Error("LOCAL_LINK_OFFLINE");
       const data = await response.json();
       return extractJsonLoose(data.choices[0].message.content);
     }
-  } catch {
-    return fallbackTooltip(elementData, context.mode);
-  }
+  } catch { return fallbackTooltip(elementData, context.mode); }
 }
 
-function fallbackProbe(panel: string, mode: string) {
-  return { 
-    description: "Manual assessment required. Local link offline.", 
-    recommendation: "Ensure Local LLM server (LM Studio/Ollama) is responsive and configured correctly.", 
-    status: mode as any, 
-    elementType: panel, 
-    elementId: "LINK_VOID", 
-    anomalies: ["AI_NODE_DISCONNECTED"], 
-    threatLevel: "ELEVATED" 
-  };
-}
-
-function fallbackTooltip(data: any, mode: string): SmartTooltipData {
-  return {
-    description: "Manual assessment required. AI telemetry link is currently buffering.",
-    recommendation: "Check connection status in Neural Core and Global Settings.",
-    status: mode as any,
-    elementType: data.elementType || "System",
-    elementId: data.elementId || "CORE"
-  };
-}
+function fallbackProbe(panel: string, mode: string) { return { description: "Link Void.", recommendation: "Manual Assessment required.", status: mode as any, elementType: panel, elementId: "VOID", anomalies: ["AI_OFFLINE"], threatLevel: "ELEVATED" }; }
+function fallbackTooltip(data: any, mode: string): SmartTooltipData { return { description: "Telemetry analysis buffering.", recommendation: "Check AI link.", status: mode as any, elementType: data.elementType || "Core", elementId: data.elementId || "SYS" }; }

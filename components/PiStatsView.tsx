@@ -1,5 +1,4 @@
-
-import React, { useState } from 'react';
+import React from 'react';
 import { PiStats, OperationalMode, Timeframe } from '../types';
 import Card from './common/Card';
 import Tooltip from './common/Tooltip';
@@ -11,16 +10,17 @@ interface PiStatsViewProps {
   onProbeClick: (panel: string, metrics: any) => void;
   onBrainClick: (id: string, type: string, metrics: any) => void;
   processingId?: string;
+  activeTelemetry: Set<string>;
+  setActiveTelemetry: (s: Set<string>) => void;
 }
 
-const PiStatsView: React.FC<PiStatsViewProps> = ({ stats, mode, timeframe, onProbeClick, onBrainClick, processingId }) => {
-  const [activeMetrics, setActiveMetrics] = useState<Set<string>>(new Set(['cpu', 'ram', 'net', 'disk']));
+const PiStatsView: React.FC<PiStatsViewProps> = ({ stats, mode, timeframe, onProbeClick, onBrainClick, processingId, activeTelemetry, setActiveTelemetry }) => {
 
   const toggleMetric = (id: string) => {
-    const next = new Set(activeMetrics);
+    const next = new Set(activeTelemetry);
     if (next.has(id)) next.delete(id);
     else next.add(id);
-    setActiveMetrics(next);
+    setActiveTelemetry(next);
   };
 
   const safe = (val: number | undefined, precision: number = 1, unit: string = '') => {
@@ -34,110 +34,109 @@ const PiStatsView: React.FC<PiStatsViewProps> = ({ stats, mode, timeframe, onPro
   return (
     <div className="space-y-10 animate-in fade-in duration-700 pb-20 no-scroll h-full overflow-y-auto pr-4">
       {/* Primary Telemetry Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 items-stretch">
         {/* CPU */}
-        <Tooltip name="CPU_MATRIX" unit="Percent (%)" source={sourceState} desc="Main computational load and thermal diagnostics. Critical for monitoring performance during active cryptanalysis.">
+        <Tooltip name="CPU_MATRIX" source={sourceState} desc="Click to HIGHLIGHT for SCANNING context. Right-click for NEURAL tooltip probe." className="h-full">
           <div 
             onClick={() => toggleMetric('cpu')}
+            onContextMenu={(e) => { e.preventDefault(); onBrainClick('CPU_CARD', 'Telemetry Card', stats?.cpu); }}
             className={`cursor-pointer border p-5 flex flex-col gap-3 transition-all group h-full ${
-              activeMetrics.has('cpu') ? 'bg-zinc-900/80 border-green-500/50 shadow-[0_0_15px_rgba(34,197,94,0.1)]' : 'bg-black border-zinc-900 hover:border-zinc-800'
+              activeTelemetry.has('cpu') ? 'bg-zinc-900/80 border-purple-500/50 shadow-[0_0_15px_rgba(168,85,247,0.1)]' : 'bg-black border-zinc-900 hover:border-zinc-800'
             }`}
           >
             <div className="flex justify-between items-center">
-              <span className="text-[9px] font-black text-zinc-700 uppercase tracking-widest group-hover:text-zinc-500 transition-colors">CPU_MATRIX</span>
-              <div className={`w-1.5 h-1.5 rounded-full ${activeMetrics.has('cpu') ? 'bg-green-500 glow-green' : 'bg-zinc-900'}`}></div>
+              <span className="text-[9px] font-black text-zinc-700 uppercase tracking-widest group-hover:text-zinc-500">CPU_MATRIX</span>
+              <div className={`w-1.5 h-1.5 rounded-full ${activeTelemetry.has('cpu') ? 'bg-purple-500 glow-purple' : 'bg-zinc-900'}`}></div>
             </div>
-            <div className="flex items-baseline gap-4">
-              <span className={`text-2xl font-black ${isDataActive ? 'text-zinc-200' : 'text-zinc-900'}`}>{safe(stats?.cpu?.usage, 1, '%')}</span>
-              <span className={`text-md font-bold ${isDataActive ? 'text-zinc-500' : 'text-zinc-950'}`}>{safe(stats?.cpu?.temp, 1, '°C')}</span>
+            <div className="flex flex-col flex-1 justify-center">
+              <div className="flex items-baseline gap-4">
+                <span className={`text-2xl font-black ${isDataActive ? 'text-zinc-200' : 'text-zinc-900'}`}>{safe(stats?.cpu?.usage, 1, '%')}</span>
+                <span className={`text-md font-bold ${isDataActive ? 'text-zinc-500' : 'text-zinc-950'}`}>{safe(stats?.cpu?.temp, 1, '°C')}</span>
+              </div>
+              <div className="text-[8px] text-zinc-800 font-mono tracking-tighter uppercase mt-2">Load: {stats?.cpu?.load?.join(' / ') || '—'}</div>
             </div>
-            <div className="text-[8px] text-zinc-800 font-mono tracking-tighter uppercase">Load: {stats?.cpu?.load?.join(' / ') || '—'}</div>
           </div>
         </Tooltip>
 
         {/* RAM */}
-        <Tooltip name="MEMORY_POOL" unit="Gigabytes (GB)" source={sourceState} desc="Volatile storage metrics. High memory saturation indicates resource-heavy modules like Metasploit are active.">
+        <Tooltip name="MEMORY_POOL" source={sourceState} desc="Click to HIGHLIGHT for SCANNING context. Right-click for NEURAL tooltip probe." className="h-full">
           <div 
             onClick={() => toggleMetric('ram')}
+            onContextMenu={(e) => { e.preventDefault(); onBrainClick('RAM_CARD', 'Telemetry Card', stats?.memory); }}
             className={`cursor-pointer border p-5 flex flex-col gap-3 transition-all group h-full ${
-              activeMetrics.has('ram') ? 'bg-zinc-900/80 border-blue-500/50 shadow-[0_0_15px_rgba(0,242,255,0.1)]' : 'bg-black border-zinc-900 hover:border-zinc-800'
+              activeTelemetry.has('ram') ? 'bg-zinc-900/80 border-purple-500/50 shadow-[0_0_15px_rgba(168,85,247,0.1)]' : 'bg-black border-zinc-900 hover:border-zinc-800'
             }`}
           >
             <div className="flex justify-between items-center">
-              <span className="text-[9px] font-black text-zinc-700 uppercase tracking-widest group-hover:text-zinc-500 transition-colors">MEMORY_POOL</span>
-              <div className={`w-1.5 h-1.5 rounded-full ${activeMetrics.has('ram') ? 'bg-blue-500 glow-blue' : 'bg-zinc-900'}`}></div>
+              <span className="text-[9px] font-black text-zinc-700 uppercase tracking-widest group-hover:text-zinc-500">MEMORY_POOL</span>
+              <div className={`w-1.5 h-1.5 rounded-full ${activeTelemetry.has('ram') ? 'bg-purple-500 glow-purple' : 'bg-zinc-900'}`}></div>
             </div>
-            <div className="flex items-baseline gap-4">
-              <span className={`text-2xl font-black ${isDataActive ? 'text-zinc-200' : 'text-zinc-900'}`}>{safe(stats?.memory?.usage, 1, '%')}</span>
-              <span className={`text-md font-bold ${isDataActive ? 'text-zinc-500' : 'text-zinc-950'}`}>{safe(stats?.memory?.used, 2, 'G')}</span>
+            <div className="flex flex-col flex-1 justify-center">
+              <div className="flex items-baseline gap-4">
+                <span className={`text-2xl font-black ${isDataActive ? 'text-zinc-200' : 'text-zinc-900'}`}>{safe(stats?.memory?.usage, 1, '%')}</span>
+                <span className={`text-md font-bold ${isDataActive ? 'text-zinc-500' : 'text-zinc-950'}`}>{safe(stats?.memory?.used, 2, 'G')}</span>
+              </div>
+              <div className="text-[8px] text-zinc-800 font-mono tracking-tighter uppercase mt-2">Avail: {safe(stats?.memory?.available, 2, 'G')}</div>
             </div>
-            <div className="text-[8px] text-zinc-800 font-mono tracking-tighter uppercase">Avail: {safe(stats?.memory?.available, 2, 'G')}</div>
           </div>
         </Tooltip>
 
         {/* DISK */}
-        <Tooltip name="DISK_VOLUMES" unit="GB / Rate (K/s)" source={sourceState} desc="Persistent storage integrity and I/O rates. Monitor this during database operations or exfiltration.">
+        <Tooltip name="DISK_VOLUMES" source={sourceState} desc="Click to HIGHLIGHT for SCANNING context. Right-click for NEURAL tooltip probe." className="h-full">
           <div 
             onClick={() => toggleMetric('disk')}
+            onContextMenu={(e) => { e.preventDefault(); onBrainClick('DISK_CARD', 'Telemetry Card', stats?.disk); }}
             className={`cursor-pointer border p-5 flex flex-col gap-3 transition-all group h-full ${
-              activeMetrics.has('disk') ? 'bg-zinc-900/80 border-orange-500/50 shadow-[0_0_15px_rgba(255,136,0,0.1)]' : 'bg-black border-zinc-900 hover:border-zinc-800'
+              activeTelemetry.has('disk') ? 'bg-zinc-900/80 border-purple-500/50 shadow-[0_0_15px_rgba(168,85,247,0.1)]' : 'bg-black border-zinc-900 hover:border-zinc-800'
             }`}
           >
             <div className="flex justify-between items-center">
-              <span className="text-[9px] font-black text-zinc-700 uppercase tracking-widest group-hover:text-zinc-500 transition-colors">DISK_VOLUMES</span>
-              <div className={`w-1.5 h-1.5 rounded-full ${activeMetrics.has('disk') ? 'bg-orange-500 glow-orange' : 'bg-zinc-900'}`}></div>
+              <span className="text-[9px] font-black text-zinc-700 uppercase tracking-widest group-hover:text-zinc-500">DISK_VOLUMES</span>
+              <div className={`w-1.5 h-1.5 rounded-full ${activeTelemetry.has('disk') ? 'bg-purple-500 glow-purple' : 'bg-zinc-900'}`}></div>
             </div>
-            <div className="flex items-baseline gap-4">
-              <span className={`text-2xl font-black ${isDataActive ? 'text-zinc-200' : 'text-zinc-900'}`}>{safe(stats?.disk?.rootUsage, 1, '%')}</span>
-              <span className={`text-md font-bold ${isDataActive ? 'text-zinc-500' : 'text-zinc-950'}`}>{safe(stats?.disk?.readRate, 1, 'K/s')}</span>
+            <div className="flex flex-col flex-1 justify-center">
+              <div className="flex items-baseline gap-4">
+                <span className={`text-2xl font-black ${isDataActive ? 'text-zinc-200' : 'text-zinc-900'}`}>{safe(stats?.disk?.rootUsage, 1, '%')}</span>
+                <span className={`text-md font-bold ${isDataActive ? 'text-zinc-500' : 'text-zinc-950'}`}>{safe(stats?.disk?.readRate, 1, 'K/s')}</span>
+              </div>
+              <div className="text-[8px] text-zinc-800 font-mono tracking-tighter uppercase mt-2">Root Partition Trace</div>
             </div>
-            <div className="text-[8px] text-zinc-800 font-mono tracking-tighter uppercase">Root: {safe(stats?.disk?.rootUsage, 1, '%')}</div>
           </div>
         </Tooltip>
 
         {/* NETWORK */}
-        <Tooltip name="IO_LINK" unit="Kilobytes (KB/s)" source={sourceState} desc="Real-time throughput analysis of network links. Crucial for verifying reverse-shell stability.">
+        <Tooltip name="IO_LINK" source={sourceState} desc="Click to HIGHLIGHT for SCANNING context. Right-click for NEURAL tooltip probe." className="h-full">
           <div 
             onClick={() => toggleMetric('net')}
+            onContextMenu={(e) => { e.preventDefault(); onBrainClick('NET_CARD', 'Telemetry Card', stats?.network); }}
             className={`cursor-pointer border p-5 flex flex-col gap-3 transition-all group h-full ${
-              activeMetrics.has('net') ? 'bg-zinc-900/80 border-teal-500/50 shadow-[0_0_15px_rgba(0,255,213,0.1)]' : 'bg-black border-zinc-900 hover:border-zinc-800'
+              activeTelemetry.has('net') ? 'bg-zinc-900/80 border-purple-500/50 shadow-[0_0_15px_rgba(168,85,247,0.1)]' : 'bg-black border-zinc-900 hover:border-zinc-800'
             }`}
           >
             <div className="flex justify-between items-center">
-              <span className="text-[9px] font-black text-zinc-700 uppercase tracking-widest group-hover:text-zinc-500 transition-colors">IO_LINK</span>
-              <div className={`w-1.5 h-1.5 rounded-full ${activeMetrics.has('net') ? 'bg-teal-500 glow-teal' : 'bg-zinc-900'}`}></div>
+              <span className="text-[9px] font-black text-zinc-700 uppercase tracking-widest group-hover:text-zinc-500">IO_LINK</span>
+              <div className={`w-1.5 h-1.5 rounded-full ${activeTelemetry.has('net') ? 'bg-purple-500 glow-purple' : 'bg-zinc-900'}`}></div>
             </div>
-            <div className="flex items-baseline gap-4">
-              <span className={`text-2xl font-black ${isDataActive ? 'text-zinc-200' : 'text-zinc-900'}`}>RX {safe(stats?.network?.inRate, 1, 'K')}</span>
-              <span className={`text-md font-bold ${isDataActive ? 'text-zinc-500' : 'text-zinc-950'}`}>TX {safe(stats?.network?.outRate, 1, 'K')}</span>
+            <div className="flex flex-col flex-1 justify-center">
+              <div className="flex items-baseline gap-4">
+                <span className={`text-2xl font-black ${isDataActive ? 'text-zinc-200' : 'text-zinc-900'}`}>RX {safe(stats?.network?.inRate, 1, 'K')}</span>
+                <span className={`text-md font-bold ${isDataActive ? 'text-zinc-500' : 'text-zinc-950'}`}>TX {safe(stats?.network?.outRate, 1, 'K')}</span>
+              </div>
+              <div className="text-[8px] text-zinc-800 font-mono tracking-tighter uppercase mt-2">I/O Tunnel Active</div>
             </div>
-            <div className="text-[8px] text-zinc-800 font-mono tracking-tighter uppercase">Sync_Rate: Active</div>
           </div>
         </Tooltip>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        <Card 
-          title="NODE_DIAGNOSTICS" 
-          variant="real" 
-          onProbe={() => onProbeClick('NODE_DIAGNOSTICS', stats)}
-          onBrain={() => onBrainClick('node_diag_panel', 'Environment Audit', stats)}
-          isProcessing={processingId === 'NODE_DIAGNOSTICS'}
-        >
+        <Card title="NODE_DIAGNOSTICS" variant="real" probeColor="#bd00ff" onProbe={() => onProbeClick('NODE_DIAGNOSTICS', stats)} onBrain={() => onBrainClick('node_diag_panel', 'Environment Audit', stats)} isProcessing={processingId === 'NODE_DIAGNOSTICS'}>
           <div className="space-y-4 font-mono text-[11px]">
-             <div className="flex justify-between border-b border-zinc-900 pb-2"><span className="text-zinc-600">HOSTNAME</span><span className="text-teal-500 uppercase font-black">{stats?.system?.hostname || 'SENTINEL_NULL'}</span></div>
-             <div className="flex justify-between border-b border-zinc-900 pb-2"><span className="text-zinc-600">OS_KERNEL</span><span className="text-zinc-400">{stats?.system?.osName || 'Kali Linux'}</span></div>
-             <div className="flex justify-between border-b border-zinc-900 pb-2"><span className="text-zinc-600">THROTTLING</span><span className={stats?.sensors?.throttled && stats?.sensors?.throttled !== '0x0' ? 'text-red-500 animate-pulse font-black' : 'text-green-500'}>{stats?.sensors?.throttled || '0x0'}</span></div>
-             <div className="flex justify-between"><span className="text-zinc-600">CORES_FREQ</span><span className="text-zinc-400">{stats?.cpu?.cores || 4}x @ {stats?.cpu?.freqCurrent || '—'}MHz</span></div>
+             <div className="flex justify-between border-b border-zinc-900 pb-2"><span className="text-zinc-600 uppercase">Hostname</span><span className="text-teal-500 uppercase font-black">{stats?.system?.hostname || 'SENTINEL_NULL'}</span></div>
+             <div className="flex justify-between border-b border-zinc-900 pb-2"><span className="text-zinc-600 uppercase">OS_Kernel</span><span className="text-zinc-400">{stats?.system?.osName || 'Kali Linux'}</span></div>
+             <div className="flex justify-between"><span className="text-zinc-600 uppercase">Cores_Freq</span><span className="text-zinc-400">{stats?.cpu?.cores || 4}x @ {stats?.cpu?.freqCurrent || '—'}MHz</span></div>
           </div>
         </Card>
-        <Card 
-          title="TOP_PROCESSES" 
-          variant="purple" 
-          onProbe={() => onProbeClick('PROCESS_AUDIT', stats?.processes)}
-          onBrain={() => onBrainClick('process_audit_panel', 'Process Audit', stats?.processes)}
-          isProcessing={processingId === 'PROCESS_AUDIT'}
-        >
+        <Card title="TOP_PROCESSES" variant="purple" probeColor="#bd00ff" onProbe={() => onProbeClick('PROCESS_AUDIT', stats?.processes)} onBrain={() => onBrainClick('process_audit_panel', 'Process Audit', stats?.processes)} isProcessing={processingId === 'PROCESS_AUDIT'}>
           <div className="space-y-2 max-h-48 overflow-y-auto no-scroll">
             {stats?.processes?.topByCpu?.slice(0, 6).map((p: any, i: number) => (
               <div key={i} className="flex justify-between items-center text-[10px] font-mono border-b border-zinc-900/40 py-1.5 hover:bg-white/5 transition-colors group">

@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { OperationalMode, SessionInfo, PiStats } from '../types';
-import Card from './common/Card';
-import Tooltip from './common/Tooltip';
-import TacticalButton from './common/TacticalButton';
-import BrainIcon from './common/BrainIcon';
+import { OperationalMode, SessionInfo, PiStats } from './types';
+import Card from './components/common/Card';
+import Tooltip from './components/common/Tooltip';
+import TacticalButton from './components/common/TacticalButton';
+import BrainIcon from './components/common/BrainIcon';
 
 interface DashboardProps {
   mode: OperationalMode;
@@ -88,7 +88,7 @@ const Dashboard: React.FC<DashboardProps> = ({
             <span className="text-[10px] font-black text-zinc-700 uppercase tracking-widest cursor-help">Dashboard_Stream</span>
           </Tooltip>
           {isConnected && (
-            <Tooltip name="TERMINAL_OVERLAY" source="SYSTEM" desc="Engage/Disengage the interactive bash console overlay for direct command injection.">
+            <Tooltip name="TERMINAL_OVERLAY" source="SYSTEM" desc="Engage/Disengage the interactive bash console overlay.">
               <button 
                 onClick={() => setTerminalMode(!terminalMode)}
                 className={`px-4 py-1.5 border text-[9px] font-black uppercase tracking-widest transition-all ${terminalMode ? 'bg-teal-500/10 border-teal-500 text-teal-400' : 'bg-zinc-950 border-zinc-800 text-zinc-600 hover:text-white'}`}
@@ -98,7 +98,7 @@ const Dashboard: React.FC<DashboardProps> = ({
             </Tooltip>
           )}
         </div>
-        <Tooltip name="NODE_STATUS" source={isConnected ? 'LINKED' : 'READY'} desc="Current bridge integrity state. LINKED indicates active SSH session.">
+        <Tooltip name="NODE_STATUS" source={isConnected ? 'LINKED' : 'READY'} desc="Handshake bridge integrity state.">
           <div className="text-[9px] font-mono text-zinc-800 uppercase cursor-help">STN_NODE_STATUS: {isConnected ? 'LINKED' : 'READY'}</div>
         </Tooltip>
       </div>
@@ -108,7 +108,7 @@ const Dashboard: React.FC<DashboardProps> = ({
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-stretch shrink-0">
             <Card 
               title="HANDSHAKE_NODE" 
-              titleTooltip="Primary SSH authentication node. SCANNING consumes 1 CORE CHARGE (Purple)."
+              titleTooltip="Primary SSH authentication node. SCANNING consumes 1 CORE CHARGE (Purple Launcher)."
               variant={getDynamicVariant()}
               onProbe={() => onProbeClick('HANDSHAKE_CORE', { ipInput, user, port })}
               onBrain={() => onBrainClick('handshake_panel', 'Connection Link', { ipInput, user, status: session.status })}
@@ -118,32 +118,32 @@ const Dashboard: React.FC<DashboardProps> = ({
             >
               <div className="space-y-4">
                 <div className="flex flex-col gap-1">
-                  <Tooltip name="TARGET_LINK" source="CONFIG" desc="Remote destination IP address. Ensure port 22 is reachable.">
+                  <Tooltip name="TARGET_LINK" source="CONFIG" desc="Destination IP address for the remote Kali Linux node.">
                     <label className="text-[10px] font-black text-zinc-700 uppercase tracking-widest cursor-help">Target_Link</label>
                   </Tooltip>
                   <input value={ipInput} onChange={e => setIpInput(e.target.value)} disabled={isConnected} className={`bg-black/50 border border-zinc-900 p-2 text-[11px] font-mono outline-none ${isConnected ? 'text-teal-500/50 cursor-not-allowed' : 'text-white'}`} placeholder="0.0.0.0" />
                 </div>
                 <div className="grid grid-cols-3 gap-3">
                   <div className="flex flex-col gap-1">
-                    <Tooltip name="USER_ID" source="CONFIG" desc="SSH username (Default: kali).">
+                    <Tooltip name="USER_ID" source="CONFIG" desc="SSH username for authentication.">
                       <label className="text-[8px] font-black text-zinc-800 uppercase tracking-widest cursor-help">User</label>
                     </Tooltip>
                     <input value={user} onChange={e => setUser(e.target.value)} disabled={isConnected} className="bg-black/50 border border-zinc-900 p-1.5 text-[10px] font-mono text-zinc-400 outline-none" placeholder="user" />
                   </div>
                   <div className="flex flex-col gap-1">
-                    <Tooltip name="AUTH_SECRET" source="CONFIG" desc="SSH password or keyphrase. Encrypted during transit.">
+                    <Tooltip name="AUTH_SECRET" source="CONFIG" desc="SSH password or keyphrase for authentication.">
                       <label className="text-[8px] font-black text-zinc-800 uppercase tracking-widest cursor-help">Pass</label>
                     </Tooltip>
                     <input type="password" value={pass} onChange={e => setPass(e.target.value)} disabled={isConnected} className="bg-black/50 border border-zinc-900 p-1.5 text-[10px] font-mono text-zinc-400 outline-none" placeholder="pass" />
                   </div>
                   <div className="flex flex-col gap-1">
-                    <Tooltip name="COM_PORT" source="CONFIG" desc="Target TCP port for SSH handshake.">
+                    <Tooltip name="COM_PORT" source="CONFIG" desc="Target SSH port (Default: 22).">
                       <label className="text-[8px] font-black text-zinc-800 uppercase tracking-widest cursor-help">Port</label>
                     </Tooltip>
                     <input type="number" value={port} onChange={e => setPort(Number(e.target.value))} disabled={isConnected} className="bg-black/50 border border-zinc-900 p-1.5 text-[10px] font-mono text-zinc-400 outline-none" />
                   </div>
                 </div>
-                <Tooltip name="HANDSHAKE_TRIGGER" source="SYSTEM" desc="Initiate encrypted Handshake Protocol with remote node.">
+                <Tooltip name="HANDSHAKE_TRIGGER" source="SYSTEM" desc="Initiate encrypted SSH handshake with the remote target.">
                   <button 
                     onClick={isConnected ? onDisconnect : () => onHandshake(ipInput, user, pass, port)} 
                     disabled={!!processingId}
@@ -157,7 +157,7 @@ const Dashboard: React.FC<DashboardProps> = ({
 
             <Card 
               title="ADAPTER_MATRIX" 
-              titleTooltip="Network interface mapping. SCANNING consumes 1 CORE CHARGE (Purple)."
+              titleTooltip="Network interface map. SCANNING consumes 1 CORE CHARGE (Purple Launcher)."
               variant={getDynamicVariant()} 
               onProbe={() => onProbeClick('ADAPTER_HUB', { stats })} 
               onBrain={() => onBrainClick('adapter_hub', 'Network Matrix', { stats })} 
@@ -169,7 +169,7 @@ const Dashboard: React.FC<DashboardProps> = ({
                 {adapters.map(name => {
                   const data = getInterfaceData(name);
                   return (
-                    <Tooltip key={name} name={name.toUpperCase()} source={data.up ? 'REAL' : 'OFFLINE'} desc={`Interface status and IPv4 assignment. Click to run 'ip addr' check.`}>
+                    <Tooltip key={name} name={name.toUpperCase()} source={data.up ? 'REAL' : 'OFFLINE'} desc={`Network interface status and IP allocation. Click to inspect.`}>
                       <div onClick={() => onAdapterCommand(`ip a show ${name}`)} className={`px-4 py-2 border border-zinc-900/40 bg-black/20 flex justify-between items-center transition-all cursor-pointer group hover:bg-teal-500/5 ${!data.up ? 'opacity-30' : ''}`}>
                         <div className="flex items-center gap-3">
                           <div className={`w-1.5 h-1.5 rounded-full ${data.up ? 'bg-green-500 glow-green' : 'bg-red-500'}`}></div>
@@ -186,7 +186,7 @@ const Dashboard: React.FC<DashboardProps> = ({
 
           <Card 
             title="MASTER_INTELLIGENCE_LINK" 
-            titleTooltip="Unified AI reasoning hub. CORE PROBE consumes 1 CORE CHARGE (Purple)."
+            titleTooltip="Unified AI reasoning hub. SCANNING consumes 1 CORE CHARGE (Purple Launcher)."
             variant="purple" 
             className="relative overflow-visible shrink-0 pb-6 min-h-0 flex-1 max-h-[300px]"
             onBrain={() => onBrainClick('MASTER_LINK', 'Neural Hub Intelligence', { latestResult: latestCoreProbeResult })}
@@ -194,10 +194,11 @@ const Dashboard: React.FC<DashboardProps> = ({
             probeColor="#bd00ff"
           >
             <div className="flex items-center justify-between gap-8 h-full">
+              {/* Left Column: AI Diagnostics */}
               <div className="flex-1 text-[10px] font-mono text-zinc-500 leading-relaxed border-r border-zinc-900/30 pr-4 h-full max-h-40 overflow-y-auto no-scroll flex flex-col justify-center">
                 {latestCoreProbeResult ? (
                   <div className="animate-in fade-in duration-500">
-                    <Tooltip name="NEURAL_STATUS" source="AI" variant="purple" desc="Current high-level system summary from Neural Engine.">
+                    <Tooltip name="NEURAL_STATUS" source="AI" variant="purple" desc="AI-generated high-fidelity system status summary.">
                       <div className="text-purple-400 font-black mb-1 uppercase tracking-tighter cursor-help">Status: {latestCoreProbeResult.status}</div>
                     </Tooltip>
                     <div className="text-zinc-400 italic">"{latestCoreProbeResult.description}"</div>
@@ -215,50 +216,82 @@ const Dashboard: React.FC<DashboardProps> = ({
                 )}
               </div>
 
+              {/* Central Column: Redesigned CORE PROBE Button as a Transistor CPU */}
               <div className="flex flex-col items-center justify-center relative group w-64 shrink-0">
-                 <div className="absolute top-[-30px] flex gap-12 pointer-events-none opacity-20">
-                    <div className="w-[1px] h-32 bg-purple-500"></div>
-                    <div className="w-[1px] h-40 bg-purple-500"></div>
-                    <div className="w-[1px] h-32 bg-purple-500"></div>
+                 {/* Top lead decorative elements (Leads) */}
+                 <div className="absolute top-[-35px] flex gap-10 pointer-events-none opacity-20 group-hover:opacity-40 transition-opacity">
+                    {[...Array(5)].map((_, i) => (
+                      <div key={`lead-t-${i}`} className={`w-[1.5px] bg-purple-500 transition-all ${isProbeActive ? 'h-40 animate-pulse' : 'h-32'}`} style={{ animationDelay: `${i * 0.1}s` }}></div>
+                    ))}
                  </div>
-                 <div className="w-24 h-6 bg-zinc-800 border-x border-t border-purple-500/30 rounded-t-sm mb-0 flex items-center justify-center">
-                    <div className="w-4 h-4 rounded-full bg-black border border-zinc-700 shadow-inner"></div>
+                 
+                 {/* Substrate Frame */}
+                 <div className="w-28 h-4 bg-[#0a0c0f] border-x border-t border-purple-500/30 rounded-t-sm mb-0 flex items-center justify-around px-2">
+                    {[...Array(6)].map((_, i) => (
+                      <div key={`pin-t-${i}`} className="w-1.5 h-1.5 bg-yellow-600/40 rounded-full"></div>
+                    ))}
                  </div>
+
                  <div className="relative z-10">
-                    <Tooltip name="CORE_PROBE" source="AI" variant="purple" desc="Trigger system-wide telemetry audit using Purple Launcher payloads.">
+                    <Tooltip name="CORE_PROBE" source="AI" variant="purple" desc="Engage systemic neural scan. Consumes 1 CORE CHARGE (Purple).">
                       <button 
                         onClick={() => onProbeClick('GLOBAL_SYSTEM_AUDIT', { stats, mode, activeFocus: Array.from(activeTelemetry || []) })} 
                         disabled={!!processingId} 
-                        className={`relative w-64 h-20 bg-[#050608] border-x border-b border-purple-500/60 shadow-2xl flex flex-col items-center justify-center transition-all group-hover:border-purple-400 group-hover:shadow-[0_0_30px_rgba(189,0,255,0.2)] disabled:opacity-50 overflow-hidden cursor-pointer`}
+                        className={`relative w-64 h-24 bg-[#050608] border border-purple-500/60 shadow-[0_10px_40px_rgba(0,0,0,0.8)] flex flex-col items-center justify-center transition-all group-hover:border-purple-400 group-hover:shadow-[0_0_30px_rgba(189,0,255,0.2)] disabled:opacity-50 overflow-hidden cursor-pointer rounded-sm`}
                       >
-                        <div className="absolute top-2 left-4 text-[6px] text-zinc-800 font-mono tracking-tighter uppercase">Sentinel_NPN_v2.9</div>
-                        <div className="absolute bottom-2 right-4 text-[6px] text-zinc-800 font-mono tracking-tighter uppercase">Lot: 0xNEURAL</div>
-                        <span className={`text-[12px] font-black uppercase tracking-[0.6em] transition-colors ${isProbeActive ? 'text-teal-400 animate-pulse' : 'text-purple-400 group-hover:text-purple-200'}`}>
-                          {isProbeActive ? 'SCANNING...' : 'CORE PROBE'}
-                        </span>
-                        <div className={`absolute inset-0 pointer-events-none transition-opacity ${isProbeActive ? 'opacity-20' : 'opacity-0'}`}>
-                           <div className="w-full h-full bg-purple-500 animate-ping"></div>
+                        {/* Chrome Heat Spreader Background Effect */}
+                        <div className="absolute inset-2 bg-gradient-to-br from-zinc-800 via-zinc-900 to-black opacity-40 border border-zinc-800/50 pointer-events-none"></div>
+                        
+                        {/* Silicon Die Indicator (Internal Die) */}
+                        <div className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-12 h-12 border border-purple-500/40 bg-black flex items-center justify-center z-0 transition-all ${isProbeActive ? 'scale-125 border-teal-500' : 'scale-100'}`}>
+                           <div className={`w-4 h-4 rounded-sm ${isProbeActive ? 'bg-teal-500 glow-teal animate-ping' : 'bg-purple-900 animate-pulse'}`}></div>
                         </div>
+
+                        {/* Gold Corner Marker */}
+                        <div className="absolute top-0 left-0 w-3 h-3 border-l-2 border-t-2 border-yellow-600 opacity-60"></div>
+                        
+                        <div className="absolute top-2 left-4 text-[6px] text-zinc-700 font-mono tracking-tighter uppercase z-10">NPN_STNL_PRO_v2</div>
+                        <div className="absolute bottom-2 right-4 text-[6px] text-zinc-700 font-mono tracking-tighter uppercase z-10">FAB: 0xAI_CORE</div>
+
+                        <span className={`relative z-10 text-[13px] font-black uppercase tracking-[0.5em] transition-colors ${isProbeActive ? 'text-teal-400' : 'text-purple-400 group-hover:text-purple-100'}`}>
+                          {isProbeActive ? 'EXECUTING...' : 'CORE PROBE'}
+                        </span>
+
+                        {/* Data Flow Lines (Chrome etched traces) */}
+                        <div className="absolute inset-0 pointer-events-none opacity-10">
+                           <div className="absolute top-1/2 left-0 w-full h-[1px] bg-white"></div>
+                           <div className="absolute left-1/2 top-0 w-[1px] h-full bg-white"></div>
+                        </div>
+
+                        {/* Scanning Overlay */}
+                        {isProbeActive && (
+                          <div className="absolute inset-0 bg-purple-500/10 animate-pulse z-20">
+                            <div className="absolute top-0 left-0 w-full h-1 bg-teal-500/50 animate-[scan_2s_infinite]"></div>
+                          </div>
+                        )}
                       </button>
                     </Tooltip>
                  </div>
-                 <div className="flex gap-16 mt-[-2px] pointer-events-none">
-                    <div className={`w-0.5 h-10 bg-purple-500/40 transition-all ${isProbeActive ? 'h-14 bg-teal-500' : ''}`}></div>
-                    <div className={`w-0.5 h-16 bg-purple-500/40 transition-all ${isProbeActive ? 'h-20 bg-teal-500 delay-75' : ''}`}></div>
-                    <div className={`w-0.5 h-10 bg-purple-500/40 transition-all ${isProbeActive ? 'h-14 bg-teal-500 delay-150' : ''}`}></div>
+
+                 {/* Bottom Leads (Pins) */}
+                 <div className="flex gap-14 mt-[-1px] pointer-events-none opacity-20 group-hover:opacity-60 transition-opacity">
+                    {[...Array(4)].map((_, i) => (
+                      <div key={`lead-b-${i}`} className={`w-[2px] bg-purple-500/40 transition-all ${isProbeActive ? 'h-24 bg-teal-500' : 'h-16'}`} style={{ animationDelay: `${i * 0.15}s` }}></div>
+                    ))}
                  </div>
-                 <span className="absolute bottom-[-30px] text-[7px] font-black uppercase tracking-[0.4em] text-zinc-800 pointer-events-none whitespace-nowrap">Neural_Bridge_Standby_Ready</span>
+                 <span className="absolute bottom-[-35px] text-[7px] font-black uppercase tracking-[0.4em] text-zinc-800 pointer-events-none whitespace-nowrap group-hover:text-zinc-600 transition-colors">Neural_Interface_Synchronized</span>
               </div>
 
+              {/* Right Column: AI Recommendations */}
               <div className="flex-1 text-[10px] font-mono text-zinc-500 leading-relaxed border-l border-zinc-900/30 pl-4 h-full max-h-40 overflow-y-auto no-scroll flex flex-col justify-center">
                 {latestCoreProbeResult ? (
                   <div className="animate-in fade-in duration-500">
-                    <Tooltip name="TACTICAL_REC" source="AI" variant="teal" desc="Direct actionable recommendation from the intelligence unit.">
+                    <Tooltip name="TACTICAL_REC" source="AI" variant="teal" desc="Direct recommendation from the neural engine based on identified anomalies.">
                       <div className="text-teal-500 font-black mb-1 uppercase tracking-tighter cursor-help">Recommendation:</div>
                     </Tooltip>
                     <div className="text-zinc-300 font-bold">{latestCoreProbeResult.recommendation}</div>
                     {latestCoreProbeResult.threatLevel && (
-                      <Tooltip name="THREAT_LEVEL" source="SYSTEM" desc="Assessed operational threat level based on current telemetry anomalies.">
+                      <Tooltip name="THREAT_LEVEL" source="SYSTEM" desc="Assessed severity of identified system anomalies.">
                         <div className={`mt-2 text-[8px] font-black uppercase tracking-widest px-2 py-0.5 w-fit rounded-sm cursor-help ${latestCoreProbeResult.threatLevel === 'CRITICAL' ? 'bg-red-500 text-white animate-pulse' : 'bg-zinc-800 text-zinc-400'}`}>
                           [Threat: {latestCoreProbeResult.threatLevel}]
                         </div>
@@ -346,6 +379,13 @@ const Dashboard: React.FC<DashboardProps> = ({
            </div>
         </div>
       )}
+
+      <style>{`
+        @keyframes scan {
+          0% { top: 0%; opacity: 1; }
+          100% { top: 100%; opacity: 0.1; }
+        }
+      `}</style>
     </div>
   );
 };

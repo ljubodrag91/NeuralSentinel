@@ -1,20 +1,23 @@
-
 import React from 'react';
 
 interface BrainIconProps {
   onClick: () => void;
   className?: string;
   isProcessing?: boolean;
+  color?: string;
 }
 
-const BrainIcon: React.FC<BrainIconProps> = ({ onClick, className = '', isProcessing = false }) => {
+const BrainIcon: React.FC<BrainIconProps> = ({ onClick, className = '', isProcessing = false, color = '#00ffd5' }) => {
   return (
     <button 
       onClick={(e) => {
         e.stopPropagation();
         onClick();
       }}
-      className={`brain-icon-btn p-3 rounded-md text-zinc-500 hover:text-[#bd00ff] transition-all flex items-center justify-center ${className} ${isProcessing ? 'animate-pulse text-[#bd00ff]' : ''}`}
+      className={`brain-icon-btn p-3 rounded-md transition-all flex items-center justify-center ${className} ${isProcessing ? 'animate-pulse' : ''}`}
+      style={{ color: isProcessing ? color : '#52525b' }}
+      onMouseEnter={(e) => e.currentTarget.style.color = color}
+      onMouseLeave={(e) => !isProcessing && (e.currentTarget.style.color = '#52525b')}
       title="Neural Intelligence Brain Probe"
     >
       <svg className="w-9 h-9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">

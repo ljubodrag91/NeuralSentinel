@@ -1,4 +1,3 @@
-
 import React, { useEffect, useRef } from 'react';
 
 interface TooltipProps {
@@ -8,9 +7,11 @@ interface TooltipProps {
   source: string; // REAL, SIMULATED, OFFLINE
   rate?: string;
   children: React.ReactNode;
+  className?: string;
+  variant?: 'purple' | 'teal' | 'default';
 }
 
-const Tooltip: React.FC<TooltipProps> = ({ name, unit, desc, source, rate, children }) => {
+const Tooltip: React.FC<TooltipProps> = ({ name, unit, desc, source, rate, children, className = '', variant = 'default' }) => {
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -26,7 +27,6 @@ const Tooltip: React.FC<TooltipProps> = ({ name, unit, desc, source, rate, child
       let left = e.clientX + 15;
       let top = e.clientY + 15;
 
-      // Ensure tooltip stays on screen
       if (left + tooltipRect.width > viewportWidth) {
         left = e.clientX - tooltipRect.width - 15;
       }
@@ -42,8 +42,18 @@ const Tooltip: React.FC<TooltipProps> = ({ name, unit, desc, source, rate, child
       const stateColor = source === 'REAL' ? 'text-[#22c55e]' : source === 'SIMULATED' ? 'text-[#0088ff]' : 'text-[#ff3e3e]';
       const isOffline = source === 'OFFLINE';
       
+      // Theme colors
+      const accentColor = variant === 'purple' ? '#bd00ff' : variant === 'teal' ? '#00ffd5' : '#52525b';
+      const accentClass = variant === 'purple' ? 'text-purple-500' : variant === 'teal' ? 'text-teal-400' : 'text-zinc-400';
+      
+      tooltip.style.borderColor = `${accentColor}44`;
+      tooltip.style.boxShadow = `0 10px 30px rgba(0,0,0,0.9), inset 0 0 10px ${accentColor}11`;
+      
       tooltip.innerHTML = `
-        <div class="text-[#00ffd5] font-black text-[10px] mb-2 border-b border-zinc-900 pb-2 tracking-[0.2em] uppercase">${name}</div>
+        <div class="flex justify-between items-center mb-2 border-b border-zinc-900 pb-2">
+          <div class="${accentClass} font-black text-[10px] tracking-[0.2em] uppercase">${name}</div>
+          <div class="text-[7px] text-zinc-800 font-mono font-bold uppercase tracking-widest">${variant === 'default' ? 'SYSTEM_METRIC' : variant.toUpperCase() + '_PROBE'}</div>
+        </div>
         <div class="flex flex-col gap-1.5 font-mono text-[10px]">
           ${unit ? `<div class="flex justify-between gap-6"><span class="text-zinc-600">UNIT:</span><span class="text-zinc-300">${unit}</span></div>` : ''}
           <div class="flex justify-between gap-6"><span class="text-zinc-600">SOURCE:</span><span class="${stateColor} font-bold">${source}</span></div>
@@ -69,9 +79,9 @@ const Tooltip: React.FC<TooltipProps> = ({ name, unit, desc, source, rate, child
       el.removeEventListener('mouseenter', handleMouseEnter);
       el.removeEventListener('mouseleave', handleMouseLeave);
     };
-  }, [name, unit, desc, source, rate]);
+  }, [name, unit, desc, source, rate, variant]);
 
-  return <div ref={containerRef} className="inline-block h-fit cursor-help">{children}</div>;
+  return <div ref={containerRef} className={`block cursor-help ${className}`}>{children}</div>;
 };
 
 export default Tooltip;
