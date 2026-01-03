@@ -1,4 +1,5 @@
-import React from 'react';
+
+import React, { useState } from 'react';
 import Card from './common/Card';
 
 interface HistoryProps {
@@ -16,11 +17,11 @@ const History: React.FC<HistoryProps> = ({ data, onProbe, onProbeInfo, onBrainCl
     return { csv: `${csvHeaders}\n${csvRows}` };
   };
 
-  const handleAudit = () => {
+  const handleProbe = () => {
     onProbe('SESSION_ARCHIVE', getArchivePayload());
   };
 
-  const handleAuditInfo = () => {
+  const handleProbeInfo = () => {
     onProbeInfo('SESSION_ARCHIVE', getArchivePayload());
   };
 
@@ -30,9 +31,9 @@ const History: React.FC<HistoryProps> = ({ data, onProbe, onProbeInfo, onBrainCl
         title="SESSION_ARCHIVE_PERSISTENCE" 
         titleTooltip="Archive of all tactical actions executed during the current neural session."
         variant="default" 
-        onProbe={handleAudit}
-        onProbeInfo={handleAuditInfo}
-        onBrain={() => onBrainClick('history_archive', 'Audit Database', { logCount: data.length })}
+        onProbe={handleProbe}
+        onProbeInfo={handleProbeInfo}
+        onBrain={() => onBrainClick('history_archive', 'Probe Database', { logCount: data.length })}
         isProcessing={processingId === 'SESSION_ARCHIVE' || processingId === 'history_archive'}
       >
         <div className="overflow-x-auto p-2">

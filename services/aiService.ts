@@ -1,7 +1,7 @@
 
 import { GoogleGenAI } from "@google/genai";
 // Fixed missing exported members by aliasing existing types from types.ts
-import { NeuralNetworkProvider as AIProvider, NeuralNetworkConfig as AIConfig, OperationalMode, SmartTooltipData } from "../types";
+import { NeuralNetworkProvider as AIProvider, NeuralNetworkConfig as AIConfig, OperationalMode, SmartTooltipData, Platform } from "../types";
 import { PROBE_CONTRACTS } from "./probeContracts";
 
 function truncateInputStrict(text: string, maxChars: number = 10000): string {
@@ -66,19 +66,36 @@ export async function performNeuralProbe(
   metrics: any,
   context: { sessionId: string; mode: OperationalMode }
 ) {
-  const isMainProbe = panelName === 'GLOBAL_SYSTEM_AUDIT';
+  const isMainProbe = panelName === 'GLOBAL_SYSTEM_PROBE';
   const contract = PROBE_CONTRACTS[panelName];
   
-  const systemInstruction = `You are the ${isMainProbe ? 'Main Neural Core' : 'Panel Diagnostic Core'} for the PiSentinel SOC monitor.
-Analyze the provided telemetry and return a structured report for security professionals.
-STRICT RULES:
+  // Platform awareness
+  const platform = metrics?.platform || Platform.LINUX;
+  const isEmpty = metrics?.status === 'empty' || contract?.buildPayload(metrics)?.status === 'empty';
+
+  let systemInstruction = `You are the ${isMainProbe ? 'Main Neural Core' : 'Panel Diagnostic Core'} for the PiSentinel SOC monitor.
+Target Platform: ${platform}.
+Analyze the provided probe data and return a structured report for security professionals.
+`;
+
+  if (platform === Platform.WINDOWS) {
+    systemInstruction += `Context: Local Windows Host Telemetry. Focus on OS-level anomalies, local network services, and process integrity.\n`;
+  } else {
+    systemInstruction += `Context: Remote Linux/Pi SSH Telemetry. Focus on kernel logs, SSH intrusion attempts, and daemon stability.\n`;
+  }
+
+  if (isEmpty) {
+    systemInstruction += `CRITICAL: The probe dataset is EMPTY or UNREACHABLE. Indicate this clearly in the description and recommend checking connectivity or launcher configuration.\n`;
+  }
+
+  systemInstruction += `STRICT RULES:
 - Respond ONLY with a valid JSON object.
 - No markdown formatting.
 - Include actionable security recommendations.
 
 Schema:
 {
-  "description": "Short human-readable summary of element health.",
+  "description": "Short human-readable summary of probe findings.",
   "recommendation": "Technical advice or suggestion.",
   "status": "${context.mode}",
   "elementType": "${panelName}",
@@ -91,6 +108,7 @@ Schema:
   const userPrompt = truncateInputStrict(JSON.stringify({ 
     panel: panelName, 
     operational_mode: context.mode,
+    platform: platform,
     payload: payload
   }));
 
@@ -137,15 +155,17 @@ export async function fetchSmartTooltip(
   elementData: any,
   context: { sessionId: string; mode: OperationalMode }
 ): Promise<SmartTooltipData> {
-  const systemInstruction = `You are a Raspberry Pi cyber dashboard smart tooltip engine.
+  const platform = elementData.metrics?.platform || "UNKNOWN";
+  
+  const systemInstruction = `You are a ${platform} cyber dashboard smart tooltip engine.
 STRICT RULES:
 - Respond ONLY with a valid JSON object.
 - No explanations or chat markers.
 
 Schema:
 {
-  "description": "Short human-readable summary of the specific metric or component.",
-  "recommendation": "Optional advice or warning based on the values.",
+  "description": "Short human-readable probe summary of the specific metric or component.",
+  "recommendation": "Optional advice based on the values.",
   "status": "${context.mode}",
   "elementType": "Type of component",
   "elementId": "ID of component"
@@ -155,8 +175,9 @@ Schema:
     elementType: elementData.elementType, 
     elementId: elementData.elementId, 
     status: context.mode, 
+    platform: platform,
     metrics: elementData.metrics,
-    context: "Dashboard - Real-time Overview"
+    context: "Dashboard - Real-time Probe Overview"
   }));
 
   try {
@@ -195,5 +216,5 @@ Schema:
   }
 }
 
-function fallbackProbe(panel: string, mode: string) { return { description: "Link Void.", recommendation: "Manual Assessment required.", status: mode as any, elementType: panel, elementId: "VOID", anomalies: ["AI_OFFLINE"], threatLevel: "ELEVATED" }; }
-function fallbackTooltip(data: any, mode: string): SmartTooltipData { return { description: "Telemetry analysis buffering.", recommendation: "Check AI link.", status: mode as any, elementType: data.elementType || "Core", elementId: data.elementId || "SYS" }; }
+function fallbackProbe(panel: string, mode: string) { return { description: "Link Void.", recommendation: "Manual Probe required.", status: mode as any, elementType: panel, elementId: "VOID", anomalies: ["AI_OFFLINE"], threatLevel: "ELEVATED" }; }
+function fallbackTooltip(data: any, mode: string): SmartTooltipData { return { description: "Telemetry probe buffering.", recommendation: "Check AI link.", status: mode as any, elementType: data.elementType || "Core", elementId: data.elementId || "SYS" }; }

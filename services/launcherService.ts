@@ -8,10 +8,10 @@ const DEFAULT_LAUNCHERS: Record<string, Launcher> = {
     id: 'std-core',
     type: 'core',
     name: 'Standard Core Launcher',
-    description: 'NPN-STNL default issue. Balanced throughput for general auditing.',
+    description: 'NPN-STNL default issue. Balanced throughput for general probing.',
     maxCharges: 5,
     rechargeRate: 60,
-    compatibleProbes: ['GLOBAL_SYSTEM_AUDIT', 'ADAPTER_HUB', 'HANDSHAKE_CORE', 'TERMINAL_COMMAND_AUDIT', 'NODE_DIAGNOSTICS', 'PROCESS_AUDIT', 'RSSI_REPORT', 'SESSION_ARCHIVE'],
+    compatibleProbes: ['GLOBAL_SYSTEM_PROBE', 'ADAPTER_HUB', 'HANDSHAKE_CORE', 'CONSOLE_DATA_PROBE', 'NODE_DIAGNOSTICS', 'PROCESS_PROBE', 'RSSI_REPORT', 'SESSION_ARCHIVE', 'LOG_AUDIT'],
     color: '#bd00ff'
   },
   'ext-core': {
@@ -21,7 +21,7 @@ const DEFAULT_LAUNCHERS: Record<string, Launcher> = {
     description: 'High-capacity capacitor array. Designed for sustained data-intensive probes.',
     maxCharges: 10,
     rechargeRate: 45,
-    compatibleProbes: ['GLOBAL_SYSTEM_AUDIT', 'HANDSHAKE_CORE', 'NODE_DIAGNOSTICS', 'SESSION_ARCHIVE', 'RSSI_REPORT'],
+    compatibleProbes: ['GLOBAL_SYSTEM_PROBE', 'HANDSHAKE_CORE', 'NODE_DIAGNOSTICS', 'SESSION_ARCHIVE', 'RSSI_REPORT'],
     color: '#00f2ff'
   },
   'std-neural': {

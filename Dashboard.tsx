@@ -1,6 +1,5 @@
-
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { OperationalMode, SessionInfo, PiStats, AppSettings } from './types';
+import { OperationalMode, SessionInfo, CoreStats, AppSettings } from './types';
 import Card from './components/common/Card';
 import Tooltip from './components/common/Tooltip';
 import { launcherSystem } from './services/launcherService';
@@ -8,7 +7,7 @@ import { launcherSystem } from './services/launcherService';
 interface DashboardProps {
   mode: OperationalMode;
   session: SessionInfo;
-  stats: PiStats | null;
+  stats: CoreStats | null;
   settings: AppSettings;
   terminalHistory: string[];
   onHandshake: (ip: string, user: string, pass: string, port: number) => void;

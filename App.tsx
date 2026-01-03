@@ -6,14 +6,15 @@ import {
   LogEntry, 
   LogLevel, 
   LogType, 
-  PiStats, 
+  CoreStats, 
   NeuralNetworkProvider, 
   NeuralNetworkConfig, 
   AppSettings, 
-  Launcher
+  Launcher,
+  Platform
 } from './types';
-import Dashboard from './Dashboard';
-import PiStatsView from './components/PiStatsView';
+import Dashboard from './components/Dashboard';
+import CoreStatsView from './components/CoreStatsView';
 import TelemetryGraphs from './components/TelemetryGraphs';
 import Toolkit from './components/Toolkit';
 import History from './components/History';
@@ -29,6 +30,7 @@ import { launcherSystem } from './services/launcherService';
 import { serverService } from './services/serverService';
 import { PROBE_CONTRACTS } from './services/probeContracts';
 import { HistoryStorage } from './services/historyStorage';
+import { sessionManager } from './services/sessionManager';
 
 const SETTINGS_KEY = 'neural_sentinel_app_settings';
 
@@ -59,13 +61,14 @@ const FROG_ASCII = `⠀⠀⠀⢀⣠⠤⠶⠖⠒⠒⠶⠦⠤⣄⠀⠀⠀⣀⡤⠤
 ⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢠⡾⢷⡄⠀⠀⠀⠀⠉⠙⠯⠀⠀⡴⠋⠀⢠⠟⠀⠀⢹⡄`;
 
 const App: React.FC = () => {
-  const [mode, setMode] = useState<OperationalMode>(OperationalMode.SIMULATED);
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'telemetry' | 'toolkit' | 'pi_stats' | 'history' | 'admin'>('dashboard');
+  const [mode, setMode] = useState<OperationalMode>(OperationalMode.OFFLINE);
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'telemetry' | 'toolkit' | 'core_stats' | 'history' | 'admin'>('dashboard');
   const [activeLogTab, setActiveLogTab] = useState<LogType>('neural');
   const [unreadLogs, setUnreadLogs] = useState<Record<LogType, boolean>>({ neural: false, console: false, kernel: false, system: false });
   const [showInventory, setShowInventory] = useState(false);
   const [showConfig, setShowConfig] = useState(false);
-  const [piStats, setPiStats] = useState<PiStats | null>(null);
+  const [showMobileMenu, setShowMobileMenu] = useState(false);
+  const [coreStats, setCoreStats] = useState<CoreStats | null>(null);
   const [activeTelemetry, setActiveTelemetry] = useState<Set<string>>(new Set(['cpu']));
   
   const [terminalHistory, setTerminalHistory] = useState<string[]>([]);
@@ -87,17 +90,20 @@ const App: React.FC = () => {
       maxCoreCharges: 5,
       maxNeuralCharges: 5,
       probeLaunchers: {
-        'GLOBAL_SYSTEM_AUDIT': 'std-core',
+        'GLOBAL_SYSTEM_PROBE': 'std-core',
         'HANDSHAKE_CORE': 'std-core',
         'ADAPTER_HUB': 'std-core',
-        'TERMINAL_COMMAND_AUDIT': 'std-core',
+        'CONSOLE_DATA_PROBE': 'std-core',
         'NODE_DIAGNOSTICS': 'std-core',
-        'PROCESS_AUDIT': 'std-core',
+        'PROCESS_PROBE': 'std-core',
         'RSSI_REPORT': 'std-core',
         'SESSION_ARCHIVE': 'std-core',
         'LOG_AUDIT': 'std-core',
         'brain_tooltip': 'std-neural'
-      }
+      },
+      telemetryEnabled: true,
+      neuralUplinkEnabled: true,
+      platform: Platform.LINUX
     };
   });
 
@@ -126,12 +132,12 @@ const App: React.FC = () => {
   const [session, setSession] = useState<SessionInfo>({
     id: Math.random().toString(36).substring(7).toUpperCase(),
     startTime: new Date().toISOString(),
-    mode: OperationalMode.SIMULATED,
+    mode: OperationalMode.OFFLINE,
     targetIp: null,
     status: 'IDLE'
   });
 
-  const currentAccent = mode === OperationalMode.REAL ? (session.status === 'ACTIVE' ? '#22c55e' : '#ff3e3e') : '#00f2ff';
+  const currentAccent = mode === OperationalMode.REAL ? (session.status === 'ACTIVE' ? '#22c55e' : '#ff3e3e') : '#52525b';
 
   const addLog = useCallback((msg: string, level: LogLevel = LogLevel.INFO, type: LogType = 'neural', metadata?: any) => {
     const entry: LogEntry = {
@@ -147,33 +153,64 @@ const App: React.FC = () => {
     if (activeLogTab !== type) setUnreadLogs(prev => ({ ...prev, [type]: true }));
   }, [mode, activeLogTab]);
 
+  // Initial Load - Check for persisted session
+  useEffect(() => {
+    const persisted = sessionManager.loadSession();
+    if (persisted) {
+      setSession(s => ({
+        ...s,
+        targetIp: persisted.ip,
+        authHash: persisted.authHash,
+        status: 'ACTIVE' // Optimistically set active to start polling
+      }));
+      setMode(OperationalMode.REAL);
+      addLog(`SESSION RESTORED: ${persisted.user}@${persisted.ip}`, LogLevel.SYSTEM, 'system');
+    }
+  }, [addLog]);
+
+  const getEffectiveTarget = useCallback(() => {
+    if (settings.platform === Platform.WINDOWS) return '127.0.0.1';
+    return session.targetIp;
+  }, [settings.platform, session.targetIp]);
+
   useEffect(() => {
     const heartbeat = setInterval(async () => {
-      if (mode === OperationalMode.REAL && session.targetIp) {
+      // Respect Telemetry Enabled Flag
+      if (!settings.telemetryEnabled) return;
+
+      const target = getEffectiveTarget();
+      // If Windows, assume local polling even if session.targetIp is null (treating as local agent)
+      if ((mode === OperationalMode.REAL && target) || settings.platform === Platform.WINDOWS) {
         try {
-          const res = await fetch(`http://${session.targetIp}:5050/stats`, { signal: AbortSignal.timeout(3000) });
+          const host = target || '127.0.0.1';
+          const res = await fetch(`http://${host}:5050/stats`, { signal: AbortSignal.timeout(3000) });
           const stats = await res.json();
-          setPiStats(stats);
+          setCoreStats(stats);
           setSession(s => ({ ...s, status: 'ACTIVE' }));
         } catch {
           setSession(s => ({ ...s, status: 'TERMINATED' }));
-          setPiStats(null);
+          setCoreStats(null);
         }
-      } else if (mode === OperationalMode.SIMULATED) {
-        setPiStats({
-          cpu: { usage: 10 + Math.random() * 20, temp: 40 + Math.random() * 10, load: [0.5, 0.3, 0.1], cores: 4 },
-          memory: { usage: 40 + Math.random() * 5, used: 1.5, total: 4.0 },
-          system: { hostname: 'kali-sim-node', uptime: 3600, osName: 'Kali Linux' },
-          network: { inRate: 12, outRate: 5, interfaces: {} },
-          processes: { total: 120, topByCpu: [] }
-        });
-      }
+      } 
     }, settings.pollInterval * 1000);
     return () => clearInterval(heartbeat);
-  }, [mode, session.targetIp, settings.pollInterval]);
+  }, [mode, getEffectiveTarget, settings.pollInterval, settings.telemetryEnabled, settings.platform]);
 
   const handleNeuralProbe = async (panelName: string, metrics: any) => {
     if (processingId) return;
+    
+    const isMainProbe = panelName === 'GLOBAL_SYSTEM_PROBE';
+    
+    if (isMainProbe && !settings.telemetryEnabled) {
+      addLog(`PROBE_ABORTED: Service Link (Telemetry) is disabled.`, LogLevel.WARNING, 'neural');
+      return;
+    }
+
+    if (!settings.neuralUplinkEnabled && !isMainProbe) { 
+        addLog(`PROBE_ABORTED: Neural Uplink is disabled.`, LogLevel.WARNING, 'neural');
+        return;
+    }
+
     const contract = PROBE_CONTRACTS[panelName] || PROBE_CONTRACTS['LOG_AUDIT'];
     const launcherId = settings.probeLaunchers[panelName] || 'std-core';
     if (!serverService.validateProbe(launcherId)) {
@@ -183,8 +220,7 @@ const App: React.FC = () => {
     setProcessingId(panelName);
 
     const history = contract?.isDataProbe ? HistoryStorage.getCSV('stats', 'CPU,MEM,TEMP') : '';
-    // Reinforced instruction to ensure valid JSON with required fields for Dashboard status
-    const systemInstruction = `You are a professional Kali Linux SOC analyst. Analyze the provided telemetry data.
+    const systemInstruction = `You are a professional ${settings.platform} SOC analyst. Analyze the provided probe data.
 RESPONSE FORMAT:
 You must return a single valid JSON object. Do not include any markdown formatting.
 The JSON object must have exactly these fields:
@@ -194,10 +230,13 @@ The JSON object must have exactly these fields:
   "recommendation": "A clear, actionable next step for the operator.",
   "threatLevel": "LOW", "MEDIUM", "HIGH", or "CRITICAL"
 }`;
-    const response = await aiTransport.fetch(neuralConfig, systemInstruction, JSON.stringify(contract.buildPayload(metrics, history)), !!contract?.isDataProbe);
+    // Inject platform context into metrics payload
+    const platformMetrics = { ...metrics, platform: settings.platform };
+    
+    const response = await aiTransport.fetch(neuralConfig, systemInstruction, JSON.stringify(contract.buildPayload(platformMetrics, history)), !!contract?.isDataProbe);
     
     if (response.success) {
-      if (panelName === 'GLOBAL_SYSTEM_AUDIT') setLatestCoreProbeResult(response.data);
+      if (panelName === 'GLOBAL_SYSTEM_PROBE') setLatestCoreProbeResult(response.data);
       addLog(`Probe executed: ${panelName}`, LogLevel.SUCCESS, 'neural', { 
         type: 'PROBE_RESULT', title: panelName, data: response.data, requestBody: response.requestBody, launcherId 
       });
@@ -209,14 +248,19 @@ The JSON object must have exactly these fields:
 
   const handleBrainRequest = async (id: string, type: string, metrics: any) => {
     if (processingId) return;
+    if (!settings.neuralUplinkEnabled) {
+      addLog(`NEURAL_ABORTED: Neural Uplink disabled.`, LogLevel.WARNING, 'neural');
+      return;
+    }
+
     const launcherId = settings.probeLaunchers['brain_tooltip'] || 'std-neural';
     if (!serverService.validateProbe(launcherId)) {
       addLog(`NEURAL_REJECTED: ${launcherId} empty.`, LogLevel.ERROR, 'neural');
       return;
     }
     setProcessingId(id);
-    const systemInstruction = `Inference engine. Provide concise security insight. JSON: {"description": "...", "recommendation": "..."}`;
-    const response = await aiTransport.fetch(neuralConfig, systemInstruction, JSON.stringify({id, metrics}), false);
+    const systemInstruction = `Inference engine. Provide concise security insight for ${settings.platform}. JSON: {"description": "...", "recommendation": "..."}`;
+    const response = await aiTransport.fetch(neuralConfig, systemInstruction, JSON.stringify({id, metrics, platform: settings.platform}), false);
     if (response.success) {
       addLog(`Inference Sync: ${id}`, LogLevel.NEURAL, 'neural', {
         type: 'PROBE_RESULT', title: `Brain: ${id}`, data: response.data, requestBody: response.requestBody, launcherId
@@ -230,24 +274,36 @@ The JSON object must have exactly these fields:
     addLog(`INITIATING HANDSHAKE: ${user}@${ip}:${port}`, LogLevel.SYSTEM, 'system');
     setSession(s => ({ ...s, targetIp: ip, status: 'IDLE' }));
     
-    if (mode === OperationalMode.SIMULATED) {
-      setTimeout(() => {
-        setSession(s => ({ ...s, status: 'ACTIVE' }));
-        addLog(`HANDSHAKE ESTABLISHED: Link stable.`, LogLevel.SUCCESS, 'system');
-      }, 1200);
-    }
+    // Simulate auth token generation (secure storage mock)
+    const token = btoa(`${user}:${Date.now()}`);
+    sessionManager.saveSession(ip, user, token, port);
+    setMode(OperationalMode.REAL);
+    
+    // Immediate activation attempt
+    setSession(s => ({ ...s, status: 'ACTIVE', authHash: token }));
+    addLog(`HANDSHAKE ESTABLISHED: Link stable.`, LogLevel.SUCCESS, 'system');
+  };
+
+  const handleDisconnect = () => {
+    setSession(s => ({ ...s, targetIp: null, status: 'IDLE', authHash: undefined }));
+    setCoreStats(null);
+    setMode(OperationalMode.OFFLINE);
+    sessionManager.clearSession();
+    addLog(`SESSION TERMINATED: Handshake dissolved.`, LogLevel.WARNING, 'system');
   };
 
   const handleCommand = async (cmd: string) => {
     addLog(`$ ${cmd}`, LogLevel.COMMAND, 'console');
-    setTerminalHistory(prev => [...prev, `root@kali:~# ${cmd}`]);
-    if (mode === OperationalMode.SIMULATED) {
-      setTerminalHistory(prev => [...prev, `[*] Identifying execution vector...`, `[+] Task transmitted to node buffer.`]);
-    } else if (session.targetIp) {
+    const prompt = settings.platform === Platform.WINDOWS ? 'PS C:\\Users\\Admin>' : 'root@kali:~#';
+    setTerminalHistory(prev => [...prev, `${prompt} ${cmd}`]);
+    
+    const target = getEffectiveTarget();
+    if (target || settings.platform === Platform.WINDOWS) {
+      const host = target || '127.0.0.1';
       try {
-        const res = await fetch(`http://${session.targetIp}:5050/exec`, {
+        const res = await fetch(`http://${host}:5050/exec`, {
           method: 'POST',
-          body: JSON.stringify({ command: cmd }),
+          body: JSON.stringify({ command: cmd, platform: settings.platform }),
           headers: { 'Content-Type': 'application/json' }
         });
         const data = await res.json();
@@ -255,6 +311,8 @@ The JSON object must have exactly these fields:
       } catch (e: any) {
         setTerminalHistory(prev => [...prev, `[ERROR] COMMS_ERR: ${e.message}`]);
       }
+    } else {
+       setTerminalHistory(prev => [...prev, `[ERROR] NO_LINK: Target unreachable.`]);
     }
   };
 
@@ -287,37 +345,72 @@ The JSON object must have exactly these fields:
     .map(id => launcherSystem.getById(id))
     .filter((l): l is Launcher => l !== undefined);
 
+  // Link Status Helpers
+  const isNeuralAvailable = true; // Always available
+  const isServiceAvailable = session.status === 'ACTIVE';
+
   return (
     <div className={`flex flex-col h-screen overflow-hidden ${mode === OperationalMode.REAL ? 'mode-real' : 'mode-sim'}`}>
-      <header className="h-24 border-b border-[#1a1e24] bg-[#050608] px-8 flex items-center justify-between z-50 shrink-0">
-        <div className="flex items-center gap-10">
-          <NeuralCore state={mode === OperationalMode.REAL ? (session.status === 'ACTIVE' ? 'connected' : 'disconnected') : 'simulated'} />
+      <header className="h-24 border-b border-[#1a1e24] bg-[#050608] px-4 md:px-8 flex items-center justify-between z-50 shrink-0">
+        <div className="flex items-center gap-4 md:gap-10">
+          <div className="hidden md:block">
+            <NeuralCore state={session.status === 'ACTIVE' ? 'connected' : 'disconnected'} />
+          </div>
+          {/* Mobile Neural Core Replacement */}
+          <div className="md:hidden">
+             <div className={`w-8 h-8 rounded-full ${session.status === 'ACTIVE' ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`}></div>
+          </div>
+
           <div className="flex flex-col justify-center">
-            <h1 className="text-2xl font-black tracking-[0.6em] text-white uppercase chromatic-aberration ml-4">Neural Sentinel</h1>
-            {/* RESTORED STATUS DIV */}
-            <div className="flex gap-6 mt-1 items-center ml-4">
-              <span className="text-[10px] font-black uppercase tracking-widest" style={{ color: currentAccent }}>{mode} PROTOCOL</span>
-              <div className="flex gap-4 ml-4">
-                <Tooltip name="NEURAL_UPLINK" source="AI" desc="Active synaptic link to the Neural Engine. Click to toggle visual distortion effects.">
-                  <div onClick={() => setSettings(s => ({...s, globalDistortion: !s.globalDistortion}))} className="block cursor-help">
-                    <div className={`w-4 h-4 rounded-full border border-black cursor-pointer transition-all ${settings.globalDistortion ? 'bg-purple-500 glow-purple' : 'bg-zinc-800'}`}></div>
+            <h1 className="text-lg md:text-2xl font-black tracking-[0.4em] md:tracking-[0.6em] text-white uppercase chromatic-aberration ml-2 md:ml-4">Sentinel</h1>
+            {/* STATUS DIV WITH INTERACTIVE LINKS */}
+            <div className="flex gap-4 md:gap-6 mt-1 items-center ml-2 md:ml-4">
+              <span className="text-[8px] md:text-[10px] font-black uppercase tracking-widest hidden md:block" style={{ color: currentAccent }}>{mode} PROTOCOL</span>
+              <div className="flex gap-4 ml-0 md:ml-4">
+                
+                {/* Neural Uplink - TEAL when Enabled */}
+                <Tooltip 
+                  name="NEURAL_UPLINK" 
+                  source={settings.platform} 
+                  desc={`STATUS: ${settings.neuralUplinkEnabled ? 'ACTIVE' : 'DISABLED'}\nPLATFORM: ${settings.platform}\nCHARGES: ${serverService.getCharges(settings.probeLaunchers['brain_tooltip'] || 'std-neural')}`}
+                >
+                  <div onClick={() => setSettings(s => ({...s, neuralUplinkEnabled: !s.neuralUplinkEnabled, globalDistortion: !s.neuralUplinkEnabled}))} className="block cursor-pointer relative group">
+                    <div className={`w-4 h-4 rounded-full border border-black transition-all ${settings.neuralUplinkEnabled ? 'bg-teal-500 glow-teal' : 'bg-zinc-800'}`}></div>
+                    {/* Rotating Indicator when Disabled but Available */}
+                    {!settings.neuralUplinkEnabled && isNeuralAvailable && (
+                       <div className="absolute -inset-1 border border-transparent border-t-teal-500 rounded-full animate-spin opacity-50"></div>
+                    )}
                   </div>
                 </Tooltip>
-                <Tooltip name="SERVICE_LINK" source="SYSTEM" desc="Telemetry Daemon heartbeat status. Click to toggle background ASCII Watcher visibility.">
-                  <div onClick={() => setSettings(s => ({...s, showAsciiBg: !s.showAsciiBg}))} className="block cursor-help">
-                    <div className={`w-4 h-4 rounded-full border border-black cursor-pointer transition-all ${session.status === 'ACTIVE' || mode === OperationalMode.SIMULATED ? 'bg-teal-500 glow-teal' : 'bg-red-500'}`}></div>
+
+                {/* Service Link - PURPLE when Enabled */}
+                <Tooltip 
+                  name="SERVICE_LINK" 
+                  source={settings.platform} 
+                  desc={`STATUS: ${settings.telemetryEnabled ? 'ACTIVE' : 'DISABLED'}\nPLATFORM: ${settings.platform}\nAVAILABILITY: ${session.status}\n${settings.telemetryEnabled ? 'Telemetry stream active.' : 'Telemetry stream paused.'}`}
+                >
+                  <div onClick={() => setSettings(s => ({...s, telemetryEnabled: !s.telemetryEnabled}))} className="block cursor-pointer relative group">
+                    <div className={`w-4 h-4 rounded-full border border-black transition-all ${
+                      settings.telemetryEnabled && isServiceAvailable ? 'bg-purple-500 glow-purple' : 
+                      (!isServiceAvailable ? 'bg-red-500' : 'bg-zinc-800') // Grey if disabled but available, Red if unavailable
+                    }`}></div>
+                     {/* Rotating Indicator when Disabled but Available */}
+                    {!settings.telemetryEnabled && isServiceAvailable && (
+                       <div className="absolute -inset-1 border border-transparent border-t-purple-500 rounded-full animate-spin opacity-50"></div>
+                    )}
                   </div>
                 </Tooltip>
+
               </div>
-              <span className="text-[10px] font-black uppercase tracking-widest text-zinc-500 border-l border-zinc-900 pl-4">
-                {piStats?.system?.hostname ? `KALI@${piStats.system.hostname}` : 'KALI@OFFLINE-SENTINEL'}
+              <span className="text-[8px] md:text-[10px] font-black uppercase tracking-widest text-zinc-500 border-l border-zinc-900 pl-4 hidden md:block">
+                {coreStats?.system?.hostname ? `HOST@${coreStats.system.hostname}` : 'HOST@OFFLINE'}
               </span>
             </div>
           </div>
         </div>
         
-        {/* LAUNCHERS HEADER */}
-        <div className="flex items-center gap-6 flex-1 justify-center px-10">
+        {/* LAUNCHERS HEADER - Hidden on mobile */}
+        <div className="hidden md:flex items-center gap-6 flex-1 justify-center px-10">
           {activeLaunchersList.map(l => {
             const state = chargesState[l.id] || { current: serverService.getCharges(l.id), progress: 0 };
             return (
@@ -353,32 +446,53 @@ The JSON object must have exactly these fields:
           })}
         </div>
 
-        <div className="flex items-center gap-8">
-           <button onClick={() => setShowInventory(true)} className="p-2 text-zinc-600 hover:text-white transition-colors">
+        <div className="flex items-center gap-4 md:gap-8">
+           <button onClick={() => setShowMobileMenu(!showMobileMenu)} className="md:hidden p-2 text-zinc-600 hover:text-white">
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16" /></svg>
+           </button>
+           <button onClick={() => setShowInventory(true)} className="hidden md:block p-2 text-zinc-600 hover:text-white transition-colors">
               <svg className="w-8 h-8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
            </button>
            <button onClick={() => setShowConfig(true)} className="p-2 text-zinc-600 hover:text-white transition-colors">
               <svg className="w-7 h-7" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 15a3 3 0 100-6 3 3 0 000 6z"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
            </button>
-           <button onClick={() => setMode(m => m === OperationalMode.REAL ? OperationalMode.SIMULATED : OperationalMode.REAL)} className="w-16 h-8 border border-zinc-900 bg-black p-1 flex items-center">
+           <button onClick={() => setMode(m => m === OperationalMode.REAL ? OperationalMode.OFFLINE : OperationalMode.REAL)} className="hidden md:flex w-16 h-8 border border-zinc-900 bg-black p-1 items-center">
               <div className={`w-6 h-6 transition-all ${mode === OperationalMode.REAL ? 'translate-x-8' : ''}`} style={{ backgroundColor: currentAccent }}></div>
            </button>
         </div>
       </header>
 
-      <main className="flex-1 flex overflow-hidden">
-        <div className="w-[70%] flex flex-col border-r border-[#1a1e24] bg-[#020406]">
-          <nav className="h-14 border-b border-[#1a1e24] flex items-center justify-center gap-12 bg-[#0a0c0f]">
-            {['dashboard', 'telemetry', 'pi_stats', 'toolkit', 'history', 'admin'].map(tab => (
+      {/* Mobile Menu */}
+      {showMobileMenu && (
+        <div className="md:hidden absolute top-24 left-0 w-full bg-[#0a0c0f] border-b border-zinc-900 z-40 p-4 animate-in slide-in-from-top-10">
+           <div className="flex flex-col gap-4">
+             {['dashboard', 'telemetry', 'core_stats', 'toolkit', 'history', 'admin'].map(tab => (
+               <button 
+                 key={tab} 
+                 onClick={() => { setActiveTab(tab as any); setShowMobileMenu(false); }}
+                 className={`text-left text-[12px] font-black uppercase tracking-[0.2em] py-2 border-b border-zinc-900 ${activeTab === tab ? 'text-teal-500' : 'text-zinc-600'}`}
+               >
+                 {tab.replace('_', ' ')}
+               </button>
+             ))}
+             <button onClick={() => setShowInventory(true)} className="text-left text-[12px] font-black uppercase tracking-[0.2em] py-2 border-b border-zinc-900 text-purple-500">INVENTORY</button>
+           </div>
+        </div>
+      )}
+
+      <main className="flex-1 flex overflow-hidden flex-col md:flex-row">
+        <div className={`w-full md:w-[70%] flex flex-col border-r border-[#1a1e24] bg-[#020406] ${showMobileMenu ? 'opacity-50' : 'opacity-100'} transition-opacity`}>
+          <nav className="hidden md:flex h-14 border-b border-[#1a1e24] items-center justify-center gap-12 bg-[#0a0c0f]">
+            {['dashboard', 'telemetry', 'core_stats', 'toolkit', 'history', 'admin'].map(tab => (
               <button key={tab} onClick={() => setActiveTab(tab as any)} className={`text-[13px] font-black uppercase tracking-[0.2em] relative h-full flex items-center ${activeTab === tab ? 'text-white' : 'text-zinc-600'}`}>
                 {tab.replace('_', ' ')}
                 {activeTab === tab && <div className="absolute bottom-0 left-0 right-0 h-1 bg-teal-500"></div>}
               </button>
             ))}
           </nav>
-          <div className="flex-1 overflow-y-auto p-10 no-scroll">
-            {activeTab === 'dashboard' && <Dashboard stats={piStats} mode={mode} session={session} settings={settings} terminalHistory={terminalHistory} onHandshake={handleHandshake} onDisconnect={() => setSession(s => ({...s, targetIp: null, status: 'IDLE'}))} onLog={addLog} onBrainClick={handleBrainRequest} onProbeClick={handleNeuralProbe} onProbeInfo={(title, payload) => setProbeContextModal({title, payload})} onLauncherSelect={(id, type) => setLauncherPickerModal({panelId: id, type})} onAdapterCommand={handleCommand} onRefresh={() => {}} processingId={processingId} latestCoreProbeResult={latestCoreProbeResult} activeTelemetry={activeTelemetry} />}
-            {activeTab === 'pi_stats' && <PiStatsView stats={piStats} mode={mode} timeframe="1m" settings={settings} onProbeClick={handleNeuralProbe} onBrainClick={handleBrainRequest} onProbeInfo={(title, payload) => setProbeContextModal({title, payload})} onLauncherSelect={(id, type) => setLauncherPickerModal({panelId: id, type})} activeTelemetry={activeTelemetry} setActiveTelemetry={setActiveTelemetry} />}
+          <div className="flex-1 overflow-y-auto p-4 md:p-10 no-scroll">
+            {activeTab === 'dashboard' && <Dashboard stats={coreStats} mode={mode} session={session} settings={settings} terminalHistory={terminalHistory} onHandshake={handleHandshake} onDisconnect={handleDisconnect} onLog={addLog} onBrainClick={handleBrainRequest} onProbeClick={handleNeuralProbe} onProbeInfo={(title, payload) => setProbeContextModal({title, payload})} onLauncherSelect={(id, type) => setLauncherPickerModal({panelId: id, type})} onAdapterCommand={handleCommand} onRefresh={() => {}} processingId={processingId} latestCoreProbeResult={latestCoreProbeResult} activeTelemetry={activeTelemetry} />}
+            {activeTab === 'core_stats' && <CoreStatsView stats={coreStats} mode={mode} timeframe="1m" settings={settings} onProbeClick={handleNeuralProbe} onBrainClick={handleBrainRequest} onProbeInfo={(title, payload) => setProbeContextModal({title, payload})} onLauncherSelect={(id, type) => setLauncherPickerModal({panelId: id, type})} activeTelemetry={activeTelemetry} setActiveTelemetry={setActiveTelemetry} />}
             {activeTab === 'telemetry' && <TelemetryGraphs timeframe="1m" isSimulated={mode === OperationalMode.SIMULATED} isConnected={!!session.targetIp} onProbe={handleNeuralProbe} onProbeInfo={(title, payload) => setProbeContextModal({title, payload})} onBrainClick={handleBrainRequest} />}
             {activeTab === 'history' && <History data={historyData} onProbe={handleNeuralProbe} onProbeInfo={(title, payload) => setProbeContextModal({title, payload})} onBrainClick={handleBrainRequest} />}
             {activeTab === 'admin' && <AdminPanel />}
@@ -386,11 +500,11 @@ The JSON object must have exactly these fields:
         </div>
         
         {/* LOG PANEL WITH WATCHER AND PROBES */}
-        <div className="w-[30%] flex flex-col bg-[#020406] border-l border-[#1a1e24] overflow-hidden relative">
-          <div className="h-14 border-b border-zinc-900 px-4 flex items-center justify-between bg-[#0a0c0f] z-10">
-             <div className="flex h-full">
+        <div className="w-full md:w-[30%] flex flex-col bg-[#020406] border-t md:border-t-0 md:border-l border-[#1a1e24] overflow-hidden relative h-[300px] md:h-auto">
+          <div className="h-10 md:h-14 border-b border-zinc-900 px-4 flex items-center justify-between bg-[#0a0c0f] z-10">
+             <div className="flex h-full overflow-x-auto no-scroll">
                {(['neural', 'console', 'kernel', 'system'] as LogType[]).map(lt => (
-                 <button key={lt} onClick={() => { setActiveLogTab(lt); setUnreadLogs(v => ({...v, [lt]: false})); }} className={`px-4 text-[10px] font-black uppercase tracking-widest relative h-full ${activeLogTab === lt ? 'text-white' : 'text-zinc-700'} ${unreadLogs[lt] ? 'animate-pulse text-teal-400' : ''}`}>
+                 <button key={lt} onClick={() => { setActiveLogTab(lt); setUnreadLogs(v => ({...v, [lt]: false})); }} className={`px-2 md:px-4 text-[9px] md:text-[10px] font-black uppercase tracking-widest relative h-full whitespace-nowrap ${activeLogTab === lt ? 'text-white' : 'text-zinc-700'} ${unreadLogs[lt] ? 'tab-flash' : ''}`}>
                    {lt}
                    {activeLogTab === lt && <div className="absolute bottom-0 left-2 right-2 h-0.5 bg-purple-500"></div>}
                  </button>
@@ -414,13 +528,13 @@ The JSON object must have exactly these fields:
              {/* WATCHER BACKGROUND FLASH - Only shows when processing OR toggled via settings.showAsciiBg AND neural tab */}
              {(processingId || (settings.showAsciiBg && !processingId)) && activeLogTab === 'neural' && (
                 <div className={`absolute inset-0 flex items-center justify-center pointer-events-none z-0 overflow-hidden ${!processingId ? 'opacity-20' : ''}`}>
-                  <pre className="text-[6px] leading-[1] font-bold select-none neural-bg-flash whitespace-pre text-center" style={{ color: settings.frogColor, opacity: settings.frogIntensity }}>
+                  <pre className="text-[4px] md:text-[6px] leading-[1] font-bold select-none neural-bg-flash whitespace-pre text-center" style={{ color: settings.frogColor, opacity: settings.frogIntensity }}>
                       {FROG_ASCII}
                   </pre>
                 </div>
              )}
 
-             <div className="relative z-10 flex-1 overflow-y-auto p-6 space-y-4 no-scroll font-mono text-[11px]">
+             <div className="relative z-10 flex-1 overflow-y-auto p-4 md:p-6 space-y-4 no-scroll font-mono text-[10px] md:text-[11px]">
                {(activeLogTab === 'neural' ? neuralLogs : activeLogTab === 'console' ? consoleLogs : activeLogTab === 'kernel' ? kernelLogsState : systemLogs).map(log => {
                  const isAiLog = log.metadata?.type === 'PROBE_RESULT';
                  const isWatcher = log.metadata?.type === 'WATCHER_SYNC';
@@ -466,12 +580,12 @@ The JSON object must have exactly these fields:
                         {isAiLog && log.metadata?.requestBody && (
                           <button 
                             onClick={() => setProbeContextModal({ 
-                              title: `FULL_NEURAL_AUDIT: ${log.metadata?.title}`, 
+                              title: `FULL_NEURAL_PROBE: ${log.metadata?.title}`, 
                               payload: { REQUEST: log.metadata.requestBody, RESPONSE: log.metadata.data } 
                             })}
                             className="px-2 py-0.5 bg-purple-500/20 hover:bg-purple-500 border border-purple-500/50 rounded-[1px] text-[7px] font-black text-purple-400 transition-all uppercase"
                           >
-                            Audit
+                            Probe
                           </button>
                         )}
                       </div>
@@ -479,7 +593,7 @@ The JSON object must have exactly these fields:
                         <span>{log.timestamp}</span> 
                       </div>
                       <pre 
-                         className="whitespace-pre-wrap text-[11px]"
+                         className="whitespace-pre-wrap"
                          style={{ 
                            color: isWatcher ? settings.frogColor : (isAiLog ? accentColor : undefined),
                            opacity: isWatcher ? settings.frogIntensity : 1,
@@ -522,6 +636,26 @@ The JSON object must have exactly these fields:
            <div className="space-y-4">
              <label className="text-[9px] text-zinc-700 uppercase font-black tracking-widest">Model_Vector</label>
              <input value={neuralConfig.model} onChange={e => setNeuralConfig(c => ({...c, model: e.target.value}))} className="w-full bg-black border border-zinc-900 p-3 text-[11px] font-mono text-white outline-none focus:border-teal-500/30" />
+           </div>
+
+           {neuralConfig.provider === NeuralNetworkProvider.LOCAL && (
+            <div className="space-y-4">
+               <label className="text-[9px] text-zinc-700 uppercase font-black tracking-widest">Local_Endpoint</label>
+               <input 
+                 value={neuralConfig.endpoint} 
+                 onChange={e => setNeuralConfig(c => ({...c, endpoint: e.target.value}))} 
+                 className="w-full bg-black border border-zinc-900 p-3 text-[11px] font-mono text-white outline-none focus:border-teal-500/30" 
+                 placeholder="http://localhost:1234/v1"
+               />
+            </div>
+           )}
+
+           <div className="space-y-4 p-6 border border-zinc-900 bg-black/40">
+              <h3 className="text-[10px] font-black text-zinc-500 uppercase tracking-widest border-b border-zinc-900 pb-2 mb-4">Platform_Target_Config</h3>
+              <div className="grid grid-cols-2 gap-4">
+                 <button onClick={() => setSettings(s => ({...s, platform: Platform.LINUX}))} className={`p-4 border ${settings.platform === Platform.LINUX ? 'border-teal-500 text-teal-400 bg-teal-500/10' : 'border-zinc-900 text-zinc-700'} font-black text-[10px] uppercase`}>TARGET: KALI_LINUX</button>
+                 <button onClick={() => setSettings(s => ({...s, platform: Platform.WINDOWS}))} className={`p-4 border ${settings.platform === Platform.WINDOWS ? 'border-teal-500 text-teal-400 bg-teal-500/10' : 'border-zinc-900 text-zinc-700'} font-black text-[10px] uppercase`}>TARGET: WINDOWS_NT</button>
+              </div>
            </div>
         </div>
       </Modal>

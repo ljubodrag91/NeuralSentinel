@@ -1,7 +1,8 @@
+
 import React, { useState, useEffect, useMemo } from 'react';
 import Card from './common/Card';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, ResponsiveContainer, Tooltip as RechartsTooltip, BarChart, Bar } from 'recharts';
-import { Timeframe } from '../types';
+import { Timeframe, OperationalMode } from '../types';
 import Tooltip from './common/Tooltip';
 import Modal from './common/Modal';
 
@@ -36,27 +37,19 @@ const TelemetryGraphs: React.FC<TelemetryProps> = ({ onProbe, onProbeInfo, onBra
     setActiveMetrics(next);
   };
 
-  const isDataActive = isSimulated || isConnected;
-  const sourceState = !isDataActive && !isSimulated ? 'OFFLINE' : (isSimulated ? 'SIMULATED' : 'REAL');
+  const isDataActive = isConnected; 
+  const sourceState = isConnected ? 'REAL' : 'OFFLINE';
 
   useEffect(() => {
     if (!isDataActive) {
       setRssiData([]);
       return;
     }
-
-    const interval = setInterval(() => {
-      setRssiData(prev => {
-        const val = Math.floor(Math.random() * -30 - 45);
-        const entry = { time: new Date().toLocaleTimeString(), val };
-        return [...prev, entry].slice(-windowSize);
-      });
-    }, 1000);
-    return () => clearInterval(interval);
+    // Real data injection point (currently just placeholder for parent prop)
   }, [isDataActive, windowSize]);
 
   const currentRssi = rssiData.length > 0 ? rssiData[rssiData.length - 1].val : -99;
-  const themeColor = isSimulated ? '#0088ff' : '#00ffd5';
+  const themeColor = '#00ffd5';
 
   return (
     <div className="space-y-10 animate-in fade-in duration-500 pb-20 no-scroll h-full">
@@ -140,17 +133,17 @@ const TelemetryGraphs: React.FC<TelemetryProps> = ({ onProbe, onProbeInfo, onBra
           <section className="space-y-2">
             <h4 className="text-teal-500 font-black uppercase text-[12px]">Data Fetch Strategy</h4>
             <p className="text-zinc-400 text-[11px] leading-relaxed">
-              Telemetry is gathered via a custom Sentinel Heartbeat daemon running on port 5050 of the remote Kali node. 
+              Telemetry is gathered via a custom Sentinel Heartbeat daemon running on port 5050 of the remote node. 
               The frontend polls this endpoint at the frequency defined in Global Settings.
             </p>
           </section>
           <section className="space-y-2">
             <h4 className="text-teal-500 font-black uppercase text-[12px]">Source Interfaces</h4>
             <ul className="list-disc list-inside text-zinc-500 text-[10px] space-y-1">
-              <li><span className="text-zinc-300">CPU Metrics:</span> Parsed from <code className="bg-zinc-950 px-1">/proc/stat</code> and thermal zones.</li>
-              <li><span className="text-zinc-300">Memory:</span> Extracted from <code className="bg-zinc-950 px-1">/proc/meminfo</code> via <code className="bg-zinc-950 px-1">free</code> utility.</li>
-              <li><span className="text-zinc-300">RF Signal:</span> Captured using <code className="bg-zinc-950 px-1">iwconfig</code> and parsed for RSSI/Link Quality.</li>
-              <li><span className="text-zinc-300">Process List:</span> Snapshot taken from <code className="bg-zinc-950 px-1">ps aux</code> sorted by compute weight.</li>
+              <li><span className="text-zinc-300">CPU Metrics:</span> Parsed from <code className="bg-zinc-950 px-1">/proc/stat</code> (Linux) or WMI (Windows).</li>
+              <li><span className="text-zinc-300">Memory:</span> Extracted from system memory counters.</li>
+              <li><span className="text-zinc-300">RF Signal:</span> Captured using platform-specific wireless tools.</li>
+              <li><span className="text-zinc-300">Process List:</span> Snapshot taken from active process table sorted by compute weight.</li>
             </ul>
           </section>
         </div>

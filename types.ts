@@ -8,6 +8,11 @@ export enum OperationalMode {
   REAL = 'REAL'
 }
 
+export enum Platform {
+  LINUX = 'LINUX',
+  WINDOWS = 'WINDOWS'
+}
+
 export enum LogLevel {
   INFO = 'INFO',
   SUCCESS = 'SUCCESS',
@@ -43,58 +48,92 @@ export interface SessionInfo {
   mode: OperationalMode;
   targetIp: string | null;
   status: 'IDLE' | 'ACTIVE' | 'TERMINATED';
+  authHash?: string; // Ephemeral session token for persistence
 }
 
-export interface PiStats {
-  cpu?: {
+export interface CoreStats {
+  cpu: {
+    cpuCores: number;
+    cpuCoresPhysical: number;
+    cpuFreqCurrent: number;
+    cpuFreqMax: number;
+    cpuLoad1: number;
+    cpuLoad5: number;
+    cpuLoad15: number;
+    temperature: number;
     usage: number;
-    temp: number;
-    load: number[];
-    freqCurrent?: number;
-    freqMax?: number;
-    cores?: number;
   };
-  memory?: {
-    total: number;
-    used: number;
+  memory: {
+    ramTotal: number;
+    ramUsed: number;
+    ramFree: number;
+    ramAvailable: number;
     usage: number;
-    available?: number;
-    swapUsage?: number;
+    swapTotal: number;
+    swapUsed: number;
+    swapPercent: number;
   };
-  disk?: {
+  disk: {
     rootUsage: number;
-    readRate: number;
-    writeRate: number;
-    partitions?: any[];
-  };
-  network?: {
-    inRate: number;
-    outRate: number;
-    interfaces: Record<string, {
-      up: boolean;
-      ip: string;
-      rx: number;
-      tx: number;
-      speed?: number;
-      mac?: string[];
-      ipv4?: string[];
+    rootFreeGB: number;
+    rootTotalGB: number;
+    rootUsedGB: number;
+    readRateKB: number;
+    writeRateKB: number;
+    readTotalMB: number;
+    writeTotalMB: number;
+    partitions: Array<{
+      device: string;
+      mountpoint: string;
+      fstype: string;
+      total: number;
+      used: number;
+      free: number;
+      percent: number;
     }>;
   };
-  processes?: {
-    topByCpu: any[];
-    topByMemory: any[];
-    total: number;
+  network: {
+    inRateKB: number;
+    outRateKB: number;
+    inTotalMB: number;
+    outTotalMB: number;
+    connections: number;
+    packetsSent: number;
+    packetsRecv: number;
+    errorsIn: number;
+    errorsOut: number;
+    droppedIn: number;
+    droppedOut: number;
+    interfaces: Record<string, {
+      ipv4: string[];
+      ipv6: string[];
+      mac: string[];
+      isUp: boolean;
+      speed: number;
+    }>;
   };
-  sensors?: {
-    throttled?: string;
-    throttledInfo?: string[];
-    raw?: Record<string, number>;
+  processes: {
+    topByCpu: Array<{ pid: number; name: string; cpu_percent: number; memory_percent: number; username: string }>;
+    topByMemory: Array<{ pid: number; name: string; cpu_percent: number; memory_percent: number; username: string }>;
+    totalProcesses: number;
   };
-  system?: {
+  sensors: {
+    cpu_thermal_temp1: number;
+    [key: string]: number;
+  };
+  system: {
     hostname: string;
-    uptime: number;
     osName: string;
+    osVersion: string;
+    machine: string;
+    bootTime: number;
+    uptime: number;
   };
+  rates: {
+    sampleInterval: number;
+  };
+  timestamp: number;
+  datetime: string;
 }
 
 export enum NeuralNetworkProvider {
@@ -124,6 +163,9 @@ export interface AppSettings {
   maxNeuralCharges: number;
   // Per-probe launcher mappings
   probeLaunchers: Record<string, string>;
+  telemetryEnabled: boolean;
+  neuralUplinkEnabled: boolean;
+  platform: Platform;
 }
 
 export interface SmartTooltipData {

@@ -59,7 +59,7 @@ const Tooltip: React.FC<TooltipProps> = ({ name, unit, desc, source, rate, child
           ${unit ? `<div class="flex justify-between gap-6"><span class="text-zinc-600">UNIT:</span><span class="text-zinc-300">${unit}</span></div>` : ''}
           <div class="flex justify-between gap-6"><span class="text-zinc-600">SOURCE:</span><span class="${stateColor} font-bold">${source}</span></div>
           ${!isOffline && rate ? `<div class="flex justify-between gap-6"><span class="text-zinc-600">INTERVAL:</span><span class="text-zinc-400">${rate}</span></div>` : ''}
-          <div class="mt-2 text-[9px] text-zinc-500 leading-tight border-t border-zinc-900/40 pt-2 italic">
+          <div class="mt-2 text-[9px] text-zinc-500 leading-tight border-t border-zinc-900/40 pt-2 italic whitespace-pre-wrap">
             ${isOffline ? '[WARNING]: Node unreachable. Metric data stale or unavailable.' : (desc || 'Awaiting further neural telemetry analysis...')}
           </div>
         </div>
