@@ -650,7 +650,7 @@ const ScannerPanel: React.FC<ScannerPanelProps> = ({
                 </div>
             </div>
          )}
-      </OverlayModal>
+      </Modal>
 
       <Modal isOpen={showHistoryModal} onClose={() => setShowHistoryModal(false)} title="SCANNER_HISTORY_ARCHIVE" variant="blue">
          <div className="space-y-4">
@@ -677,7 +677,3 @@ const ScannerPanel: React.FC<ScannerPanelProps> = ({
 };
 
 export default ScannerPanel;
-
-// Internal utility to wrap Modal for secondary dialogs if needed, 
-// using the existing Modal component is preferred for consistency.
-const OverlayModal = Modal;
