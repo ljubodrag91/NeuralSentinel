@@ -16,9 +16,10 @@ export interface TransportResponse {
  * or contain trailing commas/comments.
  */
 function cleanAndParseJson(text: string): any {
+  if (!text) throw new Error("EMPTY_RESPONSE_BODY");
+
   // 1. Remove thinking tags or other XML-like tags often returned by models
   let cleaned = text.replace(/<thought>[\s\S]*?<\/thought>/g, "");
-  cleaned = cleaned.replace(/<|.*?|>/g, "");
   
   // 2. Remove markdown code blocks
   cleaned = cleaned.replace(/```json\s?|```/g, "").trim();
@@ -28,17 +29,14 @@ function cleanAndParseJson(text: string): any {
   const end = cleaned.lastIndexOf('}');
   
   if (start === -1 || end === -1) {
-    // If it's not JSON, we throw so the caller can decide what to do
     throw new Error("No valid JSON object found in response.");
   }
   
   const jsonString = cleaned.substring(start, end + 1);
   
   try {
-    // Attempt standard parse first
     return JSON.parse(jsonString);
   } catch (e) {
-    // If standard parse fails, try to handle trailing commas (common AI mistake)
     try {
       const fixTrailingCommas = jsonString.replace(/,\s*([\]}])/g, '$1');
       return JSON.parse(fixTrailingCommas);
@@ -54,34 +52,56 @@ export const aiTransport = {
     systemInstruction: string, 
     prompt: string, 
     isDataProbe: boolean,
-    tokenLimit: number = 2000 // Launcher attribute (Characters)
+    tokenLimit: number = 2000
   ): Promise<TransportResponse> {
     
-    // STRICT INPUT ENFORCEMENT:
-    // Truncate the input string to the launcher's character limit.
-    let effectivePrompt = prompt;
+    let effectivePrompt = (typeof prompt === 'string') ? prompt : JSON.stringify(prompt);
     if (effectivePrompt.length > tokenLimit) {
         effectivePrompt = effectivePrompt.substring(0, tokenLimit) + "... [PROMPT_TRUNCATED_BY_LAUNCHER_LIMIT]";
     }
 
-    // OUTPUT SIZING:
-    // Reserve tokens for thinking if enabled. Max output must be > thinking budget.
     const thinkingBudget = isDataProbe && tokenLimit >= 3000 ? 1024 : 0;
     const responseCapacity = Math.max(512, Math.min(2048, Math.floor(tokenLimit / 2)));
     const totalOutputTokens = responseCapacity + thinkingBudget;
+
+    // MANDATORY RESPONSE SCHEMA INSTRUCTION
+    const mandatoryFormatInstruction = `
+    ABSOLUTE RULE: Respond with a single valid JSON object following the Neural Sentinel Response Schema.
+    No prose outside JSON. No markdown. No explanations.
+    
+    SCHEMA:
+    {
+      "responseType": "PROBE_RESPONSE",
+      "auditType": "STANDARD | HISTORICAL | NEURAL | FULL_NEURAL_AUDIT",
+      "status": "SUCCESS | PARTIAL | WARNING | ERROR",
+      "probeUsed": {
+        "probeType": "STANDARD_DATA | HISTORICAL_DATA | NEURAL_INFERENCE | MASTER_AGGREGATED",
+        "probeId": "exact-id-if-present",
+        "sourcePanel": "panel-name"
+      },
+      "analysis": {
+        "summary": "conclusion string",
+        "findings": [{"label": "...", "value": "...", "severity": "LOW|MEDIUM|HIGH"}],
+        "anomalies": [{"id": "...", "type": "...", "description": "...", "confidence": 0.0}],
+        "confidence": 0.0
+      },
+      "recommendations": [{"action": "...", "priority": "LOW|MEDIUM|HIGH"}],
+      "rawEcho": { "receivedPayload": {} }
+    }`;
+
+    const combinedSystemInstruction = `${systemInstruction}\n\n${mandatoryFormatInstruction}`;
 
     let requestBody: any = {};
 
     try {
       if (config.provider === 'GEMINI') {
-        // Complex Text Tasks (probes) use Pro; Lightweight inferences use Flash.
         const modelName = isDataProbe ? 'gemini-3-pro-preview' : 'gemini-3-flash-preview';
         
         requestBody = {
           model: modelName,
           contents: [{ parts: [{ text: effectivePrompt }] }],
           config: { 
-            systemInstruction: systemInstruction,
+            systemInstruction: combinedSystemInstruction,
             responseMimeType: "application/json",
             thinkingConfig: { thinkingBudget: thinkingBudget },
             maxOutputTokens: totalOutputTokens,
@@ -92,39 +112,29 @@ export const aiTransport = {
         const ai = new GoogleGenAI({ apiKey: process.env.API_KEY as string });
         const response = await ai.models.generateContent(requestBody);
         
+        if (!response) throw new Error("NULL_AI_RESPONSE");
+        
         const textResponse = response.text;
-        if (!textResponse) {
-          throw new Error("EMPTY_RESPONSE: The neural core failed to generate a text fragment.");
-        }
+        if (!textResponse) throw new Error("EMPTY_AI_RESPONSE_TEXT");
 
         try {
-          return { 
-            success: true, 
-            data: cleanAndParseJson(textResponse), 
-            rawText: textResponse,
-            requestBody 
-          };
+          const parsed = cleanAndParseJson(textResponse);
+          return { success: true, data: parsed, rawText: textResponse, requestBody };
         } catch (parseErr: any) {
-          return {
-            success: false,
-            data: null,
-            rawText: textResponse,
-            requestBody,
-            error: parseErr.message
-          };
+          return { success: false, data: null, rawText: textResponse, requestBody, error: parseErr.message };
         }
       } else {
-        const normalizedUrl = config.endpoint.replace('localhost', '127.0.0.1').replace(/\/$/, "");
+        const normalizedUrl = (config.endpoint || "").replace('localhost', '127.0.0.1').replace(/\/$/, "");
         const endpoint = normalizedUrl.includes('/chat/completions') ? normalizedUrl : `${normalizedUrl}/chat/completions`;
         
         requestBody = {
           model: config.model,
           messages: [
-            { role: 'system', content: systemInstruction }, 
+            { role: 'system', content: combinedSystemInstruction }, 
             { role: 'user', content: effectivePrompt }
           ],
           temperature: 0.1,
-          max_tokens: responseCapacity // Local models rarely support thinking budget configs yet
+          max_tokens: responseCapacity
         };
 
         const response = await fetch(endpoint, {
@@ -136,61 +146,28 @@ export const aiTransport = {
         });
         
         const data = await response.json();
+        if (!data) throw new Error("EMPTY_LOCAL_AI_JSON");
+        
         if (data.error) {
-            return {
-                success: false,
-                data: null,
-                requestBody,
-                error: data.error.message || "Unknown Local AI Error",
-                errorCode: data.error.code
-            };
+            return { success: false, data: null, requestBody, error: data.error.message || "Unknown Local AI Error", errorCode: data.error.code };
         }
         
-        const text = data.choices[0].message.content;
+        if (!Array.isArray(data.choices) || data.choices.length === 0) {
+            throw new Error("LOCAL_AI_NO_CHOICES");
+        }
         
+        const text = data.choices[0]?.message?.content;
+        if (!text) throw new Error("EMPTY_LOCAL_AI_CONTENT");
+
         try {
-          return { 
-            success: true, 
-            data: cleanAndParseJson(text), 
-            rawText: text,
-            requestBody 
-          };
+          const parsed = cleanAndParseJson(text);
+          return { success: true, data: parsed, rawText: text, requestBody };
         } catch (parseErr: any) {
-          return {
-            success: false,
-            data: null,
-            rawText: text,
-            requestBody,
-            error: parseErr.message
-          };
+          return { success: false, data: null, rawText: text, requestBody, error: parseErr.message };
         }
       }
     } catch (e: any) {
-      console.error("AI Transport Error:", e);
-      let errorMsg = e.message || "Neural Transport Failure";
-      let errorCode = "TRANSPORT_ERR";
-
-      // Attempt to parse structured API error from message
-      if (errorMsg.includes("ApiError:")) {
-          try {
-              const jsonStr = errorMsg.substring(errorMsg.indexOf('{'));
-              const parsed = JSON.parse(jsonStr);
-              if (parsed.error) {
-                  errorMsg = parsed.error.message;
-                  errorCode = parsed.error.code;
-              }
-          } catch (pe) {
-              // Fallback to raw message
-          }
-      }
-
-      return { 
-        success: false, 
-        data: null, 
-        requestBody, 
-        error: errorMsg,
-        errorCode
-      };
+      return { success: false, data: null, requestBody, error: e.message || "Neural Transport Failure", errorCode: "TRANSPORT_ERR" };
     }
   }
 };

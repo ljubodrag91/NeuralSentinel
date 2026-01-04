@@ -26,10 +26,11 @@ interface DashboardProps {
   processingId?: string;
   latestCoreProbeResult?: any;
   activeTelemetry?: Set<string>;
+  tick?: number;
 }
 
 const Dashboard: React.FC<DashboardProps> = ({ 
-  mode, session, stats, settings, setSettings, terminalHistory, onHandshake, onDisconnect, onBrainClick, onProbeClick, onProbeInfo, onLauncherSelect, onAdapterCommand, processingId, latestCoreProbeResult, activeTelemetry
+  mode, session, stats, settings, setSettings, terminalHistory, onHandshake, onDisconnect, onBrainClick, onProbeClick, onProbeInfo, onLauncherSelect, onAdapterCommand, processingId, latestCoreProbeResult, activeTelemetry, tick
 }) => {
   const [ipInput, setIpInput] = useState('10.121.41.108');
   const [user, setUser] = useState('kali');
@@ -38,6 +39,7 @@ const Dashboard: React.FC<DashboardProps> = ({
   const [terminalMode, setTerminalMode] = useState(false);
   const [consoleInput, setConsoleInput] = useState('');
   const [serviceInAudit, setServiceInAudit] = useState<'telemetry' | 'neural' | null>(null);
+  const [masterProbeCd, setMasterProbeCd] = useState(0);
 
   const consoleInputRef = useRef<HTMLInputElement>(null);
   const terminalEndRef = useRef<HTMLDivElement>(null);
@@ -53,6 +55,11 @@ const Dashboard: React.FC<DashboardProps> = ({
   useEffect(() => {
     if (terminalEndRef.current) terminalEndRef.current.scrollIntoView({ behavior: 'smooth' });
   }, [terminalHistory]);
+
+  useEffect(() => {
+    const lastFire = Number(localStorage.getItem('master_probe_last_fire_ts') || 0);
+    setMasterProbeCd(Math.max(0, (lastFire + 300000) - Date.now()));
+  }, [tick]);
 
   const isConnected = session.status === 'ACTIVE';
   const isLocal = settings.dataSourceMode === 'LOCAL';
@@ -84,18 +91,24 @@ const Dashboard: React.FC<DashboardProps> = ({
   }, [terminalMode]);
 
   const getLauncherColor = (panelId: string) => {
-    const slot = settings.panelSlots[panelId]?.mediumSlot;
+    const slot = settings.panelSlots[panelId]?.probeSlot;
     const id = slot?.launcherId || 'std-core';
     return launcherSystem.getById(id)?.color || '#bd00ff';
   };
 
   const statusIndicatorColor = useMemo(() => {
-    if (!isConnected && !isLocal) return '#ef4444';
+    if (!isConnected) return '#ef4444';
     if (isLocal) return platformAccent;
     return '#22c55e';
   }, [isConnected, isLocal, platformAccent]);
 
   let handshakeVariant: 'blue' | 'green' | 'offline' = isLocal ? (stats ? 'blue' : 'offline') : (isConnected ? 'green' : 'offline');
+
+  const getMainProbeStatusText = () => {
+    if (!isConnected) return "Disabled - System Node Offline";
+    if (masterProbeCd > 0) return `Sync Buffer Cooling... (${(masterProbeCd/1000).toFixed(0)}s)`;
+    return "Ready - Full Dashboard Aggregation Probe Available";
+  };
 
   return (
     <div className="space-y-6 h-full flex flex-col no-scroll overflow-hidden pb-4">
@@ -137,7 +150,7 @@ const Dashboard: React.FC<DashboardProps> = ({
           )}
         </div>
         <div className="flex items-center gap-3">
-          <div className={`w-2 h-2 rounded-full animate-pulse`} style={{ backgroundColor: statusIndicatorColor }}></div>
+          <div className={`w-2 h-2 rounded-full ${isConnected ? 'animate-pulse' : ''}`} style={{ backgroundColor: statusIndicatorColor }}></div>
           <div className="text-[9px] font-mono text-zinc-800 uppercase">NODE: {isConnected ? 'LINKED' : 'VOID'}</div>
         </div>
       </div>
@@ -206,7 +219,7 @@ const Dashboard: React.FC<DashboardProps> = ({
             title="MASTER_INTELLIGENCE" 
             variant="purple" 
             className="relative overflow-visible shrink-0 pb-6 flex-1 max-h-[350px]"
-            onProbe={() => isConnected && onProbeClick('GLOBAL_SYSTEM_PROBE', { stats, mode, activeFocus: Array.from(activeTelemetry || []) })}
+            onProbe={() => isConnected && masterProbeCd === 0 && onProbeClick('GLOBAL_SYSTEM_PROBE', { stats, mode, activeFocus: Array.from(activeTelemetry || []) })}
             onBrain={() => onBrainClick('GLOBAL_SYSTEM_PROBE', 'Neural Hub Intelligence', { latestResult: latestCoreProbeResult })}
             onLauncherSelect={(pid, type) => onLauncherSelect(pid, type)}
             probeColor={getLauncherColor('GLOBAL_SYSTEM_PROBE')}
@@ -229,7 +242,7 @@ const Dashboard: React.FC<DashboardProps> = ({
                       onClick={() => setServiceInAudit('neural')}
                       className="flex items-center gap-3 group"
                     >
-                        <div className={`w-2.5 h-2.5 rounded-full transition-all duration-500 ${settings.neuralUplinkEnabled ? 'bg-purple-500 glow-purple shadow-[0_0_10px_#bd00ff]' : 'bg-red-500 shadow-[0_0_10px_#ff3e3e]'}`}></div>
+                        <div className={`w-2.5 h-2.5 rounded-full transition-all duration-500 ${settings.neuralUplinkEnabled && isConnected ? 'bg-purple-500 glow-purple shadow-[0_0_10px_#bd00ff]' : 'bg-red-500 shadow-[0_0_10px_#ff3e3e]'}`}></div>
                         <span className="text-[10px] font-black uppercase tracking-widest text-zinc-400 group-hover:text-white transition-colors">Neural_Link</span>
                     </button>
                   </Tooltip>
@@ -249,15 +262,17 @@ const Dashboard: React.FC<DashboardProps> = ({
                 </div>
 
                 <div className="flex flex-col items-center justify-center relative group w-64 shrink-0">
-                    <button 
-                      onClick={() => onProbeClick('GLOBAL_SYSTEM_PROBE', { stats, mode, activeFocus: Array.from(activeTelemetry || []) })}
-                      disabled={isProbeActive || !isConnected}
-                      className={`relative w-64 h-20 bg-[#050608] border-x border-b border-purple-500/60 shadow-2xl flex flex-col items-center justify-center transition-all group-hover:border-purple-400 group-hover:shadow-[0_0_30px_rgba(189,0,255,0.2)] disabled:opacity-50 overflow-hidden ${isConnected ? 'cursor-pointer' : 'cursor-not-allowed'}`}
-                    >
-                      <span className={`text-[12px] font-black uppercase tracking-[0.6em] transition-colors ${isProbeActive ? 'text-white animate-pulse' : 'text-purple-400'}`}>
-                        {isProbeActive ? 'SCANNING...' : 'CORE PROBE'}
-                      </span>
-                    </button>
+                    <Tooltip name="AGGREGATED_CORE_PROBE" source="NEURAL_NETWORK" desc={getMainProbeStatusText()} variant="purple">
+                      <button 
+                        onClick={() => isConnected && masterProbeCd === 0 && onProbeClick('GLOBAL_SYSTEM_PROBE', { stats, mode, activeFocus: Array.from(activeTelemetry || []) })}
+                        disabled={isProbeActive || !isConnected || masterProbeCd > 0}
+                        className={`relative w-64 h-20 bg-[#050608] border-x border-b border-purple-500/60 shadow-2xl flex flex-col items-center justify-center transition-all group-hover:border-purple-400 group-hover:shadow-[0_0_30px_rgba(189,0,255,0.2)] disabled:opacity-50 overflow-hidden ${isConnected && masterProbeCd === 0 ? 'cursor-pointer' : 'cursor-not-allowed'}`}
+                      >
+                        <span className={`text-[12px] font-black uppercase tracking-[0.6em] transition-colors ${isProbeActive ? 'text-white animate-pulse' : 'text-purple-400'}`}>
+                          {isProbeActive ? 'SCANNING...' : (masterProbeCd > 0 ? `${(masterProbeCd/1000).toFixed(0)}s` : 'CORE PROBE')}
+                        </span>
+                      </button>
+                    </Tooltip>
                 </div>
 
                 <div className="flex-1 text-[10px] font-mono text-zinc-500 leading-relaxed border-l border-zinc-900/30 pl-4 h-full overflow-y-auto no-scroll flex flex-col justify-center">
@@ -338,7 +353,7 @@ const Dashboard: React.FC<DashboardProps> = ({
               className={`px-8 py-3 text-[10px] font-black uppercase tracking-widest transition-all border ${
                 (serviceInAudit === 'telemetry' ? settings.telemetryEnabled : settings.neuralUplinkEnabled)
                   ? 'bg-red-500/10 border-red-500 text-red-500 hover:bg-red-500 hover:text-white'
-                  : 'bg-teal-500/10 border-teal-500 text-teal-500 hover:bg-teal-500 hover:text-white'
+                  : 'bg-teal-500/10 border-teal-500 text-teal-400 hover:bg-teal-500 hover:text-white'
               }`}
             >
               {(serviceInAudit === 'telemetry' ? settings.telemetryEnabled : settings.neuralUplinkEnabled) ? 'DISABLE_SERVICE' : 'ENABLE_SERVICE'}

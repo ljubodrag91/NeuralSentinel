@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import Tooltip from './Tooltip';
 import TacticalButton from './TacticalButton';
@@ -68,9 +67,9 @@ const Card: React.FC<CardProps> = ({
   };
 
   const getTitleColor = () => {
+    if (variant === 'offline') return 'text-red-500';
     if (platform === Platform.LINUX) return 'text-yellow-500';
     if (platform === Platform.WINDOWS) return 'text-blue-400';
-    if (variant === 'offline') return 'text-red-900';
     return 'text-white';
   };
 
@@ -83,7 +82,6 @@ const Card: React.FC<CardProps> = ({
     const isEquipped = !!equipped?.launcherId;
     const isAdminEnabled = permissions[type];
     
-    // Only render the slot if it is permitted by the admin policy
     if (!isAdminEnabled) return null;
 
     const isInteractive = !isAnyProcessing;
@@ -95,6 +93,7 @@ const Card: React.FC<CardProps> = ({
     let maxCharges = 1;
     let cooldownValue = 0;
     let moduleName = 'EMPTY';
+    let fault = isEquipped ? serverService.getFault(equipped!.launcherId) : null;
 
     if (isEquipped) {
       const launcher = launcherSystem.getById(equipped!.launcherId);
@@ -102,35 +101,47 @@ const Card: React.FC<CardProps> = ({
       charges = serverService.getCharges(equipped!.launcherId);
       maxCharges = launcher?.maxCharges || 1;
       cooldownValue = serverService.getCooldown(equipped!.launcherId);
+      if (fault) colorHex = '#ff3e3e';
     }
 
     const icon = (
       <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
     );
 
-    let tooltipFullDesc = `Slot: ${label}\nModule: ${moduleName}\nCharges: ${charges}/${maxCharges}\nCooldown: ${(cooldownValue/1000).toFixed(1)}s\n\nLocal panel-specific probe manifold.`;
+    let tooltipFullDesc = `Slot: ${label}\nModule: ${moduleName}\nCharges: ${charges}/${maxCharges}\nCooldown: ${(cooldownValue/1000).toFixed(1)}s\n\nPanel-specific manifold status.`;
+    if (fault) tooltipFullDesc += `\n\n[FAULT_DETECTED]: ${fault}\nReload logic suspended. Inspect hardware matrix or retry uplink.`;
 
     return (
-      <Tooltip key={type} name={`${label}_SLOT`} source="SYSTEM" desc={tooltipFullDesc} variant={isEquipped ? 'purple' : 'default'}>
+      <Tooltip key={type} name={`${label}_SLOT`} source="SYSTEM" desc={tooltipFullDesc} variant={fault ? 'default' : (isEquipped ? 'purple' : 'default')}>
         <div 
           onClick={() => isInteractive && onLauncherSelect?.(targetPanelId, type)}
-          className={`group relative flex flex-col items-center justify-center w-10 h-12 border transition-all ${isInteractive ? 'bg-black/60 border-zinc-800 hover:border-zinc-500 cursor-pointer' : 'bg-zinc-950 border-zinc-900/30 opacity-40 cursor-default'}`}
+          className={`group relative flex flex-col items-center justify-center w-10 h-12 border transition-all ${isInteractive ? 'bg-black/60 border-zinc-800 hover:border-zinc-500 cursor-pointer' : 'bg-zinc-950 border-zinc-900/30 opacity-40 cursor-default'} ${fault ? 'border-red-600 shadow-[0_0_10px_rgba(239,68,68,0.2)]' : ''}`}
           style={{ color: colorHex }}
         >
            <div className="relative">
               {icon}
-              {isEquipped && charges > 0 && (
+              {isEquipped && charges > 0 && !fault && (
                 <div className="absolute -top-1.5 -right-1.5 flex items-center justify-center bg-black border border-current rounded-full w-4 h-4 shadow-xl z-10">
                    <span className="text-[7px] font-black leading-none">{charges}</span>
+                </div>
+              )}
+              {fault && (
+                <div className="absolute -top-1.5 -right-1.5 flex items-center justify-center bg-red-600 border border-red-400 rounded-full w-4 h-4 shadow-xl z-10 animate-pulse">
+                   <span className="text-[8px] font-black leading-none text-white">!</span>
                 </div>
               )}
            </div>
            
            <span className="text-[6px] font-black mt-1.5 uppercase tracking-tighter opacity-70 group-hover:opacity-100">{label}</span>
            
-           {isEquipped && cooldownValue > 0 && (
+           {isEquipped && cooldownValue > 0 && !fault && (
               <div className="absolute -bottom-1 left-0 right-0 h-1 bg-zinc-950 overflow-hidden border-x border-b border-zinc-900">
                  <div className="h-full bg-current transition-all duration-1000 shadow-[0_0:5px_currentColor]" style={{ width: `${serverService.getCooldownProgress(equipped!.launcherId) * 100}%` }}></div>
+              </div>
+           )}
+           {fault && (
+              <div className="absolute -bottom-1 left-0 right-0 h-1 bg-red-950 overflow-hidden border-x border-b border-red-900">
+                 <div className="h-full bg-red-500 w-full animate-pulse"></div>
               </div>
            )}
         </div>
@@ -150,7 +161,6 @@ const Card: React.FC<CardProps> = ({
               {title}
             </h3>
             
-            {/* Respect probe permission and config existence for rendering header slots. Hidden if permission is false or slot is empty in management contexts. */}
             {permissions.probe && slotConfig && (
               <div className="flex items-center gap-1 border-l border-zinc-800/50 pl-4 ml-2">
                 {renderSlotIcon('probe')}
@@ -158,7 +168,7 @@ const Card: React.FC<CardProps> = ({
             )}
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="items-center gap-3 hidden sm:flex">
             {onHistory && (
               <Tooltip name="HISTORICAL_LOGS" source="SYSTEM" desc="Access locally cached historical telemetry data.">
                 <button 
@@ -183,9 +193,10 @@ const Card: React.FC<CardProps> = ({
             )}
 
             {onBrain && permissions.low && (
-              <Tooltip name="NEURAL_INFERENCE" source="NEURAL_NETWORK" variant="purple" desc="Initiate a Contextual Neural Inference using GLOBAL LOW slot. Consumption: 1 Global Low Charge.">
+              <Tooltip name="NEURAL_INFERENCE" source="NEURAL_NETWORK" variant="purple" desc="Initiate a Contextual Neural Inference using GLOBAL LOW slot.">
                 <button 
                   onClick={onBrain} disabled={isAnyProcessing || !permissions.low}
+                  /* Fixed: removed undefined activeTab reference from conditional class logic */
                   className={`p-1.5 border border-zinc-800 bg-zinc-950 flex items-center justify-center transition-all ${isProcessing ? 'animate-pulse text-purple-400' : 'text-teal-600 hover:text-teal-400'} ${!permissions.low || isAnyProcessing ? 'opacity-20 cursor-not-allowed' : 'active:scale-90'}`}
                 >
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-4 h-4"><path d="M9.5 2A2.5 2.5 0 0 1 12 4.5v15a2.5 2.5 0 0 1-4.96.44 2.5 2.5 0 0 1-2.79-2.74 2.5 2.5 0 0 1-2-2.53 2.5 2.5 0 0 1 2.5-2.5h.75a.5.5 0 0 0 .5-.5v-4.73a2.5 2.5 0 0 1 2.5-2.5h1zM14.5 2A2.5 2.5 0 0 0 12 4.5v15a2.5 2.5 0 0 0 4.96.44 2.5 2.5 0 0 0 2.79-2.74 2.5 2.5 0 0 0 2-2.53 2.5 2.5 0 0 0-2.5-2.5h-.75a.5.5 0 0 1-.5-.5v-4.73a2.5 2.5 0 0 0-2.5-2.5h-1z"/></svg>

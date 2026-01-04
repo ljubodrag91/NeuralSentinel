@@ -27,15 +27,16 @@ export enum LogLevel {
 }
 
 export type LogType = 'neural' | 'console' | 'kernel' | 'system';
-export type ProbeStatus = 'COMPLETED' | 'ERROR' | 'NO_DATA' | 'PARTIAL' | 'PENDING';
+export type ProbeStatus = 'COMPLETED' | 'ERROR' | 'NO_DATA' | 'PARTIAL' | 'PENDING' | 'STOPPED';
 export type SlotType = 'LOW' | 'PROBE' | 'MAIN' | 'SENSOR' | 'BUFFER';
-export type DetailedProbeType = 'NEURO_DATA' | 'CORE_DATA' | 'HISTORICAL_CORE' | 'SENSOR_TRIGGER';
+export type DetailedProbeType = 'Standard' | 'Historical' | 'Inference' | 'Core';
 
 export enum ScriptState {
   LOADED = 'LOADED',
   DISABLED = 'DISABLED',
   REFRESHING = 'REFRESHING',
-  BROKEN = 'BROKEN'
+  BROKEN = 'BROKEN',
+  HALTED = 'HALTED'
 }
 
 export interface LogEntry {
@@ -49,9 +50,10 @@ export interface LogEntry {
     type?: string;
     panelId?: string;
     slotType?: SlotType;
-    probeType?: DetailedProbeType;
+    probeTypeUsed?: DetailedProbeType;
     probeStatus?: ProbeStatus;
     tokenLimit?: number;
+    depth?: number;
     requestPayload?: any;
     responsePayload?: any;
     hasHistoricalData?: boolean;
@@ -262,6 +264,8 @@ export interface Consumable {
   maxStack?: number;
   autoInterval?: number; // ms
   isNeuralIntegration?: boolean;
+  depth?: number; // Target depth for historical probes
+  repeatMode?: 'INCREMENTAL' | 'FULL';
 }
 
 export interface ModuleDefinition {
@@ -332,4 +336,19 @@ export interface ToolDefinition {
   baseCommand: string;
   description: string;
   parameters: ToolParameter[];
+}
+
+export type AnomalyStatus = 'POSITIVE' | 'MINOR' | 'NO_DATA' | 'UNKNOWN' | 'RARE' | 'ERROR';
+
+export interface ScanResult {
+  sensorId: string;
+  status: AnomalyStatus;
+  description: string;
+  details: string;
+  timestamp: string;
+  x: number;
+  y: number;
+  sourceSystem: string;
+  rawData?: any;
+  viewed?: boolean;
 }

@@ -7,6 +7,11 @@ interface HistoryEntry {
 const STORAGE_KEY = 'neural_sentinel_csv_history';
 const MAX_AGE_MS = 24 * 60 * 60 * 1000;
 
+/**
+ * Defensive History Storage Engine
+ * Prevents "Cannot read properties of undefined (reading 'length')" errors
+ * by ensuring return values are always strictly typed arrays.
+ */
 export const HistoryStorage = {
   clear(): void {
     localStorage.removeItem(STORAGE_KEY);
@@ -14,18 +19,31 @@ export const HistoryStorage = {
 
   append(type: string, headers: string, values: string[]): void {
     const raw = localStorage.getItem(STORAGE_KEY);
-    let store: Record<string, HistoryEntry[]> = raw ? JSON.parse(raw) : {};
+    let store: Record<string, HistoryEntry[]> = {};
+    
+    try {
+        const parsed = raw ? JSON.parse(raw) : null;
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+            store = parsed;
+        }
+    } catch (e) {
+        store = {};
+    }
     
     if (!store[type]) store[type] = [];
     
     const now = Date.now();
     
-    // Prune old entries strictly before appending
+    // Cleanup aged entries across all types to maintain storage health
     Object.keys(store).forEach(key => {
-        store[key] = store[key].filter(e => (now - e.timestamp) < MAX_AGE_MS);
+        const entries = store[key];
+        if (Array.isArray(entries)) {
+            store[key] = entries.filter(e => e && (now - e.timestamp) < MAX_AGE_MS);
+        } else {
+            store[key] = [];
+        }
     });
     
-    // Store as flat CSV string data to save space
     store[type].push({
       timestamp: now,
       data: values.join(',')
@@ -38,12 +56,21 @@ export const HistoryStorage = {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return headers;
     
-    const store: Record<string, HistoryEntry[]> = JSON.parse(raw);
-    let entries = store[type] || [];
+    let store: Record<string, HistoryEntry[]> = {};
+    try {
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+            store = parsed;
+        }
+    } catch (e) {
+        return headers;
+    }
+
+    let entries = store[type];
+    if (!Array.isArray(entries)) return headers;
     
     const now = Date.now();
-    // Filter on read as well
-    entries = entries.filter(e => (now - e.timestamp) < MAX_AGE_MS);
+    entries = entries.filter(e => e && (now - e.timestamp) < MAX_AGE_MS);
     
     if (entries.length === 0) return headers;
 
@@ -55,25 +82,64 @@ export const HistoryStorage = {
     return `TIMESTAMP,${headers}\n${rows.join('\n')}`;
   },
 
-  // Retrieve raw entries for generic UI display
+  getTicks(type: string, depth: number, headers: string): any[][] {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return [];
+
+    let store: Record<string, HistoryEntry[]> = {};
+    try {
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+            store = parsed;
+        }
+    } catch (e) {
+        return [];
+    }
+
+    let entries = store[type];
+    if (!Array.isArray(entries)) return [];
+    
+    const now = Date.now();
+    entries = entries.filter(e => e && (now - e.timestamp) < MAX_AGE_MS);
+
+    const headerKeys = (headers || "").split(',');
+
+    return entries.slice(-depth).map(e => {
+        const parts = (e.data || "").split(',');
+        return headerKeys.map((key, i) => ({ [key]: parts[i] || '0' }));
+    });
+  },
+
   getEntries(type: string): { timestamp: number, values: string[] }[] {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return [];
 
-    const store: Record<string, HistoryEntry[]> = JSON.parse(raw);
-    let entries = store[type] || [];
+    let store: Record<string, HistoryEntry[]> = {};
+    try {
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+            store = parsed;
+        }
+    } catch (e) {
+        return [];
+    }
+
+    let entries = store[type];
+    if (!Array.isArray(entries)) return [];
     
     const now = Date.now();
-    entries = entries.filter(e => (now - e.timestamp) < MAX_AGE_MS);
+    entries = entries.filter(e => e && (now - e.timestamp) < MAX_AGE_MS);
 
     return entries.map(e => ({
       timestamp: e.timestamp,
-      values: e.data.split(',')
-    })).reverse(); // Newest first
+      values: (e.data || '').split(',')
+    })).reverse(); 
   },
 
   getParsed(type: string): any[] {
     const entries = this.getEntries(type);
+    if (!Array.isArray(entries)) return [];
+    
     return entries.map((e, index) => {
       const parts = e.values;
       return {

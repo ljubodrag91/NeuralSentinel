@@ -62,7 +62,7 @@ const Dashboard: React.FC<DashboardProps> = ({
 
   const isConnected = session.status === 'ACTIVE';
   const isLocal = settings.dataSourceMode === 'LOCAL';
-  const isProbeActive = processingId === 'GLOBAL_SYSTEM_PROBE';
+  const isMasterActive = processingId === 'MASTER_AGGREGATE';
   const platformAccent = settings.platform === Platform.LINUX ? '#eab308' : '#00f2ff';
   const isWindows = settings.platform === Platform.WINDOWS;
 
@@ -77,6 +77,14 @@ const Dashboard: React.FC<DashboardProps> = ({
   const handlePlatformToggle = (p: Platform) => {
     if (isLocal) return; 
     setSettings(s => ({ ...s, platform: p }));
+  };
+
+  const toggleService = (type: 'telemetry' | 'neural') => {
+    if (isMasterActive) return;
+    setSettings(prev => ({
+      ...prev,
+      [type === 'telemetry' ? 'telemetryEnabled' : 'neuralUplinkEnabled']: !prev[type === 'telemetry' ? 'telemetryEnabled' : 'neuralUplinkEnabled']
+    }));
   };
 
   useEffect(() => {
@@ -255,15 +263,27 @@ Last Activity: ${iface.lastActivity || 'Unknown'}
           >
             <div className="flex flex-col h-full">
               <div className="flex justify-center gap-12 mb-6 border-b border-zinc-900/40 pb-3 shrink-0">
-                  <div className="flex items-center gap-3 group">
-                      <div className={`w-2 h-2 rounded-full transition-all duration-500 bg-teal-500 glow-teal shadow-[0_0_10px_#00ffd5]`}></div>
-                      <span className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Telemetry_Uplink</span>
-                  </div>
+                  <Tooltip name="TELEMETRY_CONTROL" source="SYSTEM" desc="Enable/Disable telemetry data stream">
+                    <button 
+                      onClick={() => toggleService('telemetry')}
+                      disabled={isMasterActive}
+                      className={`flex items-center gap-3 group transition-all ${isMasterActive ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                    >
+                        <div className={`w-2 h-2 rounded-full transition-all duration-300 ${settings.telemetryEnabled ? 'bg-[#28a745] shadow-[0_0_8px_#28a745]' : 'bg-[#6c757d]'}`}></div>
+                        <span className={`text-[10px] font-black uppercase tracking-widest transition-colors ${settings.telemetryEnabled ? 'text-zinc-300' : 'text-zinc-600'}`}>Telemetry_Uplink</span>
+                    </button>
+                  </Tooltip>
 
-                  <div className="flex items-center gap-3 group">
-                      <div className={`w-2 h-2 rounded-full transition-all duration-500 bg-purple-500 glow-purple shadow-[0_0_10px_#bd00ff]`}></div>
-                      <span className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Neural_Link</span>
-                  </div>
+                  <Tooltip name="NEURAL_CONTROL" source="SYSTEM" desc="Enable/Disable AI aggregation link">
+                    <button 
+                      onClick={() => toggleService('neural')}
+                      disabled={isMasterActive}
+                      className={`flex items-center gap-3 group transition-all ${isMasterActive ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                    >
+                        <div className={`w-2 h-2 rounded-full transition-all duration-300 ${settings.neuralUplinkEnabled ? 'bg-[#28a745] shadow-[0_0_8px_#28a745]' : 'bg-[#6c757d]'}`}></div>
+                        <span className={`text-[10px] font-black uppercase tracking-widest transition-colors ${settings.neuralUplinkEnabled ? 'text-zinc-300' : 'text-zinc-600'}`}>Neural_Link</span>
+                    </button>
+                  </Tooltip>
               </div>
 
               <div className="flex items-center justify-between gap-8 flex-1 min-h-0 px-4">
@@ -287,31 +307,31 @@ Last Activity: ${iface.lastActivity || 'Unknown'}
 
                 <div className="flex flex-col items-center justify-center relative group w-64 shrink-0">
                   <div className="absolute top-[-30px] flex gap-12 pointer-events-none opacity-20">
-                    <div className={`w-[1px] h-32 bg-purple-500 ${isProbeActive ? 'animate-pulse' : ''}`}></div>
-                    <div className={`w-[1px] h-40 bg-purple-500 ${isProbeActive ? 'animate-pulse' : ''}`}></div>
-                    <div className={`w-[1px] h-32 bg-purple-500 ${isProbeActive ? 'animate-pulse' : ''}`}></div>
+                    <div className={`w-[1px] h-32 bg-purple-500 ${isMasterActive ? 'animate-pulse' : ''}`}></div>
+                    <div className={`w-[1px] h-40 bg-purple-500 ${isMasterActive ? 'animate-pulse' : ''}`}></div>
+                    <div className={`w-[1px] h-32 bg-purple-500 ${isMasterActive ? 'animate-pulse' : ''}`}></div>
                   </div>
                   <div className="w-24 h-6 bg-zinc-800 border-x border-t border-purple-500/30 rounded-t-sm mb-0 flex items-center justify-center">
-                    <div className={`w-4 h-4 rounded-full bg-black border border-zinc-700 shadow-inner ${isProbeActive ? 'glow-purple shadow-[0_0_10px_#bd00ff] animate-pulse' : ''}`}></div>
+                    <div className={`w-4 h-4 rounded-full bg-black border border-zinc-700 shadow-inner ${isMasterActive ? 'glow-purple shadow-[0_0_10px_#bd00ff] animate-pulse' : ''}`}></div>
                   </div>
                   <div className="relative z-10">
                     <Tooltip name="AGGREGATED_CORE_PROBE" source="NEURAL_NETWORK" desc={`${getMainProbeStatusText()}. Single execution combines all active node vectors. Limits: 4000 Tokens.`} variant="purple">
                       <button 
-                        onClick={() => isAvailable && onProbeClick('GLOBAL_SYSTEM_PROBE', { stats, mode, activeFocus: Array.from(activeTelemetry || []) })}
-                        disabled={isProbeActive || !isAvailable}
+                        onClick={() => isAvailable && onProbeClick('MASTER_AGGREGATE', { stats, mode, activeFocus: Array.from(activeTelemetry || []) })}
+                        disabled={isMasterActive || !isAvailable}
                         className={`relative w-64 h-20 bg-[#050608] border-x border-b border-purple-500/60 shadow-2xl flex flex-col items-center justify-center transition-all overflow-hidden ${isAvailable ? 'cursor-pointer hover:border-purple-400 hover:shadow-[0_0_30px_rgba(189,0,255,0.2)]' : 'cursor-not-allowed opacity-50'}`}
                       >
                         <div className="absolute top-2 left-4 text-[6px] text-zinc-800 font-mono tracking-tighter uppercase">Sentinel_MASTER_CORE_v2</div>
                         <div className="absolute bottom-2 right-4 text-[6px] text-zinc-800 font-mono tracking-tighter uppercase">5m COOLDOWN</div>
-                        <span className={`text-[12px] font-black uppercase tracking-[0.6em] transition-colors ${isProbeActive ? 'text-white animate-pulse' : 'text-purple-400'}`}>
-                          {isProbeActive ? 'AGGREGATING...' : 'CORE PROBE'}
+                        <span className={`text-[12px] font-black uppercase tracking-[0.6em] transition-colors ${isMasterActive ? 'text-white animate-pulse' : 'text-purple-400'}`}>
+                          {isMasterActive ? 'PROCESSING...' : 'CORE PROBE'}
                         </span>
-                        {isProbeActive && (
+                        {isMasterActive && (
                           <div className="absolute inset-0 pointer-events-none transition-opacity">
                             <div className="w-full h-full bg-purple-500/20 animate-pulse"></div>
                           </div>
                         )}
-                        {(masterProbeCd > 0 && !isProbeActive) && (
+                        {(masterProbeCd > 0 && !isMasterActive) && (
                            <div className="absolute inset-0 bg-red-950/20 flex items-center justify-center z-20 backdrop-blur-[1px]">
                              <span className="text-[10px] font-black text-red-500 tracking-[0.2em]">{(masterProbeCd/1000).toFixed(0)}s</span>
                            </div>
@@ -320,12 +340,12 @@ Last Activity: ${iface.lastActivity || 'Unknown'}
                     </Tooltip>
                   </div>
                   <div className="flex gap-16 mt-[-2px] pointer-events-none">
-                    <div className={`w-0.5 h-10 bg-purple-500/40 transition-all ${isProbeActive ? 'animate-pulse' : ''}`}></div>
-                    <div className={`w-0.5 h-16 bg-purple-500/40 transition-all ${isProbeActive ? 'animate-pulse' : ''}`}></div>
-                    <div className={`w-0.5 h-10 bg-purple-500/40 transition-all ${isProbeActive ? 'animate-pulse' : ''}`}></div>
+                    <div className={`w-0.5 h-10 bg-purple-500/40 transition-all ${isMasterActive ? 'animate-pulse' : ''}`}></div>
+                    <div className={`w-0.5 h-16 bg-purple-500/40 transition-all ${isMasterActive ? 'animate-pulse' : ''}`}></div>
+                    <div className={`w-0.5 h-10 bg-purple-500/40 transition-all ${isMasterActive ? 'animate-pulse' : ''}`}></div>
                   </div>
-                  <span className={`absolute bottom-[-30px] text-[7px] font-black uppercase tracking-[0.4em] pointer-events-none whitespace-nowrap transition-colors ${isProbeActive ? 'text-purple-500' : 'text-zinc-800'}`}>
-                    {isProbeActive ? 'UPLINK_DENSE_STREAM' : 'Neural_Bridge_Standby_Ready'}
+                  <span className={`absolute bottom-[-30px] text-[7px] font-black uppercase tracking-[0.4em] pointer-events-none whitespace-nowrap transition-colors ${isMasterActive ? 'text-purple-500' : 'text-zinc-800'}`}>
+                    {isMasterActive ? 'UPLINK_DENSE_STREAM' : 'Neural_Bridge_Standby_Ready'}
                   </span>
                 </div>
 

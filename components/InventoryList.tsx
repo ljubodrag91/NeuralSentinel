@@ -2,12 +2,10 @@
 import React, { useState } from 'react';
 import { launcherSystem } from '../services/launcherService';
 import Tooltip from './common/Tooltip';
-// Fixed: Added SlotConfig to imports to support globalLowSlot
 import { PanelSlotConfig, SlotConfig } from '../types';
 
 interface InventoryListProps {
   panelSlots?: Record<string, PanelSlotConfig>;
-  // Fixed: Added globalLowSlot to track overall assignments
   globalLowSlot?: SlotConfig;
 }
 
@@ -23,14 +21,15 @@ const InventoryList: React.FC<InventoryListProps> = ({ panelSlots, globalLowSlot
   const getAssignmentCount = (id: string) => {
     let count = 0;
     
-    // Fixed: Count assignments in the global low slot
     if (globalLowSlot?.launcherId === id) count++;
     if (globalLowSlot?.ammoId === id) count++;
 
     if (!panelSlots) return count;
     
     Object.values(panelSlots).forEach((slot: PanelSlotConfig) => {
-      // Fixed: PanelSlotConfig uses probeSlot (renamed from mediumSlot) and sensorSlot. lowSlot is global.
+      // Guard against null/undefined slot values in panelSlots map
+      if (!slot) return;
+      
       if (slot.probeSlot?.launcherId === id) count++;
       if (slot.probeSlot?.ammoId === id) count++;
       if (slot.sensorSlot?.launcherId === id) count++;
@@ -40,6 +39,8 @@ const InventoryList: React.FC<InventoryListProps> = ({ panelSlots, globalLowSlot
   };
 
   const renderCard = (item: any, type: 'module' | 'consumable') => {
+    if (!item) return null;
+
     const isSelected = selectedItem === item.id;
     const assignmentCount = getAssignmentCount(item.id);
     const isAssigned = assignmentCount > 0;

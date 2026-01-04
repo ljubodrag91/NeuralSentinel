@@ -66,37 +66,63 @@ export const consumablesData: Consumable[] = [
     "id": "sensor-script-neural-1m",
     "name": "Automatic Neural Sync (1m)",
     "type": "module-core",
-    "description": "Automated scanning sequence with Neural Integration. Scans and transmits results every 1 minute.",
+    "description": "Automated scanning sequence with Neural Integration. Incremental repeat.",
     "compatibleLaunchers": ["sensor-module"],
     "cost": 1,
     "features": ["AUTO_SCAN", "NEURAL_INTEGRATION", "AUTO_TRANSMIT"],
     "unlimited": true,
     "autoInterval": 60000,
-    "isNeuralIntegration": true
+    "isNeuralIntegration": true,
+    "repeatMode": 'INCREMENTAL'
   },
   {
     "id": "sensor-script-neural-5m",
     "name": "Automatic Neural Sync (5m)",
     "type": "module-core",
-    "description": "Automated scanning sequence with Neural Integration. Scans and transmits results every 5 minutes.",
+    "description": "Automated scanning sequence with Neural Integration. Incremental repeat.",
     "compatibleLaunchers": ["sensor-module"],
     "cost": 1,
     "features": ["AUTO_SCAN", "NEURAL_INTEGRATION", "AUTO_TRANSMIT"],
     "unlimited": true,
     "autoInterval": 300000,
-    "isNeuralIntegration": true
+    "isNeuralIntegration": true,
+    "repeatMode": 'INCREMENTAL'
   },
   {
-    "id": "sensor-script-neural-10m",
-    "name": "Automatic Neural Sync (10m)",
+    "id": "sensor-script-full-5m",
+    "name": "Full Array Refresh (5m)",
     "type": "module-core",
-    "description": "Automated scanning sequence with Neural Integration. Scans and transmits results every 10 minutes.",
+    "description": "Deep scan sequence. Reruns all anomalies on every repeat cycle.",
     "compatibleLaunchers": ["sensor-module"],
     "cost": 1,
-    "features": ["AUTO_SCAN", "NEURAL_INTEGRATION", "AUTO_TRANSMIT"],
+    "features": ["AUTO_SCAN", "FULL_RERUN"],
     "unlimited": true,
-    "autoInterval": 600000,
-    "isNeuralIntegration": true
+    "autoInterval": 300000,
+    "repeatMode": 'FULL'
+  },
+  {
+    "id": "sensor-script-full-20m",
+    "name": "Deep Cycle Audit (20m)",
+    "type": "module-core",
+    "description": "Long-form tactical audit. Reruns all anomalies every 20 minutes.",
+    "compatibleLaunchers": ["sensor-module"],
+    "cost": 1,
+    "features": ["AUTO_SCAN", "FULL_RERUN"],
+    "unlimited": true,
+    "autoInterval": 1200000,
+    "repeatMode": 'FULL'
+  },
+  {
+    "id": "sensor-script-full-60m",
+    "name": "Holistic Grid Refresh (1hr)",
+    "type": "module-core",
+    "description": "Maximum coverage audit. Reruns entire sensor grid once per hour.",
+    "compatibleLaunchers": ["sensor-module"],
+    "cost": 1,
+    "features": ["AUTO_SCAN", "FULL_RERUN"],
+    "unlimited": true,
+    "autoInterval": 3600000,
+    "repeatMode": 'FULL'
   },
   {
     "id": "script-timer",
