@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { 
   OperationalMode, 
@@ -52,7 +51,7 @@ const FROG_ASCII = `⠀⠀⢀⣠⠤⠶⠖⠒⠒⠶⠦⠤⣄⠀⠀⠀⣀⡤⠤⠤
 ⠀⠀⠀⠀⠉⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⠳⡄⠀⠀⠀⠀⠀⠀⠀⠉⠳⢄⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
 ⠀⠀⠀⠀⠀⠀⠀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⠹⣆⠀⠀⠀⠀⠀⠀⣀⣀⣀⣹⣄⠀⠀⠀⠀⠀⠀⠀⠀⠀
 ⠀⠀⠀⠀⣠⠞⣉⣡⠤⠴⠿⠗⠳⠶⣬⣙⠓⢦⡈⠙⢿⡀⠀⠀⢀⣼⣿⣿⣿⣿⣿⡿⣷⣤⡀⠀⠀⠀⠀⠀⠀
-⠀⠀⠀⣾⣡⠞⣁⣀⣀⣀⣠⣤⣤⣤⣄⣭⣷⣦⣽⣦⡀⢻⡄⠰⢟⣥⣾⣿⣏⣉⡙⠓⢦⣻⠃⠀⠀⠀⠀⠀⠀
+⠀⠀⠀⣾⣡⠞⣁⣀⣀⣀⣠⣤⣤⣤⣄⣭⣷⣦⣽⣦⡀⻻⡄⠰⢟⣥⣾⣿⣏⣉⡙⠓⢦⣻⠃⠀⠀⠀⠀⠀⠀
 ⠀⠀⠀⠉⠉⠙⠻⢤⣄⣼⣿⣽⣿⠟⠻⣿⠄⠀⠀⢻⡝⢿⡇⣠⣿⣿⣻⣿⠿⣿⡉⠓⠮⣿⠀⠀⠀⠀⠀⠀⠀
 ⠀⠀⠀⠀⠀⠀⠙⢦⡈⠛⠿⣾⣿⣶⣾⡿⠀⠀⠀⢀⣳⣘⢻⣇⣿⣿⣽⣿⣶⣾⠃⣀⡴⣿⠀⠀⠀⠀⠀⠀⠀
 ⠀⠀⠀⠀⠀⠀⠀⠀⠙⠲⠤⢄⣈⣉⣙⣓⣒⣒⣚⣉⣥⠟⠀⢯⣉⡉⠉⠉⠛⢉⣉⣡⡾⠁⠀⠀⠀⠀⠀⠀⠀
@@ -134,22 +133,40 @@ const App: React.FC = () => {
       dataSourceMode: 'LOCAL' as DataSourceMode,
       telemetryUrl: 'http://127.0.0.1:5050'
     };
+
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
         if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
           if (parsed.dataSourceMode === 'LOCAL') parsed.platform = hostPlatform;
           
-          const panelSlots = (parsed.panelSlots && typeof parsed.panelSlots === 'object' && !Array.isArray(parsed.panelSlots)) 
-            ? parsed.panelSlots : defaults.panelSlots;
-          const slotPermissions = (parsed.slotPermissions && typeof parsed.slotPermissions === 'object' && !Array.isArray(parsed.slotPermissions)) 
-            ? parsed.slotPermissions : defaults.slotPermissions;
+          // DEEP MERGE LOGIC for Panel Slots
+          const mergedPanelSlots = { ...defaults.panelSlots };
+          if (parsed.panelSlots && typeof parsed.panelSlots === 'object') {
+            Object.keys(parsed.panelSlots).forEach(key => {
+              mergedPanelSlots[key] = {
+                ...defaults.panelSlots[key],
+                ...parsed.panelSlots[key]
+              };
+            });
+          }
+
+          // DEEP MERGE LOGIC for Slot Permissions
+          const mergedPermissions = { ...defaults.slotPermissions };
+          if (parsed.slotPermissions && typeof parsed.slotPermissions === 'object') {
+            Object.keys(parsed.slotPermissions).forEach(key => {
+              mergedPermissions[key] = {
+                ...defaults.slotPermissions[key],
+                ...parsed.slotPermissions[key]
+              };
+            });
+          }
           
           return { 
             ...defaults, 
             ...parsed,
-            panelSlots,
-            slotPermissions
+            panelSlots: mergedPanelSlots,
+            slotPermissions: mergedPermissions
           };
         }
       } catch (e) {
@@ -554,7 +571,7 @@ const App: React.FC = () => {
         >
           <div className="flex gap-1.5 items-center w-full justify-between px-1">
              <div className={`w-3 h-3 border ${isActive ? 'bg-yellow-500 border-yellow-400 shadow-[0_0_10px_#eab308] animate-pulse' : 'bg-zinc-800 border-zinc-700'}`}></div>
-             <div className={`text-[10px] font-black font-mono px-1.5 py-0.5 border border-zinc-800 bg-black/40 min-w-[48px] text-center ${isActive ? 'text-yellow-500' : 'text-zinc-600'}`}>
+             <div className={`text-[10px] font-black font-mono px-1.5 py-0.5 border border-zinc-800 bg-black/40 min-w-[48px] text-center ${isActive ? `${Math.ceil(remaining / 60000)}m` : 'OFFLINE'}`}>
                {isActive ? `${Math.ceil(remaining / 60000)}m` : 'OFFLINE'}
              </div>
           </div>
@@ -568,8 +585,6 @@ const App: React.FC = () => {
   const renderHeaderSlotSegment = (type: 'low' | 'probe') => {
     const stats = getSlotStats(type);
     const color = type === 'low' ? '#00ffd5' : '#bd00ff';
-    const launcherId = type === 'low' ? settings.globalLowSlot?.launcherId : settings.globalProbeSlot?.launcherId;
-    const progress = launcherId ? serverService.getCooldownProgress(launcherId) : 1;
     const isAnyFiring = !!processingId;
     
     // RENAMED LABELS
@@ -589,8 +604,8 @@ const App: React.FC = () => {
               <div className="w-full h-[1px] bg-zinc-900 mt-1"></div>
               <span className="text-[8px] font-black uppercase text-zinc-600 tracking-[0.2em]">{label}</span>
               {stats.cooldown > 0 && (
-                <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-zinc-800/40">
-                  <div className="h-full bg-current transition-all duration-1000" style={{ width: `${progress * 100}%`, color: color }}></div>
+                <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-zinc-800">
+                  <div className="h-full transition-all duration-500 bg-current shadow-[0_0_5px_currentColor]" style={{ width: `${stats.progress * 100}%`, color: color }}></div>
                 </div>
               )}
           </div>
@@ -718,7 +733,7 @@ const App: React.FC = () => {
               </button>
             ))}
           </nav>
-          <div className="flex-1 overflow-y-auto p-10 no-scroll">
+          <div className={`flex-1 flex flex-col no-scroll ${activeTab === 'dashboard' ? '' : 'p-10 overflow-y-auto'}`}>
             {activeTab === 'dashboard' && <Dashboard stats={systemData} mode={mode} session={session} settings={settings} setSettings={setSettings} terminalHistory={terminalHistory} onHandshake={handleHandshake} onDisconnect={handleDisconnect} onLog={addLog} onBrainClick={handleBrainRequest} onProbeClick={handleNeuralProbe} onProbeInfo={() => {}} onLauncherSelect={(id, type) => setInventoryContext({panelId: id, type: type as any})} onAdapterCommand={cmd => setTerminalHistory(p => [...p, cmd])} onRefresh={() => {}} processingId={processingId} latestCoreProbeResult={latestCoreProbeResult} activeTelemetry={activeTelemetry} tick={tick} />}
             {activeTab === 'core_stats' && <CoreStatsView stats={systemData} mode={mode} timeframe="1m" settings={settings} onProbeClick={handleNeuralProbe} onBrainClick={handleBrainRequest} onProbeInfo={() => {}} onLauncherSelect={(id, type) => setInventoryContext({panelId: id, type: type as any})} onCommand={cmd => setTerminalHistory(p => [...p, cmd])} activeTelemetry={activeTelemetry} setActiveTelemetry={setActiveTelemetry} />}
             {activeTab === 'telemetry' && <TelemetryGraphs stats={telemetryData} timeframe="1m" isSimulated={mode === OperationalMode.SIMULATED} isConnected={uplinkStatus.service === 'ACTIVE'} onProbe={handleNeuralProbe} onProbeInfo={() => {}} onBrainClick={handleBrainRequest} onLauncherSelect={(id, type) => setInventoryContext({panelId: id, type: type as any})} serviceStatus={(uplinkStatus.service === 'ACTIVE' ? 'ONLINE' : (serviceConnectionLocked ? 'LOCKED' : 'OFFLINE')) as any} onRetryConnection={handleRetryTelemetry} settings={settings} slotConfig={settings.panelSlots ? settings.panelSlots['RSSI_REPORT'] : undefined} globalLowSlot={settings.globalLowSlot} permissions={settings.slotPermissions['RSSI_REPORT']} />}

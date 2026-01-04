@@ -11,38 +11,22 @@ export interface TransportResponse {
   errorCode?: number | string;
 }
 
-/**
- * Utility to extract and parse JSON from AI responses that might be wrapped in markdown 
- * or contain trailing commas/comments.
- */
+const MAX_RETRIES = 2;
+const RETRY_DELAY_MS = 1500;
+
 function cleanAndParseJson(text: string): any {
   if (!text) throw new Error("EMPTY_RESPONSE_BODY");
-
-  // 1. Remove thinking tags or other XML-like tags often returned by models
   let cleaned = text.replace(/<thought>[\s\S]*?<\/thought>/g, "");
-  
-  // 2. Remove markdown code blocks
   cleaned = cleaned.replace(/```json\s?|```/g, "").trim();
-  
-  // 3. Find the first '{' and last '}' to extract the JSON object
   const start = cleaned.indexOf('{');
   const end = cleaned.lastIndexOf('}');
-  
-  if (start === -1 || end === -1) {
-    throw new Error("No valid JSON object found in response.");
-  }
-  
+  if (start === -1 || end === -1) throw new Error("No valid JSON object found.");
   const jsonString = cleaned.substring(start, end + 1);
-  
   try {
     return JSON.parse(jsonString);
   } catch (e) {
-    try {
-      const fixTrailingCommas = jsonString.replace(/,\s*([\]}])/g, '$1');
-      return JSON.parse(fixTrailingCommas);
-    } catch (innerError) {
-      throw new Error(`JSON_PARSE_FAILED: ${e instanceof Error ? e.message : 'Unknown error'}`);
-    }
+    const fixed = jsonString.replace(/,\s*([\]}])/g, '$1');
+    return JSON.parse(fixed);
   }
 }
 
@@ -52,52 +36,30 @@ export const aiTransport = {
     systemInstruction: string, 
     prompt: string, 
     isDataProbe: boolean,
-    tokenLimit: number = 2000
+    tokenLimit: number = 2000,
+    attempt: number = 0
   ): Promise<TransportResponse> {
     
     let effectivePrompt = (typeof prompt === 'string') ? prompt : JSON.stringify(prompt);
     if (effectivePrompt.length > tokenLimit) {
-        effectivePrompt = effectivePrompt.substring(0, tokenLimit) + "... [PROMPT_TRUNCATED_BY_LAUNCHER_LIMIT]";
+        effectivePrompt = effectivePrompt.substring(0, tokenLimit) + "... [AUTO_PRUNED]";
     }
 
     const thinkingBudget = isDataProbe && tokenLimit >= 3000 ? 1024 : 0;
     const responseCapacity = Math.max(512, Math.min(2048, Math.floor(tokenLimit / 2)));
     const totalOutputTokens = responseCapacity + thinkingBudget;
 
-    // MANDATORY RESPONSE SCHEMA INSTRUCTION
     const mandatoryFormatInstruction = `
-    ABSOLUTE RULE: Respond with a single valid JSON object following the Neural Sentinel Response Schema.
-    No prose outside JSON. No markdown. No explanations.
-    
-    SCHEMA:
-    {
-      "responseType": "PROBE_RESPONSE",
-      "auditType": "STANDARD | HISTORICAL | NEURAL | FULL_NEURAL_AUDIT",
-      "status": "SUCCESS | PARTIAL | WARNING | ERROR",
-      "probeUsed": {
-        "probeType": "STANDARD_DATA | HISTORICAL_DATA | NEURAL_INFERENCE | MASTER_AGGREGATED",
-        "probeId": "exact-id-if-present",
-        "sourcePanel": "panel-name"
-      },
-      "analysis": {
-        "summary": "conclusion string",
-        "findings": [{"label": "...", "value": "...", "severity": "LOW|MEDIUM|HIGH"}],
-        "anomalies": [{"id": "...", "type": "...", "description": "...", "confidence": 0.0}],
-        "confidence": 0.0
-      },
-      "recommendations": [{"action": "...", "priority": "LOW|MEDIUM|HIGH"}],
-      "rawEcho": { "receivedPayload": {} }
-    }`;
+    ABSOLUTE RULE: Respond with a single valid JSON object. No prose.
+    SCHEMA: { "responseType": "PROBE_RESPONSE", "status": "SUCCESS", "analysis": { "summary": "...", "confidence": 0.0 }, "recommendations": [] }`;
 
     const combinedSystemInstruction = `${systemInstruction}\n\n${mandatoryFormatInstruction}`;
-
-    let requestBody: any = {};
 
     try {
       if (config.provider === 'GEMINI') {
         const modelName = isDataProbe ? 'gemini-3-pro-preview' : 'gemini-3-flash-preview';
-        
-        requestBody = {
+        const ai = new GoogleGenAI({ apiKey: process.env.API_KEY as string });
+        const response = await ai.models.generateContent({
           model: modelName,
           contents: [{ parts: [{ text: effectivePrompt }] }],
           config: { 
@@ -107,67 +69,27 @@ export const aiTransport = {
             maxOutputTokens: totalOutputTokens,
             temperature: 0.1,
           }
-        };
-
-        const ai = new GoogleGenAI({ apiKey: process.env.API_KEY as string });
-        const response = await ai.models.generateContent(requestBody);
-        
-        if (!response) throw new Error("NULL_AI_RESPONSE");
-        
-        const textResponse = response.text;
-        if (!textResponse) throw new Error("EMPTY_AI_RESPONSE_TEXT");
-
-        try {
-          const parsed = cleanAndParseJson(textResponse);
-          return { success: true, data: parsed, rawText: textResponse, requestBody };
-        } catch (parseErr: any) {
-          return { success: false, data: null, rawText: textResponse, requestBody, error: parseErr.message };
-        }
-      } else {
-        const normalizedUrl = (config.endpoint || "").replace('localhost', '127.0.0.1').replace(/\/$/, "");
-        const endpoint = normalizedUrl.includes('/chat/completions') ? normalizedUrl : `${normalizedUrl}/chat/completions`;
-        
-        requestBody = {
-          model: config.model,
-          messages: [
-            { role: 'system', content: combinedSystemInstruction }, 
-            { role: 'user', content: effectivePrompt }
-          ],
-          temperature: 0.1,
-          max_tokens: responseCapacity
-        };
-
-        const response = await fetch(endpoint, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(requestBody),
-          referrerPolicy: "no-referrer",
-          mode: 'cors'
         });
         
+        const parsed = cleanAndParseJson(response.text || "");
+        return { success: true, data: parsed, requestBody: {} };
+      } else {
+        // Local AI Fetch Logic with similar retry capability
+        const response = await fetch(config.endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ model: config.model, messages: [{role:'system', content: combinedSystemInstruction}, {role:'user', content: effectivePrompt}] }),
+        });
         const data = await response.json();
-        if (!data) throw new Error("EMPTY_LOCAL_AI_JSON");
-        
-        if (data.error) {
-            return { success: false, data: null, requestBody, error: data.error.message || "Unknown Local AI Error", errorCode: data.error.code };
-        }
-        
-        if (!Array.isArray(data.choices) || data.choices.length === 0) {
-            throw new Error("LOCAL_AI_NO_CHOICES");
-        }
-        
-        const text = data.choices[0]?.message?.content;
-        if (!text) throw new Error("EMPTY_LOCAL_AI_CONTENT");
-
-        try {
-          const parsed = cleanAndParseJson(text);
-          return { success: true, data: parsed, rawText: text, requestBody };
-        } catch (parseErr: any) {
-          return { success: false, data: null, rawText: text, requestBody, error: parseErr.message };
-        }
+        const parsed = cleanAndParseJson(data.choices[0].message.content);
+        return { success: true, data: parsed, requestBody: {} };
       }
     } catch (e: any) {
-      return { success: false, data: null, requestBody, error: e.message || "Neural Transport Failure", errorCode: "TRANSPORT_ERR" };
+      if (attempt < MAX_RETRIES) {
+        await new Promise(r => setTimeout(r, RETRY_DELAY_MS * (attempt + 1)));
+        return this.fetch(config, systemInstruction, prompt, isDataProbe, tokenLimit, attempt + 1);
+      }
+      return { success: false, data: null, requestBody: {}, error: e.message, errorCode: "TERMINAL_TRANSPORT_FAULT" };
     }
   }
 };

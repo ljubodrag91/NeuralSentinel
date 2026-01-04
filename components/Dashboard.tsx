@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { OperationalMode, SessionInfo, CoreStats, AppSettings, Platform } from '../types';
 import Card from './common/Card';
@@ -64,7 +63,6 @@ const Dashboard: React.FC<DashboardProps> = ({
   const isLocal = settings.dataSourceMode === 'LOCAL';
   const isMasterActive = processingId === 'MASTER_AGGREGATE';
   const platformAccent = settings.platform === Platform.LINUX ? '#eab308' : '#00f2ff';
-  const isWindows = settings.platform === Platform.WINDOWS;
 
   const handleConsoleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -112,7 +110,8 @@ const Dashboard: React.FC<DashboardProps> = ({
   const isResultError = latestCoreProbeResult?.elementId === 'TRANSPORT_ERROR' || latestCoreProbeResult?.elementId === 'ERROR';
 
   return (
-    <div className="space-y-6 h-full flex flex-col no-scroll overflow-hidden pb-4">
+    <div className="flex flex-col h-full overflow-hidden bg-black/10 p-6 md:p-8 lg:p-10 gap-6">
+      {/* Dashboard Controls */}
       <div className="flex justify-between items-center px-2 shrink-0">
         <div className="flex items-center gap-4">
           <Tooltip name="DASHBOARD_STREAM" source="SYSTEM" desc="Real-time link monitoring.">
@@ -157,62 +156,65 @@ const Dashboard: React.FC<DashboardProps> = ({
       </div>
 
       {!terminalMode ? (
-        <>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-stretch shrink-0">
-            <Card 
-              id="HANDSHAKE_CORE"
-              title="HANDSHAKE_NODE" 
-              variant={handshakeVariant}
-              onProbe={() => onProbeClick('HANDSHAKE_CORE', { ipInput, user, port })}
-              onBrain={() => onBrainClick('HANDSHAKE_CORE', 'Connection Link', { ipInput, user, status: session.status })}
-              onLauncherSelect={(pid, type) => onLauncherSelect(pid, type)}
-              isProcessing={processingId === 'HANDSHAKE_CORE'}
-              probeColor={getLauncherColor('HANDSHAKE_CORE')}
-              platform={settings.platform}
-              slotConfig={settings.panelSlots['HANDSHAKE_CORE']}
-              globalLowSlot={settings.globalLowSlot}
-              permissions={settings.slotPermissions['HANDSHAKE_CORE']}
-            >
-              <div className="space-y-4">
-                <input value={isLocal ? '127.0.0.1 (LOCAL_LOCKED)' : ipInput} onChange={e => !isLocal && setIpInput(e.target.value)} disabled={isConnected && !isLocal} className={`bg-black/50 border border-zinc-900 p-2 text-[11px] font-mono outline-none w-full ${(isConnected && !isLocal) || isLocal ? 'text-zinc-600' : 'text-white'}`} placeholder="0.0.0.0" />
-                <div className="grid grid-cols-3 gap-3">
-                  <input value={isLocal ? 'admin' : user} onChange={e => !isLocal && setUser(e.target.value)} disabled={isConnected && !isLocal} className="bg-black/50 border border-zinc-900 p-1.5 text-[10px] font-mono outline-none" placeholder="user" />
-                  <input type="password" value={isLocal ? '******' : pass} onChange={e => !isLocal && setPass(e.target.value)} disabled={isConnected && !isLocal} className="bg-black/50 border border-zinc-900 p-1.5 text-[10px] font-mono outline-none" placeholder="pass" />
-                  <input type="number" value={isLocal ? 0 : port} onChange={e => !isLocal && setPort(Number(e.target.value))} disabled={isConnected && !isLocal} className="bg-black/50 border border-zinc-900 p-1.5 text-[10px] font-mono outline-none" />
+        <div className="flex-1 flex flex-col gap-6 min-h-0">
+          {/* Top Row: Nodes Section (50% of available space) */}
+          <div className="flex-[0.5] min-h-0">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 h-full items-stretch">
+              <Card 
+                id="HANDSHAKE_CORE"
+                title="HANDSHAKE_NODE" 
+                variant={handshakeVariant}
+                onProbe={() => onProbeClick('HANDSHAKE_CORE', { ipInput, user, port })}
+                onBrain={() => onBrainClick('HANDSHAKE_CORE', 'Connection Link', { ipInput, user, status: session.status })}
+                onLauncherSelect={(pid, type) => onLauncherSelect(pid, type)}
+                isProcessing={processingId === 'HANDSHAKE_CORE'}
+                probeColor={getLauncherColor('HANDSHAKE_CORE')}
+                platform={settings.platform}
+                slotConfig={settings.panelSlots['HANDSHAKE_CORE']}
+                globalLowSlot={settings.globalLowSlot}
+                permissions={settings.slotPermissions['HANDSHAKE_CORE']}
+                className="h-full"
+              >
+                <div className="space-y-4">
+                  <input value={isLocal ? '127.0.0.1 (LOCAL_LOCKED)' : ipInput} onChange={e => !isLocal && setIpInput(e.target.value)} disabled={isConnected && !isLocal} className={`bg-black/50 border border-zinc-900 p-2 text-[11px] font-mono outline-none w-full ${(isConnected && !isLocal) || isLocal ? 'text-zinc-600' : 'text-white'}`} placeholder="0.0.0.0" />
+                  <div className="grid grid-cols-3 gap-3">
+                    <input value={isLocal ? 'admin' : user} onChange={e => !isLocal && setUser(e.target.value)} disabled={isConnected && !isLocal} className="bg-black/50 border border-zinc-900 p-1.5 text-[10px] font-mono outline-none" placeholder="user" />
+                    <input type="password" value={isLocal ? '******' : pass} onChange={e => !isLocal && setPass(e.target.value)} disabled={isConnected && !isLocal} className="bg-black/50 border border-zinc-900 p-1.5 text-[10px] font-mono outline-none" placeholder="pass" />
+                    <input type="number" value={isLocal ? 0 : port} onChange={e => !isLocal && setPort(Number(e.target.value))} disabled={isConnected && !isLocal} className="bg-black/50 border border-zinc-900 p-1.5 text-[10px] font-mono outline-none" />
+                  </div>
+                  <button 
+                    onClick={isConnected && !isLocal ? onDisconnect : () => onHandshake(ipInput, user, pass, port)} 
+                    disabled={isLocal}
+                    className={`w-full py-3 text-[10px] font-black border transition-all tracking-widest uppercase ${isConnected && !isLocal ? 'border-red-900/40 text-red-500 hover:bg-red-500/10' : 'border-zinc-800 text-zinc-600 hover:text-white'} ${isLocal ? 'opacity-30 cursor-not-allowed' : ''}`}
+                  >
+                    {isLocal ? 'LOCAL_HOST_STABLE' : (isConnected ? 'TERMINATE' : 'HANDSHAKE')}
+                  </button>
                 </div>
-                <button 
-                  onClick={isConnected && !isLocal ? onDisconnect : () => onHandshake(ipInput, user, pass, port)} 
-                  disabled={isLocal}
-                  className={`w-full py-3 text-[10px] font-black border transition-all tracking-widest uppercase ${isConnected && !isLocal ? 'border-red-900/40 text-red-500 hover:bg-red-500/10' : 'border-zinc-800 text-zinc-600 hover:text-white'} ${isLocal ? 'opacity-30 cursor-not-allowed' : ''}`}
-                >
-                  {isLocal ? 'LOCAL_HOST_STABLE' : (isConnected ? 'TERMINATE' : 'HANDSHAKE')}
-                </button>
-              </div>
-            </Card>
+              </Card>
 
-            <Card 
-              id="ADAPTER_HUB"
-              title="ADAPTER_MATRIX" 
-              variant={handshakeVariant} 
-              onProbe={() => onProbeClick('ADAPTER_HUB', { stats })} 
-              onBrain={() => onBrainClick('ADAPTER_HUB', 'Network Matrix', { stats })} 
-              onLauncherSelect={(pid, type) => onLauncherSelect(pid, type)}
-              isProcessing={processingId === 'ADAPTER_HUB'}
-              probeColor={getLauncherColor('ADAPTER_HUB')}
-              platform={settings.platform}
-              slotConfig={settings.panelSlots['ADAPTER_HUB']}
-              globalLowSlot={settings.globalLowSlot}
-              permissions={settings.slotPermissions['ADAPTER_HUB']}
-            >
-              <div className="flex flex-col gap-2 flex-1 overflow-y-auto no-scroll pr-1">
-                {adapters.map(name => {
-                  const iface = stats?.network?.interfaces?.[name];
-                  const isActive = iface?.isUp;
-                  const isHighlighted = isWindows && isActive;
-                  const statusColor = isActive ? (isWindows ? '#00f2ff' : '#22c55e') : '#ef4444';
-                  
-                  // Detail payload for tooltips
-                  const tooltipDesc = iface ? `
+              <Card 
+                id="ADAPTER_HUB"
+                title="ADAPTER_MATRIX" 
+                variant={handshakeVariant} 
+                onProbe={() => onProbeClick('ADAPTER_HUB', { stats })} 
+                onBrain={() => onBrainClick('ADAPTER_HUB', 'Network Matrix', { stats })} 
+                onLauncherSelect={(pid, type) => onLauncherSelect(pid, type)}
+                isProcessing={processingId === 'ADAPTER_HUB'}
+                probeColor={getLauncherColor('ADAPTER_HUB')}
+                platform={settings.platform}
+                slotConfig={settings.panelSlots['ADAPTER_HUB']}
+                globalLowSlot={settings.globalLowSlot}
+                permissions={settings.slotPermissions['ADAPTER_HUB']}
+                className="h-full"
+              >
+                <div className="flex flex-col gap-2 flex-1 overflow-y-auto no-scroll pr-1">
+                  {adapters.map(name => {
+                    const iface = stats?.network?.interfaces?.[name];
+                    const isActive = iface?.isUp;
+                    const isHighlighted = settings.platform === Platform.WINDOWS && isActive;
+                    const statusColor = isActive ? (settings.platform === Platform.WINDOWS ? '#00f2ff' : '#22c55e') : '#ef4444';
+                    
+                    const tooltipDesc = iface ? `
 MAC Address: ${iface.mac && iface.mac.length > 0 ? iface.mac[0] : 'None'}
 Status: ${isActive ? 'ACTIVE' : 'INACTIVE'}
 Speed: ${iface.speed > 0 ? `${iface.speed} Mbps` : 'N/A'}
@@ -222,152 +224,156 @@ Throughput TX: ${iface.txKB?.toFixed(1) || 0} KB/s
 Total Recv: ${iface.totalRecvMB?.toFixed(1) || 0} MB
 Total Sent: ${iface.totalSentMB?.toFixed(1) || 0} MB
 Last Activity: ${iface.lastActivity || 'Unknown'}
-                  `.trim() : 'Interface data unavailable';
+                    `.trim() : 'Interface data unavailable';
 
-                  return (
-                    <Tooltip key={name} name={name} source={isLocal ? "LOCAL" : "REMOTE"} desc={tooltipDesc}>
-                        <div className={`px-4 py-2 border bg-black/20 flex flex-col gap-1 group transition-all hover:bg-zinc-900/40 ${isHighlighted ? 'border-blue-500/50 shadow-[0_0_10px_rgba(0,242,255,0.1)]' : 'border-zinc-900/40'}`}>
-                            <div className="flex justify-between items-center">
-                                <div className="flex items-center gap-3">
-                                    <div className={`w-1.5 h-1.5 rounded-full transition-all duration-500`} style={{ backgroundColor: statusColor, boxShadow: isActive ? `0 0 5px ${statusColor}` : 'none' }}></div>
-                                    <span className={`text-[10px] font-black uppercase tracking-widest transition-colors ${isActive ? 'text-zinc-300 group-hover:text-white' : 'text-zinc-700'}`}>{name}</span>
-                                </div>
-                                <span className={`text-[9px] font-mono ${isActive ? 'text-zinc-500' : 'text-zinc-800'}`}>{iface?.rxKB !== undefined ? `RX: ${iface.rxKB.toFixed(1)}K` : ''}</span>
-                            </div>
-                            <div className="flex justify-between items-center mt-0.5">
-                                <span className="text-[9px] font-mono text-zinc-600">{(iface?.ipv4 && iface.ipv4[0]) || 'OFFLINE'}</span>
-                                <span className={`text-[8px] font-mono uppercase tracking-tighter ${isActive ? 'text-zinc-700' : 'text-zinc-900'}`}>{iface?.mac && iface.mac.length > 0 ? iface.mac[0] : 'NO_MAC'}</span>
-                            </div>
-                        </div>
+                    return (
+                      <Tooltip key={name} name={name} source={isLocal ? "LOCAL" : "REMOTE"} desc={tooltipDesc}>
+                          <div className={`px-4 py-2 border bg-black/20 flex flex-col gap-1 group transition-all hover:bg-zinc-900/40 ${isHighlighted ? 'border-blue-500/50 shadow-[0_0_10px_rgba(0,242,255,0.1)]' : 'border-zinc-900/40'}`}>
+                              <div className="flex justify-between items-center">
+                                  <div className="flex items-center gap-3">
+                                      <div className={`w-1.5 h-1.5 rounded-full transition-all duration-500`} style={{ backgroundColor: statusColor, boxShadow: isActive ? `0 0 5px ${statusColor}` : 'none' }}></div>
+                                      <span className={`text-[10px] font-black uppercase tracking-widest transition-colors ${isActive ? 'text-zinc-300 group-hover:text-white' : 'text-zinc-700'}`}>{name}</span>
+                                  </div>
+                                  <span className={`text-[9px] font-mono ${isActive ? 'text-zinc-500' : 'text-zinc-800'}`}>{iface?.rxKB !== undefined ? `RX: ${iface.rxKB.toFixed(1)}K` : ''}</span>
+                              </div>
+                              <div className="flex justify-between items-center mt-0.5">
+                                  <span className="text-[9px] font-mono text-zinc-600">{(iface?.ipv4 && iface.ipv4[0]) || 'OFFLINE'}</span>
+                                  <span className={`text-[8px] font-mono uppercase tracking-tighter ${isActive ? 'text-zinc-700' : 'text-zinc-900'}`}>{iface?.mac && iface.mac.length > 0 ? iface.mac[0] : 'NO_MAC'}</span>
+                              </div>
+                          </div>
+                      </Tooltip>
+                    );
+                  })}
+                  {adapters.length === 0 && <div className="py-10 text-center text-zinc-800 uppercase tracking-widest text-[9px]">Awaiting adapter broadcast...</div>}
+                </div>
+              </Card>
+            </div>
+          </div>
+
+          {/* Bottom Row: Master Intelligence (50% of available space) */}
+          <div className="flex-[0.5] min-h-0">
+            <Card 
+              id="GLOBAL_SYSTEM_PROBE"
+              title="MASTER_INTELLIGENCE" 
+              variant="purple" 
+              className="h-full relative overflow-visible"
+              onProbe={() => isAvailable && onProbeClick('GLOBAL_SYSTEM_PROBE', { stats, mode, activeFocus: Array.from(activeTelemetry || []) })}
+              onBrain={() => onBrainClick('GLOBAL_SYSTEM_PROBE', 'Neural Hub Intelligence', { latestResult: latestCoreProbeResult })}
+              onLauncherSelect={(pid, type) => onLauncherSelect(pid, type)}
+              probeColor={getLauncherColor('GLOBAL_SYSTEM_PROBE')}
+              platform={settings.platform}
+              permissions={settings.slotPermissions['GLOBAL_SYSTEM_PROBE']}
+              slotConfig={settings.panelSlots['GLOBAL_SYSTEM_PROBE']}
+              globalLowSlot={settings.globalLowSlot}
+            >
+              <div className="flex flex-col h-full min-h-0">
+                <div className="flex justify-center gap-12 mb-4 border-b border-zinc-900/40 pb-3 shrink-0">
+                    <Tooltip name="TELEMETRY_CONTROL" source="SYSTEM" desc="Enable/Disable telemetry data stream">
+                      <button 
+                        onClick={() => toggleService('telemetry')}
+                        disabled={isMasterActive}
+                        className={`flex items-center gap-3 group transition-all ${isMasterActive ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                      >
+                          <div className={`w-2 h-2 rounded-full transition-all duration-300 ${settings.telemetryEnabled ? 'bg-[#28a745] shadow-[0_0_8px_#28a745]' : 'bg-[#6c757d]'}`}></div>
+                          <span className={`text-[10px] font-black uppercase tracking-widest transition-colors ${settings.telemetryEnabled ? 'text-zinc-300' : 'text-zinc-600'}`}>Telemetry_Uplink</span>
+                      </button>
                     </Tooltip>
-                  );
-                })}
-                {adapters.length === 0 && <div className="py-10 text-center text-zinc-800 uppercase tracking-widest text-[9px]">Awaiting adapter broadcast...</div>}
+
+                    <Tooltip name="NEURAL_CONTROL" source="SYSTEM" desc="Enable/Disable AI aggregation link">
+                      <button 
+                        onClick={() => toggleService('neural')}
+                        disabled={isMasterActive}
+                        className={`flex items-center gap-3 group transition-all ${isMasterActive ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                      >
+                          <div className={`w-2 h-2 rounded-full transition-all duration-300 ${settings.neuralUplinkEnabled ? 'bg-[#28a745] shadow-[0_0_8px_#28a745]' : 'bg-[#6c757d]'}`}></div>
+                          <span className={`text-[10px] font-black uppercase tracking-widest transition-colors ${settings.neuralUplinkEnabled ? 'text-zinc-300' : 'text-zinc-600'}`}>Neural_Link</span>
+                      </button>
+                    </Tooltip>
+                </div>
+
+                <div className="flex items-center justify-between gap-8 flex-1 min-h-0 px-4">
+                  <div className="flex-1 text-[10px] font-mono text-zinc-500 leading-relaxed border-r border-zinc-900/30 pr-4 h-full overflow-y-auto no-scroll flex flex-col justify-center">
+                    <div className={`text-[9px] font-black uppercase tracking-widest mb-2 border-b border-zinc-900/20 pb-1 ${isResultError ? 'text-red-500' : 'text-zinc-700'}`}>
+                      {isResultError ? 'HEURISTIC_FAULT' : 'Heuristic_Buffer'}
+                    </div>
+                    {latestCoreProbeResult ? (
+                      <div className="animate-in fade-in duration-500">
+                        <div className={`font-black mb-1 uppercase tracking-tighter ${isResultError ? 'text-red-400' : 'text-purple-400'}`}>
+                          {isResultError ? 'API_EXCEPTION' : `Status: ${latestCoreProbeResult.status}`}
+                        </div>
+                        <div className={`${isResultError ? 'text-red-300 font-bold' : 'text-zinc-400'} italic`}>
+                          "{latestCoreProbeResult.description}"
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="text-zinc-800 italic uppercase text-[8px] tracking-widest animate-pulse text-center">Awaiting System Scan...</div>
+                    )}
+                  </div>
+
+                  <div className="flex flex-col items-center justify-center relative group w-64 shrink-0">
+                    <div className="absolute top-[-30px] flex gap-12 pointer-events-none opacity-20">
+                      <div className={`w-[1px] h-32 bg-purple-500 ${isMasterActive ? 'animate-pulse' : ''}`}></div>
+                      <div className={`w-[1px] h-40 bg-purple-500 ${isMasterActive ? 'animate-pulse' : ''}`}></div>
+                      <div className={`w-[1px] h-32 bg-purple-500 ${isMasterActive ? 'animate-pulse' : ''}`}></div>
+                    </div>
+                    <div className="w-24 h-6 bg-zinc-800 border-x border-t border-purple-500/30 rounded-t-sm mb-0 flex items-center justify-center">
+                      <div className={`w-4 h-4 rounded-full bg-black border border-zinc-700 shadow-inner ${isMasterActive ? 'glow-purple shadow-[0_0_10px_#bd00ff] animate-pulse' : ''}`}></div>
+                    </div>
+                    <div className="relative z-10">
+                      <Tooltip name="AGGREGATED_CORE_PROBE" source="NEURAL_NETWORK" desc={`${getMainProbeStatusText()}. Single execution combines all active node vectors. Limits: 4000 Tokens.`} variant="purple">
+                        <button 
+                          onClick={() => isAvailable && onProbeClick('MASTER_AGGREGATE', { stats, mode, activeFocus: Array.from(activeTelemetry || []) })}
+                          disabled={isMasterActive || !isAvailable}
+                          className={`relative w-64 h-20 bg-[#050608] border-x border-b border-purple-500/60 shadow-2xl flex flex-col items-center justify-center transition-all overflow-hidden ${isAvailable ? 'cursor-pointer hover:border-purple-400 hover:shadow-[0_0_30px_rgba(189,0,255,0.2)]' : 'cursor-not-allowed opacity-50'}`}
+                        >
+                          <div className="absolute top-2 left-4 text-[6px] text-zinc-800 font-mono tracking-tighter uppercase">Sentinel_MASTER_CORE_v2</div>
+                          <div className="absolute bottom-2 right-4 text-[6px] text-zinc-800 font-mono tracking-tighter uppercase">5m COOLDOWN</div>
+                          <span className={`text-[12px] font-black uppercase tracking-[0.6em] transition-colors ${isMasterActive ? 'text-white animate-pulse' : 'text-purple-400'}`}>
+                            {isMasterActive ? 'PROCESSING...' : 'CORE PROBE'}
+                          </span>
+                          {isMasterActive && (
+                            <div className="absolute inset-0 pointer-events-none transition-opacity">
+                              <div className="w-full h-full bg-purple-500/20 animate-pulse"></div>
+                            </div>
+                          )}
+                          {(masterProbeCd > 0 && !isMasterActive) && (
+                             <div className="absolute inset-0 bg-red-950/20 flex items-center justify-center z-20 backdrop-blur-[1px]">
+                               <span className="text-[10px] font-black text-red-500 tracking-[0.2em]">{(masterProbeCd/1000).toFixed(0)}s</span>
+                             </div>
+                          )}
+                        </button>
+                      </Tooltip>
+                    </div>
+                    <div className="flex gap-16 mt-[-2px] pointer-events-none">
+                      <div className={`w-0.5 h-10 bg-purple-500/40 transition-all ${isMasterActive ? 'animate-pulse' : ''}`}></div>
+                      <div className={`w-0.5 h-16 bg-purple-500/40 transition-all ${isMasterActive ? 'animate-pulse' : ''}`}></div>
+                      <div className={`w-0.5 h-10 bg-purple-500/40 transition-all ${isMasterActive ? 'animate-pulse' : ''}`}></div>
+                    </div>
+                    <span className={`absolute bottom-[-30px] text-[7px] font-black uppercase tracking-[0.4em] pointer-events-none whitespace-nowrap transition-colors ${isMasterActive ? 'text-purple-500' : 'text-zinc-800'}`}>
+                      {isMasterActive ? 'UPLINK_DENSE_STREAM' : 'Neural_Bridge_Standby_Ready'}
+                    </span>
+                  </div>
+
+                  <div className="flex-1 text-[10px] font-mono text-zinc-500 leading-relaxed border-l border-zinc-900/30 pl-4 h-full overflow-y-auto no-scroll flex flex-col justify-center">
+                     <div className={`text-[9px] font-black uppercase tracking-widest mb-2 border-b border-zinc-900/20 pb-1 ${isResultError ? 'text-red-500' : 'text-zinc-700'}`}>Directives</div>
+                    {latestCoreProbeResult ? (
+                      <div className="animate-in fade-in duration-500">
+                        <div className={`font-black mb-1 uppercase tracking-tighter ${isResultError ? 'text-red-500 animate-pulse' : 'text-teal-500'}`}>
+                          {isResultError ? 'CRITICAL_SUGGESTION:' : 'Recommendation:'}
+                        </div>
+                        <div className={`${isResultError ? 'text-red-400' : 'text-zinc-300 font-bold'} border-l-2 ${isResultError ? 'border-red-500/50' : 'border-teal-500/30'} pl-3 leading-tight`}>
+                          {latestCoreProbeResult.recommendation}
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="text-zinc-800 italic uppercase text-[8px] tracking-widest text-center">Standby...</div>
+                    )}
+                  </div>
+                </div>
               </div>
             </Card>
           </div>
-
-          <Card 
-            id="GLOBAL_SYSTEM_PROBE"
-            title="MASTER_INTELLIGENCE" 
-            variant="purple" 
-            className="relative overflow-visible shrink-0 pb-6 flex-1 max-h-[350px]"
-            onProbe={() => isAvailable && onProbeClick('GLOBAL_SYSTEM_PROBE', { stats, mode, activeFocus: Array.from(activeTelemetry || []) })}
-            onBrain={() => onBrainClick('GLOBAL_SYSTEM_PROBE', 'Neural Hub Intelligence', { latestResult: latestCoreProbeResult })}
-            onLauncherSelect={(pid, type) => onLauncherSelect(pid, type)}
-            probeColor={getLauncherColor('GLOBAL_SYSTEM_PROBE')}
-            platform={settings.platform}
-            permissions={settings.slotPermissions['GLOBAL_SYSTEM_PROBE']}
-            slotConfig={settings.panelSlots['GLOBAL_SYSTEM_PROBE']}
-            globalLowSlot={settings.globalLowSlot}
-          >
-            <div className="flex flex-col h-full">
-              <div className="flex justify-center gap-12 mb-6 border-b border-zinc-900/40 pb-3 shrink-0">
-                  <Tooltip name="TELEMETRY_CONTROL" source="SYSTEM" desc="Enable/Disable telemetry data stream">
-                    <button 
-                      onClick={() => toggleService('telemetry')}
-                      disabled={isMasterActive}
-                      className={`flex items-center gap-3 group transition-all ${isMasterActive ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
-                    >
-                        <div className={`w-2 h-2 rounded-full transition-all duration-300 ${settings.telemetryEnabled ? 'bg-[#28a745] shadow-[0_0_8px_#28a745]' : 'bg-[#6c757d]'}`}></div>
-                        <span className={`text-[10px] font-black uppercase tracking-widest transition-colors ${settings.telemetryEnabled ? 'text-zinc-300' : 'text-zinc-600'}`}>Telemetry_Uplink</span>
-                    </button>
-                  </Tooltip>
-
-                  <Tooltip name="NEURAL_CONTROL" source="SYSTEM" desc="Enable/Disable AI aggregation link">
-                    <button 
-                      onClick={() => toggleService('neural')}
-                      disabled={isMasterActive}
-                      className={`flex items-center gap-3 group transition-all ${isMasterActive ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
-                    >
-                        <div className={`w-2 h-2 rounded-full transition-all duration-300 ${settings.neuralUplinkEnabled ? 'bg-[#28a745] shadow-[0_0_8px_#28a745]' : 'bg-[#6c757d]'}`}></div>
-                        <span className={`text-[10px] font-black uppercase tracking-widest transition-colors ${settings.neuralUplinkEnabled ? 'text-zinc-300' : 'text-zinc-600'}`}>Neural_Link</span>
-                    </button>
-                  </Tooltip>
-              </div>
-
-              <div className="flex items-center justify-between gap-8 flex-1 min-h-0 px-4">
-                <div className="flex-1 text-[10px] font-mono text-zinc-500 leading-relaxed border-r border-zinc-900/30 pr-4 h-full overflow-y-auto no-scroll flex flex-col justify-center">
-                  <div className={`text-[9px] font-black uppercase tracking-widest mb-2 border-b border-zinc-900/20 pb-1 ${isResultError ? 'text-red-500' : 'text-zinc-700'}`}>
-                    {isResultError ? 'HEURISTIC_FAULT' : 'Heuristic_Buffer'}
-                  </div>
-                  {latestCoreProbeResult ? (
-                    <div className="animate-in fade-in duration-500">
-                      <div className={`font-black mb-1 uppercase tracking-tighter ${isResultError ? 'text-red-400' : 'text-purple-400'}`}>
-                        {isResultError ? 'API_EXCEPTION' : `Status: ${latestCoreProbeResult.status}`}
-                      </div>
-                      <div className={`${isResultError ? 'text-red-300 font-bold' : 'text-zinc-400'} italic`}>
-                        "{latestCoreProbeResult.description}"
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="text-zinc-800 italic uppercase text-[8px] tracking-widest animate-pulse text-center">Awaiting System Scan...</div>
-                  )}
-                </div>
-
-                <div className="flex flex-col items-center justify-center relative group w-64 shrink-0">
-                  <div className="absolute top-[-30px] flex gap-12 pointer-events-none opacity-20">
-                    <div className={`w-[1px] h-32 bg-purple-500 ${isMasterActive ? 'animate-pulse' : ''}`}></div>
-                    <div className={`w-[1px] h-40 bg-purple-500 ${isMasterActive ? 'animate-pulse' : ''}`}></div>
-                    <div className={`w-[1px] h-32 bg-purple-500 ${isMasterActive ? 'animate-pulse' : ''}`}></div>
-                  </div>
-                  <div className="w-24 h-6 bg-zinc-800 border-x border-t border-purple-500/30 rounded-t-sm mb-0 flex items-center justify-center">
-                    <div className={`w-4 h-4 rounded-full bg-black border border-zinc-700 shadow-inner ${isMasterActive ? 'glow-purple shadow-[0_0_10px_#bd00ff] animate-pulse' : ''}`}></div>
-                  </div>
-                  <div className="relative z-10">
-                    <Tooltip name="AGGREGATED_CORE_PROBE" source="NEURAL_NETWORK" desc={`${getMainProbeStatusText()}. Single execution combines all active node vectors. Limits: 4000 Tokens.`} variant="purple">
-                      <button 
-                        onClick={() => isAvailable && onProbeClick('MASTER_AGGREGATE', { stats, mode, activeFocus: Array.from(activeTelemetry || []) })}
-                        disabled={isMasterActive || !isAvailable}
-                        className={`relative w-64 h-20 bg-[#050608] border-x border-b border-purple-500/60 shadow-2xl flex flex-col items-center justify-center transition-all overflow-hidden ${isAvailable ? 'cursor-pointer hover:border-purple-400 hover:shadow-[0_0_30px_rgba(189,0,255,0.2)]' : 'cursor-not-allowed opacity-50'}`}
-                      >
-                        <div className="absolute top-2 left-4 text-[6px] text-zinc-800 font-mono tracking-tighter uppercase">Sentinel_MASTER_CORE_v2</div>
-                        <div className="absolute bottom-2 right-4 text-[6px] text-zinc-800 font-mono tracking-tighter uppercase">5m COOLDOWN</div>
-                        <span className={`text-[12px] font-black uppercase tracking-[0.6em] transition-colors ${isMasterActive ? 'text-white animate-pulse' : 'text-purple-400'}`}>
-                          {isMasterActive ? 'PROCESSING...' : 'CORE PROBE'}
-                        </span>
-                        {isMasterActive && (
-                          <div className="absolute inset-0 pointer-events-none transition-opacity">
-                            <div className="w-full h-full bg-purple-500/20 animate-pulse"></div>
-                          </div>
-                        )}
-                        {(masterProbeCd > 0 && !isMasterActive) && (
-                           <div className="absolute inset-0 bg-red-950/20 flex items-center justify-center z-20 backdrop-blur-[1px]">
-                             <span className="text-[10px] font-black text-red-500 tracking-[0.2em]">{(masterProbeCd/1000).toFixed(0)}s</span>
-                           </div>
-                        )}
-                      </button>
-                    </Tooltip>
-                  </div>
-                  <div className="flex gap-16 mt-[-2px] pointer-events-none">
-                    <div className={`w-0.5 h-10 bg-purple-500/40 transition-all ${isMasterActive ? 'animate-pulse' : ''}`}></div>
-                    <div className={`w-0.5 h-16 bg-purple-500/40 transition-all ${isMasterActive ? 'animate-pulse' : ''}`}></div>
-                    <div className={`w-0.5 h-10 bg-purple-500/40 transition-all ${isMasterActive ? 'animate-pulse' : ''}`}></div>
-                  </div>
-                  <span className={`absolute bottom-[-30px] text-[7px] font-black uppercase tracking-[0.4em] pointer-events-none whitespace-nowrap transition-colors ${isMasterActive ? 'text-purple-500' : 'text-zinc-800'}`}>
-                    {isMasterActive ? 'UPLINK_DENSE_STREAM' : 'Neural_Bridge_Standby_Ready'}
-                  </span>
-                </div>
-
-                <div className="flex-1 text-[10px] font-mono text-zinc-500 leading-relaxed border-l border-zinc-900/30 pl-4 h-full overflow-y-auto no-scroll flex flex-col justify-center">
-                   <div className={`text-[9px] font-black uppercase tracking-widest mb-2 border-b border-zinc-900/20 pb-1 ${isResultError ? 'text-red-500' : 'text-zinc-700'}`}>Directives</div>
-                  {latestCoreProbeResult ? (
-                    <div className="animate-in fade-in duration-500">
-                      <div className={`font-black mb-1 uppercase tracking-tighter ${isResultError ? 'text-red-500 animate-pulse' : 'text-teal-500'}`}>
-                        {isResultError ? 'CRITICAL_SUGGESTION:' : 'Recommendation:'}
-                      </div>
-                      <div className={`${isResultError ? 'text-red-400' : 'text-zinc-300 font-bold'} border-l-2 ${isResultError ? 'border-red-500/50' : 'border-teal-500/30'} pl-3 leading-tight`}>
-                        {latestCoreProbeResult.recommendation}
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="text-zinc-800 italic uppercase text-[8px] tracking-widest text-center">Standby...</div>
-                  )}
-                </div>
-              </div>
-            </div>
-          </Card>
-        </>
+        </div>
       ) : (
         <Card
           id="CONSOLE_DATA_PROBE"
@@ -391,7 +397,7 @@ Last Activity: ${iface.lastActivity || 'Unknown'}
               ))}
               <div ref={terminalEndRef} />
            </div>
-           <div className="h-12 border-t border-zinc-900 bg-black/40 flex items-center px-6 mt-2">
+           <div className="h-12 border-t border-zinc-900 bg-black/40 flex items-center px-6 mt-2 shrink-0">
               <form onSubmit={handleConsoleSubmit} className="flex-1 flex items-center gap-3">
                  <span className="text-teal-500 font-black">{isLocal ? 'admin@sentinel' : 'kali@remote'}:~#</span>
                  <input 
