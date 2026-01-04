@@ -1,61 +1,62 @@
-
 Role: Expert Frontend & Security Engineer
 Context: Neural Sentinel SOC Console (React 19, TypeScript, Tailwind, Gemini AI)
 
 CORE OBJECTIVE:
 Maintain stability, correctness, and operator clarity in a high-fidelity Cyber-Tactical Dashboard. 
-The application manages both Local (Windows) and Remote (Linux/Pi) telemetry sources.
+The application manages both Local (Windows) and Remote (Linux/Pi) telemetry sources using a Tiered Slot Architecture.
 
 ---
 
 1. ARCHITECTURAL INVARIANTS (DO NOT BREAK)
-- State Management: React useState/useEffect for real-time telemetry. No external state libs (Redux/Zustand).
+- State Management: React useState/useEffect. Persistent state via `HistoryStorage` and `LauncherSystem` in localStorage.
 - Data Source Routing: 
   - LOCAL mode = 127.0.0.1 (Windows HUD).
   - REMOTE mode = User-defined IP (Linux HUD).
-  - Toggle MUST switch effectively without reload.
 - AI Integration: 
-  - Gemini (Cloud) and Local LLM (OpenAI-compatible) support.
-  - "Probes" = Heavy data analysis requests (Core Charges, Token Limit: 4000-8000 Chars).
-  - "Neural Tooltips" = Lightweight inference (Neural Charges, Token Limit: 400-800 Tokens).
-- Data Persistence:
-  - All critical session actions (Probes, Handshakes, Commands) must be persisted to CSV in localStorage via `HistoryStorage`.
-  - Retention: 24-hour sliding window.
+  - Gemini (Cloud) and Local LLM support.
+  - "Core Probes" = Heavy analysis (Tokens: 4000-8000).
+  - "Neural Probes" = Lightweight inference (Tokens: 400-800).
+- Data Persistence: 24-hour sliding window for CSV history logs.
 
-2. STRICT DATA & ERROR HANDLING
-- Null Safety: Always check `stats`, `session`, and `metrics` before access.
-- Error Boundaries: AI failures must return fallback JSON, never crash the UI.
-- Networking: Use `AbortController` for all polling intervals.
-- Telemetry:
-  - If source is OFFLINE, show "VOID" or "DISCONNECTED" markers.
-  - Do not hallucinate data. If a metric is missing, display "—".
+2. TIERED SLOT LOGIC
+- LOW (Teal): Neural/Inference only.
+- MEDIUM (Purple): Core Data Probes.
+- HIGH (Orange): Specialized Hardware (Sensors) & Scripts.
+  - High slot cooldown: 1 hour base. Persisted.
+  - Buffer Scripts (e.g., Script Reload Timer) can reduce cooldowns (e.g., from 1 hour to 1 minute).
+- Charges: Low/Medium reflect the minimum charges among all active modules of that tier. High slot is limited to 1.
 
-3. VISUAL & UI RULES
-- Aesthetics: Cyber-Tactical HUD (Scanlines, CRT flicker, Chromatic Aberration).
+3. PROBE CONTRACT EXAMPLES
+- GLOBAL_SYSTEM_PROBE:
+  - Description: Consolidated system-wide security audit.
+  - Expected Response: JSON Assessment (threat_level, anomalies, recommendations).
+  - compatibleSlots: Medium, High.
+- NEURO_DATA_PROBE:
+  - Description: Contextual metadata inference for UI labels.
+  - Expected Response: JSON mapping labels to security descriptions.
+  - compatibleSlots: Low.
+
+4. VISUAL & UI RULES
+- Aesthetics: Cyber-Tactical HUD (Scanlines, CRT flicker).
 - Color Coding (Strict):
-  - BLUE/CYAN (#00f2ff) -> Local Host / Simulation / Info
-  - GREEN (#22c55e) -> Remote Host / Success / Active Link
-  - RED (#ff3e3e) -> Offline / Error / Critical Threat
-  - PURPLE (#bd00ff) -> Neural/AI Activity
-- Typography: JetBrains Mono (primary), Share Tech Mono (headers).
-- Icons: Lucide-React or SVG equivalents.
+  - BLUE/CYAN (#00f2ff) -> Local Host / Simulation
+  - GREEN (#22c55e) -> Remote Host / Success
+  - RED (#ff3e3e) -> Offline / Error
+  - PURPLE (#bd00ff) -> Neural Activity (Medium)
+  - TEAL (#00ffd5) -> Neural Activity (Low)
+  - ORANGE (#f97316) -> Hardware/Scripts (High)
+- Confirm Buttons: MANDATORY in all MATRIX_CONFIG dialogs for committing hardware changes.
 
-4. FEATURE CONSTRAINTS
-- Handshake Node: Must be GATED (Disabled) when in LOCAL mode.
-- Neural Logs: 
-  - Button text: "PROBE" (Action), "Audit" (Inspection).
-  - Dialog title: "FULL_NEURAL_AUDIT".
-- Toolkit: Only execute commands if a session is ACTIVE (Local or Remote).
-- Launchers: Enforce token limits on AI prompts to prevent context overflow.
+5. SCANNER FUNCTIONALITY
+- Node Grid: Radial scanning animation.
+- Quick Fire: Circle icon in header fires data-type sensors immediately and switches tab to "Scanner".
+- Sensor Cooldown: 1 minute (if optimized), 1 hour (base).
 
-5. NEGATIVE CONSTRAINTS (NEVER DO THIS)
-- Do not introduce Redux, Context API, or new dependencies.
+6. DYNAMIC REFLECTION
+- Any item, module, or launcher added via Admin or modified in the manifest MUST be merged with base data on app restart to ensure persistence.
+
+7. NEGATIVE CONSTRAINTS
+- Do not introduce external state libraries.
 - Do not remove the "FROG_ASCII" easter egg.
-- Do not change the JSON schema expected by the 5050 backend.
-- Do not make the UI responsive for mobile unless explicitly asked (Desktop-first SOC).
-- Do not rename "Brain Probe" back to "Brain" (Use "Neural Probe").
-
-6. PROMPT ADHERENCE
-- If asked to fix a bug, fix ONLY that bug.
-- If asked to refactor, ensure 100% feature parity.
-- Always validate `process.env.API_KEY` existence before AI calls.
+- Do not change JSON schemas expected by the 5050 backend.
+- Do not rename "Neural Probe" or "Core Probe".

@@ -17,7 +17,7 @@ export const arraysData = [
     "name": "Full_Spectrum_Grid",
     "description": "Advanced heavy-duty scanning configuration for deep-dive forensics.",
     "compatibility": "BOTH",
-    "nodeIds": ["BASIC_NODE", "NET_IFACE", "DEV_TOPOLOGY", "SVC_DAEMON", "OPEN_PORTS", "CPU_HEURISTICS", "MEM_INTEGRITY", "DISK_IO", "SYS_LOGS", "PROC_ANOMALY", "THERMAL_EVT"],
+    "nodeIds": ["BASIC_NODE", "NET_IFACE", "OPEN_PORTS", "SYS_LOGS", "PROC_ANOMALY", "THERMAL_EVT"],
     "settings": {
       "maxExecutionTime": 25000,
       "executionMode": "PARALLEL",

@@ -6,7 +6,45 @@ export interface TransportResponse {
   success: boolean;
   data: any;
   requestBody: any; 
+  rawText?: string;
   error?: string;
+}
+
+/**
+ * Utility to extract and parse JSON from AI responses that might be wrapped in markdown 
+ * or contain trailing commas/comments.
+ */
+function cleanAndParseJson(text: string): any {
+  // 1. Remove thinking tags or other XML-like tags often returned by models
+  let cleaned = text.replace(/<thought>[\s\S]*?<\/thought>/g, "");
+  cleaned = cleaned.replace(/<\|.*?\|>/g, "");
+  
+  // 2. Remove markdown code blocks
+  cleaned = cleaned.replace(/```json\s?|```/g, "").trim();
+  
+  // 3. Find the first '{' and last '}' to extract the JSON object
+  const start = cleaned.indexOf('{');
+  const end = cleaned.lastIndexOf('}');
+  
+  if (start === -1 || end === -1) {
+    // If it's not JSON, we throw so the caller can decide what to do
+    throw new Error("No valid JSON object found in response.");
+  }
+  
+  const jsonString = cleaned.substring(start, end + 1);
+  
+  try {
+    // Attempt standard parse first
+    return JSON.parse(jsonString);
+  } catch (e) {
+    // If standard parse fails, try to handle trailing commas (common AI mistake)
+    try {
+      const fixTrailingCommas = jsonString.replace(/,\s*([\]}])/g, '$1');
+      return JSON.parse(fixTrailingCommas);
+    } catch (innerError) {
+      throw new Error(`JSON_PARSE_FAILED: ${e instanceof Error ? e.message : 'Unknown error'}`);
+    }
+  }
 }
 
 export const aiTransport = {
@@ -20,23 +58,23 @@ export const aiTransport = {
     
     // STRICT INPUT ENFORCEMENT:
     // Truncate the input string to the launcher's character limit.
-    // This prevents "token limit exceeded" errors on local models and context overflow on cloud.
     let effectivePrompt = prompt;
     if (effectivePrompt.length > tokenLimit) {
         effectivePrompt = effectivePrompt.substring(0, tokenLimit) + "... [PROMPT_TRUNCATED_BY_LAUNCHER_LIMIT]";
     }
 
     // OUTPUT SIZING:
-    // Derive output token limit from the launcher's input character limit.
-    // Heuristic: 1 token ~= 4 chars. We allow output to be ~25% of input capacity, 
-    // clamped between 256 (min for JSON) and 2048 (max for detailed report).
-    const derivedOutputTokens = Math.max(256, Math.min(2048, Math.floor(tokenLimit / 4)));
+    // Reserve tokens for thinking if enabled. Max output must be > thinking budget.
+    const thinkingBudget = isDataProbe && tokenLimit >= 3000 ? 1024 : 0;
+    const responseCapacity = Math.max(512, Math.min(2048, Math.floor(tokenLimit / 2)));
+    const totalOutputTokens = responseCapacity + thinkingBudget;
 
     let requestBody: any = {};
 
     try {
       if (config.provider === 'GEMINI') {
-        const modelName = 'gemini-3-flash-preview';
+        // Complex Text Tasks (probes) use Pro; Lightweight inferences use Flash.
+        const modelName = isDataProbe ? 'gemini-3-pro-preview' : 'gemini-3-flash-preview';
         
         requestBody = {
           model: modelName,
@@ -44,9 +82,8 @@ export const aiTransport = {
           config: { 
             systemInstruction: systemInstruction,
             responseMimeType: "application/json",
-            // Thinking budget only for complex probes if capacity allows
-            thinkingConfig: { thinkingBudget: isDataProbe && tokenLimit > 2000 ? 1024 : 0 },
-            maxOutputTokens: derivedOutputTokens,
+            thinkingConfig: { thinkingBudget: thinkingBudget },
+            maxOutputTokens: totalOutputTokens,
             temperature: 0.1,
           }
         };
@@ -54,15 +91,27 @@ export const aiTransport = {
         const ai = new GoogleGenAI({ apiKey: process.env.API_KEY as string });
         const response = await ai.models.generateContent(requestBody);
         
-        if (!response.text) {
+        const textResponse = response.text;
+        if (!textResponse) {
           throw new Error("EMPTY_RESPONSE: The neural core failed to generate a text fragment.");
         }
 
-        return { 
-          success: true, 
-          data: JSON.parse(response.text), 
-          requestBody 
-        };
+        try {
+          return { 
+            success: true, 
+            data: cleanAndParseJson(textResponse), 
+            rawText: textResponse,
+            requestBody 
+          };
+        } catch (parseErr: any) {
+          return {
+            success: false,
+            data: null,
+            rawText: textResponse,
+            requestBody,
+            error: parseErr.message
+          };
+        }
       } else {
         const normalizedUrl = config.endpoint.replace('localhost', '127.0.0.1').replace(/\/$/, "");
         const endpoint = normalizedUrl.includes('/chat/completions') ? normalizedUrl : `${normalizedUrl}/chat/completions`;
@@ -74,7 +123,7 @@ export const aiTransport = {
             { role: 'user', content: effectivePrompt }
           ],
           temperature: 0.1,
-          max_tokens: derivedOutputTokens
+          max_tokens: responseCapacity // Local models rarely support thinking budget configs yet
         };
 
         const response = await fetch(endpoint, {
@@ -89,15 +138,23 @@ export const aiTransport = {
         if (data.error) throw new Error(data.error.message || "Unknown Local AI Error");
         
         const text = data.choices[0].message.content;
-        const jsonMatch = text.match(/\{[\s\S]*\}/);
         
-        if (!jsonMatch) throw new Error("JSON_PARSE_FAILED: Output did not contain valid JSON.");
-
-        return { 
-          success: true, 
-          data: JSON.parse(jsonMatch[0]), 
-          requestBody 
-        };
+        try {
+          return { 
+            success: true, 
+            data: cleanAndParseJson(text), 
+            rawText: text,
+            requestBody 
+          };
+        } catch (parseErr: any) {
+          return {
+            success: false,
+            data: null,
+            rawText: text,
+            requestBody,
+            error: parseErr.message
+          };
+        }
       }
     } catch (e: any) {
       console.error("AI Transport Error:", e);

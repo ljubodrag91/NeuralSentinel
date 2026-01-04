@@ -27,6 +27,16 @@ export enum LogLevel {
 }
 
 export type LogType = 'neural' | 'console' | 'kernel' | 'system';
+export type ProbeStatus = 'COMPLETED' | 'ERROR' | 'NO_DATA' | 'PARTIAL' | 'PENDING';
+export type SlotType = 'LOW' | 'PROBE' | 'MAIN' | 'SENSOR';
+export type DetailedProbeType = 'NEURO_DATA' | 'CORE_DATA' | 'HISTORICAL_CORE' | 'SENSOR_TRIGGER';
+
+export enum ScriptState {
+  LOADED = 'LOADED',
+  DISABLED = 'DISABLED',
+  REFRESHING = 'REFRESHING',
+  BROKEN = 'BROKEN'
+}
 
 export interface LogEntry {
   id: string;
@@ -37,10 +47,15 @@ export interface LogEntry {
   details?: string;
   metadata?: {
     type?: string;
-    title?: string;
-    data?: any;
+    panelId?: string;
+    slotType?: SlotType;
+    probeType?: DetailedProbeType;
+    probeStatus?: ProbeStatus;
+    tokenLimit?: number;
+    requestPayload?: any;
+    responsePayload?: any;
+    hasHistoricalData?: boolean;
     launcherId?: string;
-    probeType?: 'NEURAL' | 'DATA';
     contract?: {
         description: string;
         expectation: string;
@@ -164,8 +179,14 @@ export interface SlotConfig {
 }
 
 export interface PanelSlotConfig {
-  dataSlot: SlotConfig;
-  neuralSlot: SlotConfig;
+  probeSlot?: SlotConfig; // Renamed from mediumSlot
+  sensorSlot?: SlotConfig;   // Dedicated Sensor Slot (Scanner only)
+}
+
+export interface SlotPermissions {
+  low: boolean;
+  probe: boolean;
+  sensor: boolean;
 }
 
 export interface AppSettings {
@@ -182,10 +203,17 @@ export interface AppSettings {
   maxCoreCharges: number;
   maxNeuralCharges: number;
   panelSlots: Record<string, PanelSlotConfig>;
+  globalLowSlot: SlotConfig; 
+  globalProbeSlot: SlotConfig; // Persistent Master Probe Slot
+  globalSensorSlot: SlotConfig; // Persistent Master Sensor Slot
+  slotPermissions: Record<string, SlotPermissions>;
   telemetryEnabled: boolean;
   neuralUplinkEnabled: boolean;
   platform: Platform;
   dataSourceMode: DataSourceMode;
+  boosterEndTime?: number;
+  installedBoosterId?: string;
+  telemetryUrl: string;
 }
 
 export interface SmartTooltipData {
@@ -201,21 +229,24 @@ export type Timeframe = '1m' | '5m' | '15m' | '30m' | '1h' | '6h' | '12h' | '24h
 export interface Launcher {
   id: string;
   name: string;
-  type: 'core' | 'neural';
+  type: 'core' | 'neural' | 'sensor-module';
+  tier?: 1 | 2 | 3; // Added hierarchy support
   description: string;
   maxCharges: number;
   rechargeRate: number; // seconds
   compatibleProbes: string[]; 
   color: string;
   tokens: number;
+  baseCooldown?: number; // ms
+  isExtended?: boolean; // If true, triggers neural calls
 }
 
 export interface Consumable {
   id: string;
   name: string;
-  type: 'data' | 'neural';
+  type: 'data' | 'neural' | 'booster' | 'module-core';
   description: string;
-  compatibleLaunchers: ('core' | 'neural')[];
+  compatibleLaunchers: ('core' | 'neural' | 'main' | 'sensor-module')[];
   cost: number;
   features: string[];
   disabled?: boolean;

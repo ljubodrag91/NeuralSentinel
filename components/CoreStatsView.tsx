@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { CoreStats, OperationalMode, Timeframe, AppSettings, Platform } from '../types';
+import { CoreStats, OperationalMode, Timeframe, AppSettings, Platform, SlotConfig } from '../types';
 import Card from './common/Card';
 import Tooltip from './common/Tooltip';
 import { launcherSystem } from '../services/launcherService';
@@ -15,13 +15,13 @@ interface CoreStatsViewProps {
   onProbeClick: (panel: string, metrics: any) => void;
   onProbeInfo: (title: string, payload: any) => void;
   onBrainClick: (id: string, type: string, metrics: any) => void;
-  onLauncherSelect: (id: string, type: 'data' | 'neural') => void;
+  onLauncherSelect: (id: string, type: 'low' | 'probe') => void;
   onCommand: (cmd: string) => void;
   onHistoryShow?: (panelId: string, title: string, headers: string[]) => void;
   processingId?: string;
   activeTelemetry: Set<string>;
   setActiveTelemetry: (s: Set<string>) => void;
-  launcherState?: Record<string, { cooldown: number }>; // New prop
+  launcherState?: Record<string, { cooldown: number }>; 
 }
 
 const CoreStatsView: React.FC<CoreStatsViewProps> = ({ 
@@ -60,13 +60,13 @@ const CoreStatsView: React.FC<CoreStatsViewProps> = ({
   const sourceState = isDataActive ? 'REAL' : 'OFFLINE';
 
   const getLauncherColor = (panelId: string) => {
-    const slot = settings.panelSlots[panelId]?.dataSlot;
+    const slot = settings.panelSlots[panelId]?.probeSlot;
     const id = slot?.launcherId || 'std-core';
     return launcherSystem.getById(id)?.color || '#bd00ff';
   };
 
   const getCooldown = (panelId: string) => {
-    const slot = settings.panelSlots[panelId]?.dataSlot;
+    const slot = settings.panelSlots[panelId]?.probeSlot;
     const id = slot?.launcherId || 'std-core';
     return launcherState[id]?.cooldown || 0;
   };
@@ -120,10 +120,10 @@ const CoreStatsView: React.FC<CoreStatsViewProps> = ({
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 items-stretch">
         {/* CPU */}
-        <Tooltip name="CPU_MATRIX" source={sourceState} desc="Thermal and computational load monitoring. Detects crypto-mining signatures or runaway processes via thermal spikes. Click to HIGHLIGHT. Right-click to CONFIGURE NEURAL LAUNCHER." className="h-full">
+        <Tooltip name="CPU_MATRIX" source={sourceState} desc="Thermal and computational load monitoring. Detects crypto-mining signatures or runaway processes via thermal spikes. Click to HIGHLIGHT. Right-click to CONFIGURE GLOBAL NEURAL LAUNCHER." className="h-full">
           <div 
             onClick={() => toggleMetric('cpu')}
-            onContextMenu={(e) => { e.preventDefault(); onLauncherSelect('brain_tooltip', 'neural'); }}
+            onContextMenu={(e) => { e.preventDefault(); onLauncherSelect('brain_tooltip', 'low'); }}
             className={`cursor-pointer border p-5 flex flex-col gap-3 transition-all group h-full ${
               activeTelemetry.has('cpu') ? 'bg-zinc-900/80 border-purple-500/50 shadow-[0_0_15px_rgba(168,85,247,0.1)]' : 'bg-black border-zinc-900 hover:border-zinc-800'
             }`}
@@ -146,10 +146,10 @@ const CoreStatsView: React.FC<CoreStatsViewProps> = ({
         </Tooltip>
 
         {/* RAM */}
-        <Tooltip name="MEMORY_POOL" source={sourceState} desc="Volatile memory usage analysis. Monitors RAM allocation and Swap usage to detect buffer overflow attempts or leaks. Click to HIGHLIGHT. Right-click to CONFIGURE NEURAL LAUNCHER." className="h-full">
+        <Tooltip name="MEMORY_POOL" source={sourceState} desc="Volatile memory usage analysis. Monitors RAM allocation and Swap usage to detect buffer overflow attempts or leaks. Click to HIGHLIGHT. Right-click to CONFIGURE GLOBAL NEURAL LAUNCHER." className="h-full">
           <div 
             onClick={() => toggleMetric('ram')}
-            onContextMenu={(e) => { e.preventDefault(); onLauncherSelect('brain_tooltip', 'neural'); }}
+            onContextMenu={(e) => { e.preventDefault(); onLauncherSelect('brain_tooltip', 'low'); }}
             className={`cursor-pointer border p-5 flex flex-col gap-3 transition-all group h-full ${
               activeTelemetry.has('ram') ? 'bg-zinc-900/80 border-purple-500/50 shadow-[0_0_15px_rgba(168,85,247,0.1)]' : 'bg-black border-zinc-900 hover:border-zinc-800'
             }`}
@@ -172,10 +172,10 @@ const CoreStatsView: React.FC<CoreStatsViewProps> = ({
         </Tooltip>
 
         {/* DISK */}
-        <Tooltip name="DISK_VOLUMES" source={sourceState} desc="Storage filesystem integrity monitor. Tracks partition usage and I/O rates to identify data exfiltration or ransomware activity. Click to HIGHLIGHT. Right-click to CONFIGURE NEURAL LAUNCHER." className="h-full">
+        <Tooltip name="DISK_VOLUMES" source={sourceState} desc="Storage filesystem integrity monitor. Tracks partition usage and I/O rates to identify data exfiltration or ransomware activity. Click to HIGHLIGHT. Right-click to CONFIGURE GLOBAL NEURAL LAUNCHER." className="h-full">
           <div 
             onClick={() => toggleMetric('disk')}
-            onContextMenu={(e) => { e.preventDefault(); onLauncherSelect('brain_tooltip', 'neural'); }}
+            onContextMenu={(e) => { e.preventDefault(); onLauncherSelect('brain_tooltip', 'low'); }}
             className={`cursor-pointer border p-5 flex flex-col gap-3 transition-all group h-full ${
               activeTelemetry.has('disk') ? 'bg-zinc-900/80 border-purple-500/50 shadow-[0_0_15px_rgba(168,85,247,0.1)]' : 'bg-black border-zinc-900 hover:border-zinc-800'
             }`}
@@ -197,10 +197,10 @@ const CoreStatsView: React.FC<CoreStatsViewProps> = ({
         </Tooltip>
 
         {/* NETWORK */}
-        <Tooltip name="IO_LINK" source={sourceState} desc="Network throughput analyzer. Measures RX/TX rates to detect C2 beacons or unauthorized large file transfers. Click to HIGHLIGHT. Right-click to CONFIGURE NEURAL LAUNCHER." className="h-full">
+        <Tooltip name="IO_LINK" source={sourceState} desc="Network throughput analyzer. Measures RX/TX rates to detect C2 beacons or unauthorized large file transfers. Click to HIGHLIGHT. Right-click to CONFIGURE GLOBAL NEURAL LAUNCHER." className="h-full">
           <div 
             onClick={() => toggleMetric('net')}
-            onContextMenu={(e) => { e.preventDefault(); onLauncherSelect('brain_tooltip', 'neural'); }}
+            onContextMenu={(e) => { e.preventDefault(); onLauncherSelect('brain_tooltip', 'low'); }}
             className={`cursor-pointer border p-5 flex flex-col gap-3 transition-all group h-full ${
               activeTelemetry.has('net') ? 'bg-zinc-900/80 border-purple-500/50 shadow-[0_0_15px_rgba(168,85,247,0.1)]' : 'bg-black border-zinc-900 hover:border-zinc-800'
             }`}
@@ -237,6 +237,8 @@ const CoreStatsView: React.FC<CoreStatsViewProps> = ({
           isProcessing={processingId === 'NODE_DIAGNOSTICS'}
           allowDistortion={settings.panelDistortion}
           cooldown={getCooldown('NODE_DIAGNOSTICS')}
+          slotConfig={settings.panelSlots['NODE_DIAGNOSTICS']}
+          globalLowSlot={settings.globalLowSlot}
         >
           <div className="space-y-4 font-mono text-[11px]">
              <div className="flex justify-between border-b border-zinc-900 pb-2"><span className="text-zinc-600 uppercase">Hostname</span><span className="text-teal-500 uppercase font-black">{stats?.system?.hostname || 'SENTINEL_NULL'}</span></div>
@@ -286,6 +288,8 @@ const CoreStatsView: React.FC<CoreStatsViewProps> = ({
           isProcessing={processingId === 'PROCESS_PROBE'}
           allowDistortion={settings.panelDistortion}
           cooldown={getCooldown('PROCESS_PROBE')}
+          slotConfig={settings.panelSlots['PROCESS_PROBE']}
+          globalLowSlot={settings.globalLowSlot}
         >
           <div className="flex flex-col h-full">
             <div className="flex gap-2 mb-3">

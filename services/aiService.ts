@@ -222,22 +222,30 @@ Schema:
   const userPrompt = truncateInputStrict(JSON.stringify(_sentPayload));
 
   try {
-    // Pass isDataProbe=true for standard probes to utilize logic in transport if needed
     const result = await aiTransport.fetch(config, systemInstruction, userPrompt, true, context.tokenLimit);
-    if (!result.success) throw new Error(result.error);
+    if (!result.success) {
+      // If transport says failure but we have rawText, it's a parse error. Try fallback parse.
+      if (result.rawText) {
+          try {
+              const looseJson = extractJsonLoose(result.rawText);
+              return { ...looseJson, _sentPayload };
+          } catch {
+              // Failed loose extraction too
+          }
+      }
+      throw new Error(result.error || "UNKNOWN_TRANSPORT_ERROR");
+    }
     
-    // Attach the captured payload to the result for logging
     return { ...result.data, _sentPayload };
   } catch (e: any) {
     console.error("Neural Probe Error:", e);
-    // Return a structured error response that fits the schema so the UI doesn't crash, including the sent payload for audit
     return {
       description: `Neural Link Failure: ${e.message}`,
-      recommendation: "Check AI Configuration and Connectivity.",
+      recommendation: "Check AI Configuration and Connectivity. The model might be outputting invalid JSON format due to token limits or reasoning complexity.",
       status: context.mode,
       elementType: panelName,
       elementId: "ERROR",
-      anomalies: ["AI_UNREACHABLE"],
+      anomalies: ["AI_UNREACHABLE", "INVALID_JSON_STREAM"],
       threatLevel: "UNKNOWN",
       _sentPayload
     };

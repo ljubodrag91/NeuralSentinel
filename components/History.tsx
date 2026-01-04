@@ -1,18 +1,21 @@
 
 import React, { useState } from 'react';
 import Card from './common/Card';
+import { PanelSlotConfig, SlotConfig } from '../types';
 
 interface HistoryProps {
   data: any[];
   onProbe: (panel: string, data: any) => void;
   onProbeInfo: (panel: string, data: any) => void;
   onBrainClick: (id: string, type: string, metrics: any) => void;
-  onLauncherSelect: (id: string, type: 'data' | 'neural') => void;
+  onLauncherSelect: (id: string, type: 'low' | 'probe') => void;
   processingId?: string;
   allowDistortion?: boolean;
+  slotConfig?: PanelSlotConfig;
+  globalLowSlot?: SlotConfig;
 }
 
-const History: React.FC<HistoryProps> = ({ data, onProbe, onProbeInfo, onBrainClick, onLauncherSelect, processingId, allowDistortion }) => {
+const History: React.FC<HistoryProps> = ({ data, onProbe, onProbeInfo, onBrainClick, onLauncherSelect, processingId, allowDistortion, slotConfig, globalLowSlot }) => {
   const getArchivePayload = () => {
     const csvHeaders = "TIMESTAMP,ACTION,TARGET,RESULT";
     const csvRows = data.map(h => `${h.timestamp},${h.action},${h.target},${h.result}`).join("\n");
@@ -40,6 +43,8 @@ const History: React.FC<HistoryProps> = ({ data, onProbe, onProbeInfo, onBrainCl
         onLauncherSelect={(_, type) => onLauncherSelect('SESSION_ARCHIVE', type)}
         isProcessing={processingId === 'SESSION_ARCHIVE' || processingId === 'history_archive'}
         allowDistortion={allowDistortion}
+        slotConfig={slotConfig}
+        globalLowSlot={globalLowSlot}
       >
         <div className="overflow-x-auto p-2">
           <table className="w-full font-mono text-[11px] text-[#4a726f] border-collapse">

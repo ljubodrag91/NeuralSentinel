@@ -1,3 +1,4 @@
+
 import React from 'react';
 
 interface ModalProps {
@@ -6,9 +7,10 @@ interface ModalProps {
   title: string;
   children: React.ReactNode;
   variant?: 'blue' | 'purple' | 'green' | 'teal';
+  footerActions?: React.ReactNode;
 }
 
-const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, children, variant = 'blue' }) => {
+const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, children, variant = 'blue', footerActions }) => {
   if (!isOpen) return null;
 
   const colorClass = variant === 'green' ? 'border-green-500 shadow-[0_0_20px_rgba(34,197,94,0.3)]' :
@@ -42,7 +44,8 @@ const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, children, variant
           {children}
         </div>
 
-        <div className="p-4 border-t border-zinc-900 bg-zinc-950/20 flex justify-end relative z-10">
+        <div className="p-4 border-t border-zinc-900 bg-zinc-950/20 flex justify-end gap-3 relative z-10">
+          {footerActions}
           <button 
             onClick={onClose}
             className={`px-6 py-2 border text-[10px] font-black uppercase tracking-widest transition-all ${

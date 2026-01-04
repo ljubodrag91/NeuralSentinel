@@ -1,261 +1,327 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import Modal from './Modal';
 import { launcherSystem, PROBE_AMMUNITION, PANELS_SUPPORTING_HISTORY } from '../../services/launcherService';
-import { PanelSlotConfig } from '../../types';
+import { PROBE_CONTRACTS } from '../../services/probeContracts';
+import { PanelSlotConfig, SlotConfig } from '../../types';
+import Tooltip from './Tooltip';
 
 interface InventoryDialogProps {
   isOpen: boolean;
   onClose: () => void;
   panelId: string;
-  initialSlotType: 'data' | 'neural';
+  initialSlotType: 'low' | 'probe' | 'sensor' | 'main';
   fullConfig: PanelSlotConfig;
-  onEquip: (panelId: string, slotType: 'data' | 'neural', launcherId: string, ammoId: string) => void;
+  onEquip: (panelId: string, slotType: 'low' | 'probe' | 'sensor' | 'main', launcherId: string, ammoId: string) => void;
+  onRemove?: (panelId: string, slotType: 'low' | 'probe' | 'sensor' | 'main') => void;
+  onClear?: (panelId: string, slotType: 'low' | 'probe' | 'sensor' | 'main') => void;
+  globalLowSlot?: SlotConfig;
 }
 
-const InventoryDialog: React.FC<InventoryDialogProps> = ({ isOpen, onClose, panelId, initialSlotType, fullConfig, onEquip }) => {
-  // State for the active slot being edited (Unified Config)
-  const [activeSlot, setActiveSlot] = useState<'data' | 'neural'>(initialSlotType);
+const InventoryDialog: React.FC<InventoryDialogProps> = ({ isOpen, onClose, panelId, initialSlotType, fullConfig, onEquip, onRemove, onClear, globalLowSlot }) => {
+  const [navLevel, setNavLevel] = useState<'ROOT' | 'SLOT_SELECTED'>('ROOT');
+  const [activeSlot, setActiveSlot] = useState<'low' | 'probe' | 'sensor' | 'main'>(initialSlotType || 'low');
   
-  // Resolve the specific config for the active slot
-  const activeConfig = activeSlot === 'data' ? fullConfig.dataSlot : fullConfig.neuralSlot;
-  
-  const [selectedLauncher, setSelectedLauncher] = useState<string | null>(activeConfig.launcherId);
+  const [stagedLauncher, setStagedLauncher] = useState<string | null>(null);
+  const [stagedAmmoId, setStagedAmmoId] = useState<string | null>(null);
 
-  // Update selection when switching slots
+  const isGlobalMode = panelId === 'GLOBAL_SYSTEM';
+
   useEffect(() => {
-    const config = activeSlot === 'data' ? fullConfig.dataSlot : fullConfig.neuralSlot;
-    setSelectedLauncher(config.launcherId);
-  }, [activeSlot, fullConfig]);
+    if (isOpen) {
+      if (initialSlotType) {
+        setActiveSlot(initialSlotType);
+        setNavLevel('SLOT_SELECTED');
+        if (initialSlotType === 'main') {
+          setStagedLauncher('MAIN_SYSTEM_BUS');
+          setStagedAmmoId(launcherSystem.getInstalledBoosterId() || '');
+        } else if (initialSlotType === 'low') {
+          setStagedLauncher(globalLowSlot?.launcherId || null);
+          setStagedAmmoId(globalLowSlot?.ammoId || null);
+        } else {
+          const current = initialSlotType === 'probe' ? fullConfig.probeSlot : fullConfig.sensorSlot;
+          setStagedLauncher(current?.launcherId || null);
+          setStagedAmmoId(current?.ammoId || null);
+        }
+      } else {
+        setNavLevel('ROOT');
+        setStagedLauncher(null);
+        setStagedAmmoId(null);
+        setActiveSlot('low');
+      }
+    }
+  }, [isOpen, initialSlotType, fullConfig, globalLowSlot]);
 
-  // Filter launchers that match the active slot type
-  const requiredLauncherType = activeSlot === 'data' ? 'core' : 'neural';
-  const compatibleLaunchers = launcherSystem.getCompatible(requiredLauncherType);
-  
-  // Get current inventory state
-  const ownedAmmoList = launcherSystem.getOwnedConsumablesList();
-  const ammoCounts: Record<string, number> = {};
-  ownedAmmoList.forEach(a => {
-    ammoCounts[a.id] = a.unlimited ? 9999 : a.count;
-  });
+  const handleSlotSelect = (type: 'low' | 'probe' | 'sensor' | 'main') => {
+    setActiveSlot(type);
+    setNavLevel('SLOT_SELECTED');
+    const current = type === 'main' 
+      ? { launcherId: 'MAIN_SYSTEM_BUS', ammoId: launcherSystem.getInstalledBoosterId() || '' }
+      : (type === 'low' ? globalLowSlot : (type === 'probe' ? fullConfig.probeSlot : fullConfig.sensorSlot));
+    setStagedLauncher(current?.launcherId || null);
+    setStagedAmmoId(current?.ammoId || null);
+  };
 
   const handleLauncherClick = (launcherId: string) => {
-    if (selectedLauncher !== launcherId) {
-      setSelectedLauncher(launcherId);
+    setStagedLauncher(launcherId);
+    const ammo = Object.values(PROBE_AMMUNITION).find(a => a.compatibleLaunchers.includes(launcherSystem.getById(launcherId)?.type as any));
+    if (ammo) setStagedAmmoId(ammo.id);
+  };
+
+  const handleAmmoSelect = (ammoId: string) => {
+    setStagedAmmoId(ammoId);
+  };
+
+  const handleConfirm = () => {
+    if (stagedLauncher && stagedAmmoId !== null) {
+      onEquip(panelId, activeSlot, stagedLauncher, stagedAmmoId);
+      onClose();
     }
   };
 
-  const handleEquip = (ammoId: string) => {
-    if (!selectedLauncher) return;
-    onEquip(panelId, activeSlot, selectedLauncher, ammoId);
-    onClose();
+  const handleApply = () => {
+    if (stagedLauncher && stagedAmmoId !== null) {
+      onEquip(panelId, activeSlot, stagedLauncher, stagedAmmoId);
+    }
   };
 
+  const handleClearSlot = () => {
+    if (onClear) {
+      onClear(panelId, activeSlot);
+      onClose();
+    }
+  };
+
+  const handleDecommissionSlot = () => {
+    if (onRemove) {
+      onRemove(panelId, activeSlot);
+      onClose();
+    }
+  };
+
+  const hasChanges = useMemo(() => {
+    const original = activeSlot === 'main'
+      ? { launcherId: 'MAIN_SYSTEM_BUS', ammoId: launcherSystem.getInstalledBoosterId() || '' }
+      : (activeSlot === 'low' ? globalLowSlot : (activeSlot === 'probe' ? fullConfig.probeSlot : fullConfig.sensorSlot));
+    
+    const launcherChanged = stagedLauncher !== (original?.launcherId || null);
+    const ammoChanged = stagedAmmoId !== (original?.ammoId || null);
+    
+    return launcherChanged || ammoChanged;
+  }, [activeSlot, fullConfig, globalLowSlot, stagedLauncher, stagedAmmoId]);
+
+  const payloadPreview = useMemo(() => {
+    if (activeSlot === 'main') return { type: 'BOOSTER_MODULE', feature: 'COOLDOWN_BYPASS', status: 'READY_FOR_ENGAGEMENT' };
+    
+    const contract = PROBE_CONTRACTS[panelId] || PROBE_CONTRACTS['GLOBAL_SYSTEM_PROBE'];
+    const launcher = launcherSystem.getById(stagedLauncher || '');
+    const ammo = PROBE_AMMUNITION[stagedAmmoId || ''];
+
+    return {
+      protocol: activeSlot === 'low' ? 'GLOBAL_NEURO_DATA_INFERENCE' : (activeSlot === 'probe' ? 'CORE_DATA_PROBE' : 'SENSOR_MODULE_EXECUTION'),
+      panel_context: panelId,
+      tier: activeSlot.toUpperCase(),
+      launcher_node: launcher?.name || 'NULL',
+      capacity_limit: launcher?.tokens || 0,
+      contract_id: contract.id,
+      ammunition: ammo?.name || 'NULL',
+      mock_payload_structure: contract.buildPayload({ 
+        status: 'REAL_TIME_STREAM_SNAPSHOT',
+        latency_ms: 12,
+        active_traces: 4,
+        entropy: 0.82
+      })
+    };
+  }, [panelId, activeSlot, stagedLauncher, stagedAmmoId]);
+
   const isHistoricalSupported = PANELS_SUPPORTING_HISTORY.includes(panelId);
+  const requiredLauncherType = activeSlot === 'low' ? 'neural' : (activeSlot === 'probe' ? 'core' : 'sensor-module');
+  const compatibleLaunchers = useMemo(() => {
+    if (activeSlot === 'main') {
+        return [{ id: 'MAIN_SYSTEM_BUS', name: 'MAIN SYSTEM BUS', color: '#eab308', type: 'main' as any, tier: 1 as any, description: 'Primary tactical backbone. Accepts Booster Modules.', maxCharges: 1, rechargeRate: 0, tokens: 0, compatibleProbes: [] }];
+    }
+    // Filter and then Sort by Tier
+    return launcherSystem.getCompatible(requiredLauncherType as any)
+      .sort((a, b) => (a.tier || 1) - (b.tier || 1));
+  }, [activeSlot, requiredLauncherType]);
+
+  const getTierColor = (slot: string) => {
+    if (slot === 'low') return '#00ffd5'; 
+    if (slot === 'probe') return '#bd00ff'; 
+    if (slot === 'sensor') return '#f97316'; 
+    return '#eab308';
+  };
+
+  const footerActions = (
+    <>
+      {hasChanges && stagedLauncher && (
+        <>
+          <button 
+            onClick={handleApply}
+            className="px-6 py-2 bg-teal-500/10 border border-teal-500/40 text-teal-400 text-[10px] font-black uppercase tracking-widest hover:bg-teal-500/20 transition-all"
+          >
+            APPLY
+          </button>
+          <button 
+            onClick={handleConfirm}
+            className="px-6 py-2 bg-teal-500/20 border border-teal-500 text-teal-400 text-[10px] font-black uppercase tracking-widest hover:bg-teal-500/30 transition-all shadow-[0_0_10px_rgba(20,184,166,0.2)]"
+          >
+            CONFIRM
+          </button>
+        </>
+      )}
+    </>
+  );
+
+  const rootOptions = [
+    { id: 'low', name: isGlobalMode ? 'MASTER_LOW_CONFIGURATION' : 'GLOBAL_LOW_SLOT', desc: 'Neural labels & inference. (Globally Managed)', color: getTierColor('low'), visible: isGlobalMode },
+    { id: 'probe', name: isGlobalMode ? 'MASTER_PROBE_CONFIGURATION' : 'PROBE_TIER_SLOT', desc: isGlobalMode ? 'Updates all equipped med-tier slots.' : 'Deep-dive panel telemetry auditing.', color: getTierColor('probe'), disabled: (!isGlobalMode && panelId === 'GLOBAL_SYSTEM_PROBE') || !fullConfig.probeSlot, visible: true },
+    { id: 'sensor', name: 'SENSOR_PORT_SLOT', desc: 'Hardware sensor nodes.', color: getTierColor('sensor'), disabled: panelId !== 'SENSOR_PANEL', visible: !isGlobalMode },
+    { id: 'main', name: 'BOOSTER_TIER_SLOT', desc: 'Global Neural Override.', color: getTierColor('main'), visible: true }
+  ];
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title={`UNIFIED_SLOT_CONFIG: ${panelId}`} variant={activeSlot === 'data' ? 'purple' : 'teal'}>
-      <div className="flex flex-col h-[550px] overflow-hidden">
-        <div className="flex flex-1 gap-6 overflow-hidden">
-          
-          {/* LEFT: Unified Launcher Configuration Tree */}
+    <Modal 
+      isOpen={isOpen} 
+      onClose={onClose} 
+      title={isGlobalMode ? 'MASTER_MATRIX_CONFIG' : `PANEL_CONFIG: ${panelId}`} 
+      variant={activeSlot === 'sensor' ? 'green' : 'purple'}
+      footerActions={footerActions}
+    >
+      <div className="flex flex-col h-[620px] overflow-hidden">
+        
+        <div className="flex items-center gap-2 mb-6 px-1 shrink-0">
+           <button 
+             onClick={() => setNavLevel('ROOT')}
+             className={`text-[10px] font-black uppercase tracking-widest ${navLevel === 'ROOT' ? 'text-zinc-300' : 'text-zinc-600 hover:text-zinc-400'}`}
+           >
+             SYSTEM_SLOTS
+           </button>
+           {navLevel === 'SLOT_SELECTED' && (
+             <>
+               <span className="text-zinc-800">/</span>
+               <span className="text-[10px] font-black uppercase tracking-widest text-zinc-400">
+                 {activeSlot.toUpperCase()}_TIER
+               </span>
+             </>
+           )}
+        </div>
+
+        <div className="flex flex-1 gap-6 overflow-hidden min-h-0">
           <div className="w-1/2 border-r border-zinc-900 pr-4 overflow-y-auto no-scroll relative flex flex-col">
-            
-            {/* SLOT SELECTOR (Top Node) */}
-            <div className="mb-6 shrink-0">
-               <h4 className="text-[10px] font-black text-zinc-500 uppercase tracking-widest mb-3 flex items-center gap-2">
-                  <div className="w-1.5 h-1.5 bg-zinc-700 rounded-sm"></div>
-                  System_Bus_Selection
-               </h4>
-               <div className="flex flex-col gap-2">
-                  {/* DATA SLOT NODE */}
-                  <div 
-                    onClick={() => setActiveSlot('data')}
-                    className={`relative p-3 border transition-all cursor-pointer flex items-center justify-between group
-                      ${activeSlot === 'data' ? 'bg-purple-900/10 border-purple-500 shadow-[inset_0_0_10px_rgba(168,85,247,0.1)]' : 'bg-black border-zinc-800 hover:border-zinc-600'}
-                    `}
-                  >
-                    <div className="flex items-center gap-3">
-                       <div className={`w-8 h-8 flex items-center justify-center border border-zinc-800 bg-zinc-950 ${activeSlot === 'data' ? 'text-purple-500' : 'text-zinc-600'}`}>
-                          <span className="font-black text-xs">D</span>
-                       </div>
-                       <div className="flex flex-col">
-                          <span className={`text-[10px] font-black uppercase tracking-widest ${activeSlot === 'data' ? 'text-purple-400' : 'text-zinc-500'}`}>Core_Data_Bus</span>
-                          <span className="text-[8px] font-mono text-zinc-600">Primary Telemetry Stream</span>
-                       </div>
-                    </div>
-                    {activeSlot === 'data' && <div className="w-1.5 h-1.5 bg-purple-500 rounded-full animate-pulse"></div>}
-                  </div>
-
-                  {/* NEURAL SLOT NODE */}
-                  <div 
-                    onClick={() => setActiveSlot('neural')}
-                    className={`relative p-3 border transition-all cursor-pointer flex items-center justify-between group
-                      ${activeSlot === 'neural' ? 'bg-teal-900/10 border-teal-500 shadow-[inset_0_0_10px_rgba(20,184,166,0.1)]' : 'bg-black border-zinc-800 hover:border-zinc-600'}
-                    `}
-                  >
-                    <div className="flex items-center gap-3">
-                       <div className={`w-8 h-8 flex items-center justify-center border border-zinc-800 bg-zinc-950 ${activeSlot === 'neural' ? 'text-teal-500' : 'text-zinc-600'}`}>
-                          <span className="font-black text-xs">N</span>
-                       </div>
-                       <div className="flex flex-col">
-                          <span className={`text-[10px] font-black uppercase tracking-widest ${activeSlot === 'neural' ? 'text-teal-400' : 'text-zinc-500'}`}>Neural_Uplink</span>
-                          <span className="text-[8px] font-mono text-zinc-600">Inference & Context Engine</span>
-                       </div>
-                    </div>
-                    {activeSlot === 'neural' && <div className="w-1.5 h-1.5 bg-teal-500 rounded-full animate-pulse"></div>}
-                  </div>
-               </div>
-            </div>
-
-            {/* HARDWARE TREE (Children) */}
-            <div className="flex-1 overflow-y-auto no-scroll relative">
-               <h4 className="text-[10px] font-black text-zinc-500 uppercase tracking-widest mb-4 sticky top-0 bg-[#080c0d] py-2 z-20 flex justify-between items-center border-b border-zinc-900/50">
-                 <span>Available_Hardware</span>
-                 <span className={`text-[8px] font-mono px-1.5 py-0.5 rounded-sm ${activeSlot === 'data' ? 'bg-purple-900/20 text-purple-500' : 'bg-teal-900/20 text-teal-500'}`}>
-                    [{activeSlot === 'data' ? 'CORE_TYPE' : 'NEURAL_TYPE'}]
-                 </span>
-               </h4>
-               
-               <div className="space-y-4 pl-2 pb-4">
-                 {compatibleLaunchers.map(l => (
-                   <div key={l.id} className="flex flex-col relative group animate-in slide-in-from-left-2 duration-300">
-                     {/* Tree Guide Line (Vertical) */}
-                     <div className={`absolute left-[11px] top-8 bottom-0 w-[1px] bg-zinc-800 transition-opacity ${selectedLauncher === l.id ? 'opacity-100' : 'opacity-0'}`}></div>
-
-                     <div 
-                       onClick={() => handleLauncherClick(l.id)}
-                       className={`p-4 border cursor-pointer transition-all flex justify-between items-center relative z-10 ${selectedLauncher === l.id ? 'bg-zinc-900 border-white shadow-lg' : 'bg-black border-zinc-800 hover:border-zinc-600'}`}
-                     >
-                       <div>
-                         <div className="text-[10px] font-black uppercase tracking-widest flex items-center gap-2">
-                           <span style={{ color: l.color }}>{l.name}</span>
-                           {activeConfig.launcherId === l.id && (
-                              <span className="text-[7px] bg-zinc-800 text-zinc-400 px-1 rounded-sm border border-zinc-700">EQUIPPED</span>
-                           )}
-                         </div>
-                         <div className="text-[8px] text-zinc-600 mt-1 font-mono">
-                           CHARGES: {l.maxCharges} | RATE: {l.rechargeRate}s | TOKENS: <span className="text-zinc-400">{l.tokens}</span>
-                         </div>
-                       </div>
-                       {/* Selection Indicator */}
-                       <div className={`w-2 h-2 border ${selectedLauncher === l.id ? 'bg-white border-white' : 'border-zinc-700 bg-black'}`}></div>
+            {navLevel === 'ROOT' ? (
+              <div className="space-y-2 animate-in fade-in slide-in-from-left-2">
+                 <h4 className="text-[9px] font-black text-zinc-700 uppercase tracking-[0.2em] mb-4">Select_Tier_Slot</h4>
+                 {rootOptions.filter(o => o.visible).map(slot => (
+                   <div 
+                      key={slot.id} 
+                      onClick={() => !slot.disabled && handleSlotSelect(slot.id as any)} 
+                      className={`p-4 border border-zinc-900 bg-black/40 flex justify-between items-center transition-all ${slot.disabled ? 'opacity-20 cursor-not-allowed' : 'hover:border-zinc-700 cursor-pointer group'}`}
+                   >
+                     <div className="flex flex-col">
+                        <span className="text-[10px] font-black uppercase tracking-widest" style={{ color: slot.color }}>{slot.name}</span>
+                        <p className="text-[8px] text-zinc-600 italic">{slot.desc}</p>
                      </div>
-                     
-                     {/* Expanded Ammunition List (Tree Branches) */}
-                     {selectedLauncher === l.id && (
-                       <div className="ml-6 pt-2 space-y-2 animate-in slide-in-from-top-2">
-                         {Object.values(PROBE_AMMUNITION)
-                           .filter(a => a.compatibleLaunchers.includes(l.type))
-                           .filter(a => {
-                               // Strict Requirement: Only list Historical Probes for panels that support historical data
-                               if (a.features.includes('HISTORY_CSV') && !isHistoricalSupported) return false;
-                               return true;
-                           })
-                           .map(ammo => {
-                             const count = ammoCounts[ammo.id] || 0;
-                             const isOutOfStock = !ammo.unlimited && count <= 0;
-                             const isDisabled = ammo.disabled || isOutOfStock; 
-                             const isEquipped = activeConfig.ammoId === ammo.id && activeConfig.launcherId === l.id;
-                             
-                             return (
-                               <div 
-                                 key={ammo.id} 
-                                 className={`relative p-3 border text-[9px] flex flex-col gap-1 transition-all ml-4 
-                                   ${isDisabled 
-                                       ? 'opacity-60 bg-zinc-950/50 border-zinc-900 cursor-not-allowed grayscale' 
-                                       : 'cursor-pointer hover:bg-zinc-900 bg-black/60 border-zinc-800'} 
-                                   ${isEquipped ? (activeSlot === 'data' ? 'border-purple-500 shadow-[0_0_10px_rgba(168,85,247,0.1)]' : 'border-teal-500 shadow-[0_0_10px_rgba(20,184,166,0.1)]') : ''}
-                                 `}
-                                 onClick={() => !isDisabled && handleEquip(ammo.id)}
-                               >
-                                 {/* Tree Guide Line (Horizontal) */}
-                                 <div className="absolute -left-4 top-1/2 w-4 h-[1px] bg-zinc-800"></div>
-
-                                 <div className="flex justify-between items-center">
-                                   <span className={`font-black uppercase tracking-wider ${isDisabled ? 'text-zinc-600' : 'text-zinc-300'}`}>
-                                     {ammo.name}
-                                   </span>
-                                   <div className="flex items-center gap-2">
-                                     {ammo.disabled ? (
-                                       <span className="text-[7px] text-red-500 border border-red-900/50 px-1 bg-red-950/20">LOCKED</span>
-                                     ) : isOutOfStock ? (
-                                       <span className="text-[7px] text-yellow-600 border border-yellow-900/50 px-1 bg-yellow-950/20">EMPTY</span>
-                                     ) : (
-                                       <span className={`text-[8px] font-mono ${ammo.unlimited ? (activeSlot === 'data' ? 'text-purple-500' : 'text-teal-500') : 'text-zinc-400'}`}>
-                                         {ammo.unlimited ? '∞' : `x${count}`}
-                                       </span>
-                                     )}
-                                     
-                                     {isEquipped && (
-                                       <span className={`text-[7px] text-black px-1 font-bold ${activeSlot === 'data' ? 'bg-purple-500' : 'bg-teal-500'}`}>ACTIVE</span>
-                                     )}
-                                   </div>
-                                 </div>
-                                 <span className="text-zinc-600 italic leading-tight text-[8px]">{ammo.description}</span>
-                                 <div className="flex gap-1 mt-1">
-                                     {ammo.features.map(f => (
-                                         <span key={f} className={`text-[7px] px-1 border ${isDisabled ? 'border-zinc-900 text-zinc-700' : 'border-zinc-800 bg-zinc-950 text-zinc-500'}`}>{f}</span>
-                                     ))}
-                                 </div>
-                               </div>
-                             );
-                           })}
-                       </div>
-                     )}
+                     <div className="w-1.5 h-1.5 rounded-full bg-zinc-800 group-hover:bg-white"></div>
                    </div>
                  ))}
-               </div>
-            </div>
+              </div>
+            ) : (
+              <div className="flex-1 overflow-y-auto no-scroll animate-in fade-in slide-in-from-left-2">
+                 <h4 className="text-[9px] font-black text-zinc-700 uppercase tracking-[0.2em] mb-4">Hardware_Nodes</h4>
+                 <div className="space-y-4 pl-2 pb-10">
+                   {compatibleLaunchers.map(l => {
+                     const isTierAllowed = isGlobalMode || launcherSystem.isLauncherAllowed(panelId, l.id);
+                     
+                     return (
+                       <div key={l.id} className={`flex flex-col relative group ${!isTierAllowed ? 'opacity-40 grayscale' : ''}`}>
+                        <div 
+                           onClick={() => isTierAllowed && handleLauncherClick(l.id)} 
+                           className={`p-4 border transition-all flex justify-between items-center z-10 ${!isTierAllowed ? 'cursor-not-allowed border-zinc-900' : (stagedLauncher === l.id ? 'bg-zinc-900 border-white shadow-lg cursor-pointer' : 'bg-black border-zinc-900 hover:border-zinc-600 cursor-pointer')}`}
+                        >
+                         <div>
+                           <div className="text-[10px] font-black uppercase tracking-widest flex items-center gap-2">
+                             {l.tier && <span className="text-[7px] border border-zinc-700 px-1 text-zinc-500 font-mono">T{l.tier}</span>}
+                             <span style={{ color: stagedLauncher === l.id ? l.color : '#71717a' }}>{l.name}</span>
+                             {stagedLauncher === l.id && <span className="text-[7px] bg-teal-900/40 text-teal-400 px-1 rounded-sm border border-teal-500/20">STAGED</span>}
+                           </div>
+                           <div className="text-[8px] text-zinc-600 mt-1 font-mono uppercase">Capacity: {l.maxCharges} | Tokens: {l.tokens}</div>
+                           {!isTierAllowed && <div className="text-[6px] text-red-500 font-black uppercase tracking-tighter mt-1">[INCOMPATIBLE_PANEL_RESOURCES]</div>}
+                         </div>
+                         <div className={`w-2 h-2 border ${stagedLauncher === l.id ? 'bg-white border-white' : 'border-zinc-700 bg-black'}`}></div>
+                       </div>
+                       {stagedLauncher === l.id && (
+                         <div className="ml-6 pt-2 space-y-2 animate-in slide-in-from-top-2">
+                           {Object.values(PROBE_AMMUNITION).filter(a => a.compatibleLaunchers.includes(l.type as any)).filter(a => !(a.features.includes('HISTORY_CSV') && !isHistoricalSupported)).map(ammo => {
+                               const isPending = stagedAmmoId === ammo.id;
+                               return (
+                                 <div key={ammo.id} className={`relative p-3 border text-[9px] flex flex-col gap-1 transition-all ml-4 ${ammo.disabled ? 'opacity-40 grayscale cursor-not-allowed' : 'cursor-pointer hover:bg-zinc-900 bg-black/60 border-zinc-800'} ${isPending ? 'border-teal-500 shadow-[0_0_10px_rgba(20,184,166,0.1)]' : ''}`} onClick={() => !ammo.disabled && handleAmmoSelect(ammo.id)}>
+                                   <div className="absolute -left-4 top-1/2 w-4 h-[1px] bg-zinc-800"></div>
+                                   <div className="flex justify-between items-center">
+                                     <span className="font-black uppercase tracking-wider text-zinc-300">{ammo.name}</span>
+                                     {isPending && <span className="text-[7px] text-black px-1 font-bold bg-teal-500 uppercase">SELECTED</span>}
+                                   </div>
+                                   <span className="text-zinc-600 italic text-[8px] leading-tight">{ammo.description}</span>
+                                 </div>
+                               );
+                           })}
+                         </div>
+                       )}
+                     </div>
+                   );
+                   })}
+                   
+                   {activeSlot !== 'main' && (
+                      <div className="mt-8 border-t border-zinc-900 pt-4 flex flex-col gap-2">
+                          <button 
+                              onClick={handleClearSlot}
+                              className="w-full py-2 border border-zinc-800 text-zinc-400 text-[9px] font-black uppercase tracking-widest hover:bg-white/5 hover:text-white transition-all"
+                          >
+                              {activeSlot === 'probe' ? 'REVERT_TO_STANDARD' : 'CLEAR_SLOT_CONTENTS'}
+                          </button>
+                          
+                          {activeSlot !== 'low' && activeSlot !== 'probe' && (
+                            <button 
+                                onClick={handleDecommissionSlot}
+                                className="w-full py-2 border border-red-900/40 text-red-500 text-[9px] font-black uppercase tracking-widest hover:bg-red-500/10 transition-all"
+                            >
+                                DECOMMISSION_SLOT_MODULE
+                            </button>
+                          )}
+                      </div>
+                   )}
+                 </div>
+              </div>
+            )}
           </div>
 
-          {/* RIGHT: Slot Info / Preview */}
-          <div className="w-1/2 pl-2 flex flex-col justify-center items-center text-center p-8 bg-zinc-950/30 transition-colors duration-500"
-               style={{ borderColor: activeSlot === 'data' ? 'rgba(168,85,247,0.1)' : 'rgba(20,184,166,0.1)', borderWidth: '1px', borderStyle: 'solid' }}>
-             
-             <div className="mb-6 animate-in fade-in zoom-in-95 duration-300 key={activeSlot}">
-                <div className={`w-20 h-20 rounded-full border-2 flex items-center justify-center mb-6 mx-auto transition-all ${activeSlot === 'data' ? 'border-purple-500 text-purple-500 shadow-[0_0_30px_rgba(168,85,247,0.2)] bg-purple-900/10' : 'border-teal-500 text-teal-500 shadow-[0_0_30px_rgba(0,255,213,0.2)] bg-teal-900/10'}`}>
-                   <svg className="w-8 h-8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      {activeSlot === 'data' 
-                        ? <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/> 
-                        : <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>}
+          <div className="w-1/2 flex flex-col overflow-hidden bg-zinc-950/30 border border-zinc-900/50 rounded-sm">
+             <div className="flex-none p-6 text-center border-b border-zinc-900 bg-zinc-950/50">
+                <div className={`w-12 h-12 rounded-full border flex items-center justify-center mb-3 mx-auto transition-all`} style={{ borderColor: getTierColor(activeSlot), color: getTierColor(activeSlot), boxShadow: `0 0 15px ${getTierColor(activeSlot)}33` }}>
+                   <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      {activeSlot === 'low' ? <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/> : <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>}
                    </svg>
                 </div>
-                
-                <h3 className={`text-sm font-black uppercase tracking-[0.3em] ${activeSlot === 'data' ? 'text-purple-400' : 'text-teal-400'}`}>
-                  {activeSlot === 'data' ? 'CORE_DATA_PROBE' : 'NEURAL_INFERENCE'}
+                <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-white">
+                  {activeSlot === 'low' ? 'GLOBAL_NEURO_INFERENCE' : `${activeSlot.toUpperCase()}_TIER_INFERENCE`}
                 </h3>
-                <span className="text-[9px] font-mono text-zinc-600 block mt-1 uppercase tracking-widest">Slot_Configuration_Matrix</span>
-                
-                <div className="w-12 h-0.5 bg-zinc-800 mx-auto my-6"></div>
-                
-                <p className="text-[10px] text-zinc-400 mt-2 max-w-xs mx-auto leading-relaxed border-l-2 border-zinc-800 pl-3 text-left">
-                  {activeSlot === 'data' 
-                    ? "Configures heavy-lift core probes. Determines payload depth, historical CSV aggregation, and token consumption for deep analysis." 
-                    : "Configures the fast-twitch Neural Inference engine. Optimized for lightweight, context-aware tooltips and rapid anomaly scanning."}
-                </p>
+                {isGlobalMode && <span className="text-[7px] text-teal-400 font-black uppercase tracking-widest animate-pulse">[MASTER_OVERRIDE_ACTIVE]</span>}
              </div>
-
-             <div className="w-full border-t border-zinc-900 pt-6 space-y-3">
-               <div className="flex justify-between items-center text-[10px] text-zinc-500 mb-2 font-mono uppercase bg-black/40 p-3 border border-zinc-900/50">
-                 <span>Active Launcher</span>
-                 <span className={`${activeSlot === 'data' ? 'text-purple-400' : 'text-teal-400'} font-black`}>
-                    {launcherSystem.getById(activeConfig.launcherId)?.name || 'UNKNOWN'}
-                 </span>
-               </div>
-               <div className="flex justify-between items-center text-[10px] text-zinc-500 font-mono uppercase bg-black/40 p-3 border border-zinc-900/50">
-                 <span>Loaded Payload</span>
-                 <span className="text-white font-black">{PROBE_AMMUNITION[activeConfig.ammoId]?.name || 'STANDARD'}</span>
-               </div>
-               {isHistoricalSupported && activeSlot === 'data' && (
-                   <div className="text-[9px] text-teal-600 uppercase font-black tracking-widest mt-4 border border-teal-900/30 bg-teal-950/10 p-2 flex items-center justify-center gap-2">
-                       <div className="w-1.5 h-1.5 bg-teal-500 rounded-full animate-pulse"></div>
-                       [ PANEL_HISTORY_CAPABLE ]
-                   </div>
-               )}
+             
+             <div className="flex-1 flex flex-col p-4 overflow-hidden">
+                <div className="flex justify-between items-center mb-2 px-1">
+                   <span className="text-[8px] font-black text-zinc-700 uppercase tracking-widest">Neural_Packet_Preview</span>
+                   <span className={`text-[7px] font-mono uppercase ${hasChanges ? 'text-teal-400 animate-pulse' : 'text-zinc-600'}`}>{hasChanges ? 'STAGED_READY' : 'SYNC_PENDING'}</span>
+                </div>
+                <div className="flex-1 bg-black/80 border border-zinc-900 p-4 font-mono text-[9px] text-teal-600 overflow-y-auto no-scroll selection:bg-teal-500/20 shadow-inner">
+                   <pre className="whitespace-pre-wrap">{JSON.stringify(payloadPreview, null, 2)}</pre>
+                </div>
+                <div className="mt-4 pt-4 border-t border-zinc-900 space-y-2 shrink-0">
+                   <div className="flex justify-between text-[8px] uppercase tracking-tighter"><span className="text-zinc-700">Launcher Node</span><span className="text-zinc-400 font-black">{launcherSystem.getById(stagedLauncher || '')?.name || 'NONE'}</span></div>
+                   <div className="flex justify-between text-[8px] uppercase tracking-tighter"><span className="text-zinc-700">Active Script</span><span className="text-zinc-400 font-black">{PROBE_AMMUNITION[stagedAmmoId || '']?.name || 'NULL'}</span></div>
+                </div>
              </div>
           </div>
-
         </div>
       </div>
     </Modal>

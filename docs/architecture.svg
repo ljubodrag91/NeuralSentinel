@@ -1,0 +1,82 @@
+<svg width="1000" height="800" viewBox="0 0 1000 800" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background -->
+  <rect width="1000" height="800" fill="#020406"/>
+  
+  <!-- Definitions -->
+  <defs>
+    <linearGradient id="grad_teal" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#00ffd5" stop-opacity="0.2"/>
+      <stop offset="100%" stop-color="#00ffd5" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="grad_purple" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#bd00ff" stop-opacity="0.2"/>
+      <stop offset="100%" stop-color="#bd00ff" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="grad_orange" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#f97316" stop-opacity="0.2"/>
+      <stop offset="100%" stop-color="#f97316" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+
+  <!-- UI Layer -->
+  <rect x="50" y="50" width="900" height="200" rx="4" stroke="#111a21" stroke-width="2" fill="#050c10"/>
+  <text x="70" y="80" fill="#a0aec0" font-family="monospace" font-size="14" font-weight="bold">HUD_FRONTEND_INTERFACE (React 19)</text>
+  
+  <rect x="100" y="110" width="220" height="100" rx="2" fill="#00ffd5" fill-opacity="0.05" stroke="#00ffd5" stroke-dasharray="4 4"/>
+  <text x="110" y="130" fill="#00ffd5" font-family="monospace" font-size="10">LOW_TIER_SLOTS (Teal)</text>
+  <text x="110" y="145" fill="#00ffd5" font-family="monospace" font-size="8">Neural Inferences</text>
+  
+  <rect x="390" y="110" width="220" height="100" rx="2" fill="#bd00ff" fill-opacity="0.05" stroke="#bd00ff" stroke-dasharray="4 4"/>
+  <text x="400" y="130" fill="#bd00ff" font-family="monospace" font-size="10">MEDIUM_TIER_SLOTS (Purple)</text>
+  <text x="400" y="145" fill="#bd00ff" font-family="monospace" font-size="8">Core Data Probes</text>
+  
+  <rect x="680" y="110" width="220" height="100" rx="2" fill="#f97316" fill-opacity="0.05" stroke="#f97316" stroke-dasharray="4 4"/>
+  <text x="690" y="130" fill="#f97316" font-family="monospace" font-size="10">HIGH_TIER_SLOTS (Orange)</text>
+  <text x="690" y="145" fill="#f97316" font-family="monospace" font-size="8">Hardware &amp; Scripts</text>
+
+  <!-- Logic Layers -->
+  <line x1="500" y1="250" x2="500" y2="350" stroke="#1a232e" stroke-width="2"/>
+  
+  <rect x="150" y="350" width="700" height="250" rx="4" stroke="#111a21" stroke-width="2" fill="#050c10"/>
+  <text x="170" y="380" fill="#a0aec0" font-family="monospace" font-size="14" font-weight="bold">SYSTEM_LOGIC_CONTROLLERS</text>
+  
+  <!-- Services -->
+  <rect x="180" y="410" width="180" height="160" rx="2" stroke="#00f2ff" stroke-opacity="0.3" fill="#001a1a"/>
+  <text x="190" y="430" fill="#00f2ff" font-family="monospace" font-size="10">LauncherSystem</text>
+  <text x="190" y="450" fill="#a0aec0" font-family="monospace" font-size="8">Manifest Management</text>
+  <text x="190" y="465" fill="#a0aec0" font-family="monospace" font-size="8">Slot State Mapping</text>
+  <text x="190" y="480" fill="#a0aec0" font-family="monospace" font-size="8">Dynamic Persistence</text>
+  
+  <rect x="410" y="410" width="180" height="160" rx="2" stroke="#bd00ff" stroke-opacity="0.3" fill="#1a001a"/>
+  <text x="420" y="430" fill="#bd00ff" font-family="monospace" font-size="10">NeuralBridge</text>
+  <text x="420" y="450" fill="#a0aec0" font-family="monospace" font-size="8">Gemini AI Integration</text>
+  <text x="420" y="465" fill="#a0aec0" font-family="monospace" font-size="8">Probe Contract Validation</text>
+  <text x="420" y="480" fill="#a0aec0" font-family="monospace" font-size="8">Payload Transmorphing</text>
+  
+  <rect x="640" y="410" width="180" height="160" rx="2" stroke="#22c55e" stroke-opacity="0.3" fill="#001a00"/>
+  <text x="650" y="430" fill="#22c55e" font-family="monospace" font-size="10">DataIngress</text>
+  <text x="650" y="450" fill="#a0aec0" font-family="monospace" font-size="8">Local Source Detection</text>
+  <text x="650" y="465" fill="#a0aec0" font-family="monospace" font-size="8">Remote SSH/HTTP Uplink</text>
+  <text x="650" y="480" fill="#a0aec0" font-family="monospace" font-size="8">5050 Daemon Polling</text>
+
+  <!-- Persistence Layer -->
+  <line x1="500" y1="600" x2="500" y2="650" stroke="#1a232e" stroke-width="2"/>
+  
+  <rect x="250" y="650" width="500" height="100" rx="4" stroke="#1a232e" stroke-width="2" fill="#050c10"/>
+  <text x="270" y="680" fill="#a0aec0" font-family="monospace" font-size="12" font-weight="bold">PERSISTENCE_STORAGE (LocalStorage)</text>
+  
+  <rect x="280" y="695" width="120" height="40" rx="2" fill="#a0aec0" fill-opacity="0.1" stroke="#a0aec0" stroke-opacity="0.3"/>
+  <text x="290" y="715" fill="#a0aec0" font-family="monospace" font-size="10">CSV_ENGINE</text>
+  <text x="290" y="728" fill="#a0aec0" font-family="monospace" font-size="7">24h Telemetry Logs</text>
+  
+  <rect x="420" y="695" width="120" height="40" rx="2" fill="#a0aec0" fill-opacity="0.1" stroke="#a0aec0" stroke-opacity="0.3"/>
+  <text x="430" y="715" fill="#a0aec0" font-family="monospace" font-size="10">JSON_STORE</text>
+  <text x="430" y="728" fill="#a0aec0" font-family="monospace" font-size="7">Launcher Manifest</text>
+  
+  <rect x="560" y="695" width="120" height="40" rx="2" fill="#a0aec0" fill-opacity="0.1" stroke="#a0aec0" stroke-opacity="0.3"/>
+  <text x="570" y="715" fill="#a0aec0" font-family="monospace" font-size="10">CONFIG_PREF</text>
+  <text x="570" y="728" fill="#a0aec0" font-family="monospace" font-size="7">Global App Settings</text>
+
+  <!-- Connectors -->
+  <path d="M500 110 V 350" stroke="#1a232e" stroke-width="1" stroke-dasharray="2 2"/>
+</svg>

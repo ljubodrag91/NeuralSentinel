@@ -1,16 +1,12 @@
 
-import React, { useState, useEffect } from 'react';
-import { CoreStats, Platform, SensorArrayConfig, SensorNodeConfig } from '../types';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { CoreStats, Platform, SensorArrayConfig, SensorNodeConfig, AppSettings, ScriptState } from '../types';
 import Tooltip from './common/Tooltip';
 import { HistoryStorage } from '../services/historyStorage';
 import Modal from './common/Modal';
 import { sensorService } from '../services/sensorService';
-
-interface ScannerPanelProps {
-  stats: CoreStats | null;
-  platform: Platform;
-  allowDistortion?: boolean;
-}
+import { launcherSystem } from '../services/launcherService';
+import { serverService } from '../services/serverService';
 
 type AnomalyStatus = 'POSITIVE' | 'MINOR' | 'NO_DATA' | 'UNKNOWN' | 'RARE' | 'ERROR';
 
@@ -20,46 +16,84 @@ interface ScanResult {
   description: string;
   details: string;
   timestamp: string;
-  x: number; // Calculated display X
-  y: number; // Calculated display Y
+  x: number;
+  y: number;
   sourceSystem: string;
   rawData?: any;
 }
 
-const ScannerPanel: React.FC<ScannerPanelProps> = ({ stats, platform, allowDistortion }) => {
-  // --- STATE ---
+interface ScannerPanelProps {
+  stats: CoreStats | null;
+  platform: Platform;
+  allowDistortion?: boolean;
+  settings?: AppSettings;
+  onLauncherSelect?: (panelId: string, type: 'low' | 'probe' | 'sensor') => void;
+  onNeuralProbe?: (panelId: string, data: any) => void;
+  isProcessing?: boolean;
+  externalTrigger?: number; // New prop for shortcut firing
+}
+
+const ScannerPanel: React.FC<ScannerPanelProps> = ({ stats, platform, allowDistortion, settings, onLauncherSelect, onNeuralProbe, isProcessing, externalTrigger }) => {
   const [availableArrays, setAvailableArrays] = useState<SensorArrayConfig[]>([]);
-  const [activeArrayId, setActiveArrayId] = useState<string>('STD_SYS_SCANNER');
   
-  // Safe accessor for active array
-  const activeArray = availableArrays.find(a => a.id === activeArrayId) || availableArrays[0];
+  const sensorSlotConfig = settings?.panelSlots['SENSOR_PANEL']?.sensorSlot;
+  const sensorLauncherId = sensorSlotConfig?.launcherId;
+  const sensorModule = sensorLauncherId ? launcherSystem.getById(sensorLauncherId) : null;
+  const scannerCooldownRemaining = sensorLauncherId ? serverService.getCooldown(sensorLauncherId) : 0;
+  
+  // Categorize loaded script - Enforce strict 1-to-1 script logic for the Data Model
+  const activeAmmo = useMemo(() => {
+    const ammoId = sensorSlotConfig?.ammoId;
+    if (!ammoId) return null;
+    const ammo = launcherSystem.getConsumableById(ammoId);
+    // Exclusive check: scripts for this slot must be module-core or boosters compatible with sensor-module
+    if (ammo && ammo.compatibleLaunchers.includes('sensor-module')) {
+      return ammo;
+    }
+    return null;
+  }, [sensorSlotConfig?.ammoId]);
+
+  const isSystemScript = activeAmmo?.type === 'module-core';
+  const isBufferScript = activeAmmo?.type === 'booster';
+
+  // Derive active array profile exclusively from the sensor slot launcher
+  const activeArray = useMemo(() => {
+    if (!availableArrays.length) return null;
+    if (sensorModule && sensorModule.compatibleProbes[0]) {
+        return availableArrays.find(a => a.id === sensorModule.compatibleProbes[0]) || availableArrays[0];
+    }
+    return availableArrays.find(a => a.id === 'STD_SYS_SCANNER') || availableArrays[0];
+  }, [sensorModule, availableArrays]);
 
   const [results, setResults] = useState<Record<string, ScanResult>>({});
   const [isScanning, setIsScanning] = useState(false);
   const [scanProgress, setScanProgress] = useState(0); 
   const [completedNodes, setCompletedNodes] = useState(0);
+  const [lastScanTime, setLastScanTime] = useState(0);
   
-  // Modals
-  const [showConfigModal, setShowConfigModal] = useState(false); 
   const [showHistoryModal, setShowHistoryModal] = useState(false);
   const [selectedResult, setSelectedResult] = useState<ScanResult | null>(null);
   const [historyEntries, setHistoryEntries] = useState<{timestamp: number, values: string[]}[]>([]);
 
-  // Derived state to fix missing variables
   const isOffline = !stats;
   const hudColor = isScanning ? '#14b8a6' : (stats ? '#00ffd5' : '#52525b');
 
-  // -- Initialization --
+  // Derive script state for local UI with strict validation logic
+  const currentScriptState = useMemo(() => {
+    if (!settings) return { state: ScriptState.DISABLED, reason: 'System link uninitialized.' };
+    
+    // Explicit Data Model Validation for Sensor Slot
+    if (!sensorLauncherId) return { state: ScriptState.DISABLED, reason: 'Sensor Port Offline: Module required.' };
+    if (!activeAmmo) return { state: ScriptState.DISABLED, reason: 'Awaiting Script: No valid sequence loaded.' };
+
+    return serverService.getScriptState('SENSOR_PANEL', settings);
+  }, [settings, sensorLauncherId, activeAmmo, scannerCooldownRemaining]);
+
   useEffect(() => {
     const arrays = sensorService.getAvailableArrays();
     setAvailableArrays(arrays);
-    // Default to Standard Scanner if current selection invalid
-    if (!arrays.find(a => a.id === activeArrayId)) {
-        setActiveArrayId('STD_SYS_SCANNER');
-    }
   }, []);
 
-  // -- Persistence --
   const refreshHistory = () => {
     setHistoryEntries(HistoryStorage.getEntries('SCANNER_HISTORY'));
   };
@@ -68,30 +102,24 @@ const ScannerPanel: React.FC<ScannerPanelProps> = ({ stats, platform, allowDisto
     refreshHistory();
   }, []);
 
-  // -- LOGIC --
-
   const analyzeSensor = async (sensor: SensorNodeConfig): Promise<Omit<ScanResult, 'x' | 'y'>> => {
-    const latency = Math.max(200, sensor.timeout * 0.5 + (Math.random() * 500)); 
+    const latency = Math.max(200, sensor.timeout * 0.4 + (Math.random() * 400)); 
     await new Promise(r => setTimeout(r, latency));
 
     const ts = new Date().toLocaleTimeString();
     const sourceSystem = `${platform} (${stats?.source || 'UNKNOWN'})`;
     
     if (!stats) {
-      // Basic Node handles offline differently
       if (sensor.id === 'BASIC_NODE') {
           return { sensorId: sensor.id, status: 'NO_DATA', description: 'Ping Failed', details: 'Target Unreachable', timestamp: ts, sourceSystem };
       }
       return { sensorId: sensor.id, status: 'ERROR', description: 'Source Offline', details: sensor.noDataDefinition, timestamp: ts, sourceSystem };
     }
 
-    // Dynamic Logic for Modular Nodes
-    // Basic Node Check
     if (sensor.id === 'BASIC_NODE') {
         return { sensorId: sensor.id, status: 'MINOR', description: 'Ping Success', details: 'Latency < 1ms', timestamp: ts, sourceSystem };
     }
 
-    // Logic for other types
     if (sensor.type === 'NETWORK') {
         const netLoad = (stats.network?.inRateKB || 0) + (stats.network?.outRateKB || 0);
         const ifaces = Object.keys(stats.network?.interfaces || {}).length;
@@ -108,60 +136,92 @@ const ScannerPanel: React.FC<ScannerPanelProps> = ({ stats, platform, allowDisto
         return { sensorId: sensor.id, status: 'MINOR', description: 'System Nominal', details: 'Load within bounds.', timestamp: ts, sourceSystem };
     }
 
-    // Fallback
     return { sensorId: sensor.id, status: 'UNKNOWN', description: 'Generic Node', details: 'No specific heuristics.', timestamp: ts, sourceSystem };
   };
 
-  const handleScan = async () => {
+  const handleScan = useCallback(async (isAuto = false) => {
     if (isScanning || !activeArray) return;
     
-    setIsScanning(true);
-    setResults({});
-    setScanProgress(0);
-    setCompletedNodes(0);
-    
-    const enabledSensors = activeArray.nodes.filter(s => s.enabled);
-    const total = enabledSensors.length;
-    
-    const isParallel = activeArray.settings.executionMode === 'PARALLEL';
-    const sessionResults: string[] = [];
-
-    if (isParallel) {
-       await Promise.all(enabledSensors.map(async (sensor) => {
-          const res = await analyzeSensor(sensor);
-          finalizeNodeResult(sensor, res);
-          sessionResults.push(`${sensor.name}: ${res.status}`);
-          setCompletedNodes(prev => { const next = prev + 1; setScanProgress((next / total) * 100); return next; });
-       }));
-    } else {
-       for (const sensor of enabledSensors) {
-          const res = await analyzeSensor(sensor);
-          finalizeNodeResult(sensor, res);
-          sessionResults.push(`${sensor.name}: ${res.status}`);
-          setCompletedNodes(prev => { const next = prev + 1; setScanProgress((next / total) * 100); return next; });
-       }
+    // Enforce operational constraints
+    if (currentScriptState.state !== ScriptState.LOADED) {
+        return;
     }
 
-    const summary = sessionResults.length > 0 ? sessionResults.join(' | ') : 'ALL_SYSTEMS_NOMINAL';
-    HistoryStorage.append('SCANNER_HISTORY', 'TIMESTAMP,SENSORS,SUMMARY', [new Date().toLocaleTimeString(), `${enabledSensors.length} Nodes`, summary]);
+    setIsScanning(true);
+
+    if (isSystemScript) {
+        // Reset results specifically at the start of a new System Scan execution
+        setResults({});
+        setScanProgress(0);
+        setCompletedNodes(0);
+        
+        const enabledSensors = activeArray.nodes.filter(s => s.enabled);
+        const total = enabledSensors.length;
+        
+        const isParallel = activeArray.settings.executionMode === 'PARALLEL';
+        const sessionResults: Record<string, any> = {};
+
+        const finalizeNodeResult = (sensor: SensorNodeConfig, res: Omit<ScanResult, 'x' | 'y'>) => {
+            setResults(prev => ({ ...prev, [sensor.id]: { ...res, x: sensor.x, y: sensor.y } }));
+        };
+
+        if (isParallel) {
+           await Promise.all(enabledSensors.map(async (sensor) => {
+              const res = await analyzeSensor(sensor);
+              finalizeNodeResult(sensor, res);
+              sessionResults[sensor.name] = res.status;
+              setCompletedNodes(prev => { const next = prev + 1; setScanProgress((next / total) * 100); return next; });
+           }));
+        } else {
+           for (const sensor of enabledSensors) {
+              const res = await analyzeSensor(sensor);
+              finalizeNodeResult(sensor, res);
+              sessionResults[sensor.name] = res.status;
+              setCompletedNodes(prev => { const next = prev + 1; setScanProgress((next / total) * 100); return next; });
+           }
+        }
+
+        if (sensorModule?.isExtended && onNeuralProbe) {
+            onNeuralProbe('SENSOR_PANEL', { results: sessionResults });
+        }
+
+        const summary = Object.entries(sessionResults).map(([k,v]) => `${k}: ${v}`).join(' | ');
+        HistoryStorage.append('SCANNER_HISTORY', 'TIMESTAMP,SENSORS,SUMMARY', [new Date().toLocaleTimeString(), `${enabledSensors.length} Nodes`, `SYSTEM_SCAN: ${summary || 'NOMINAL'}`]);
+    } else {
+        // Buffer script execution - enhancer logic maintained without wiping radar scans
+        await new Promise(r => setTimeout(r, 1200)); 
+        HistoryStorage.append('SCANNER_HISTORY', 'TIMESTAMP,SENSORS,SUMMARY', [new Date().toLocaleTimeString(), 'BUFFER_OP', `ENHANCER_TRIGGERED: ${activeAmmo?.name || 'Protocol Delta'}`]);
+    }
+
     refreshHistory();
     setIsScanning(false);
-  };
+    
+    if (sensorLauncherId && !isAuto) {
+        serverService.triggerCooldown(sensorLauncherId, sensorModule?.baseCooldown || 60000);
+        setLastScanTime(Date.now());
+    }
+  }, [isScanning, activeArray, sensorSlotConfig, sensorModule, sensorLauncherId, stats, scannerCooldownRemaining, currentScriptState, onNeuralProbe, platform, isSystemScript, activeAmmo]);
 
-  const finalizeNodeResult = (sensor: SensorNodeConfig, res: Omit<ScanResult, 'x' | 'y'>) => {
-      const jitterX = (Math.random() - 0.5) * 12; 
-      const jitterY = (Math.random() - 0.5) * 12;
-      const finalX = Math.max(10, Math.min(90, sensor.x + jitterX));
-      const finalY = Math.max(10, Math.min(90, sensor.y + jitterY));
+  // Automatic Scan Engine with dynamic interval reduction for active System Scripts
+  useEffect(() => {
+    if (currentScriptState.state !== ScriptState.LOADED || isScanning || isProcessing) return;
 
-      setResults(prev => ({ ...prev, [sensor.id]: { ...res, x: finalX, y: finalY } }));
-  };
+    const basePoll = (settings?.pollInterval || 30) * 1000;
+    // Reduce interval by 50% when a System Script is active to increase tactical data density
+    const dynamicInterval = isSystemScript ? basePoll / 2 : basePoll;
 
-  const handleClear = () => {
-    setResults({});
-    setScanProgress(0);
-    setCompletedNodes(0);
-  };
+    const autoTimer = setInterval(() => {
+      handleScan(true);
+    }, dynamicInterval);
+
+    return () => clearInterval(autoTimer);
+  }, [currentScriptState.state, isScanning, isProcessing, isSystemScript, settings?.pollInterval, handleScan]);
+
+  useEffect(() => {
+    if (externalTrigger && externalTrigger > 0) {
+        handleScan(true);
+    }
+  }, [externalTrigger, handleScan]);
 
   const getStatusColor = (status: AnomalyStatus) => {
     switch (status) {
@@ -175,31 +235,38 @@ const ScannerPanel: React.FC<ScannerPanelProps> = ({ stats, platform, allowDisto
     }
   };
 
-  // Safe render if arrays not loaded yet
+  const getScriptStateStyle = (state: ScriptState) => {
+    switch (state) {
+      case ScriptState.LOADED: return 'border-orange-400/50 bg-orange-500/10';
+      case ScriptState.DISABLED: return 'border-zinc-800 bg-black opacity-60';
+      case ScriptState.REFRESHING: return 'border-orange-500/30 bg-orange-500/5';
+      case ScriptState.BROKEN: return 'border-red-500/50 bg-red-950/20 animate-pulse';
+      default: return 'border-zinc-800 bg-black opacity-60';
+    }
+  };
+
   if (!activeArray) return <div className="p-10 text-center text-zinc-500">LOADING_SENSOR_MODULES...</div>;
 
+  const canScan = currentScriptState.state === ScriptState.LOADED && !!stats;
+
   return (
-    <div className={`flex flex-col-reverse md:flex-row h-full w-full bg-[#020406] overflow-hidden ${allowDistortion ? 'core-distortion' : ''}`}>
-      
-      {/* --- LEFT: RADAR VISUALIZATION (Flex Grow) --- */}
-      {/* On mobile: this is bottom (flex-col-reverse) */}
+    <div className="flex flex-col-reverse md:flex-row h-full w-full bg-[#020406] overflow-hidden relative">
       <div className="relative flex-1 h-full md:h-auto flex flex-col items-center justify-center overflow-hidden bg-black/20 shrink-0">
-         
          <div className="absolute top-0 left-0 w-full p-4 z-20 flex justify-between items-center bg-gradient-to-b from-black/90 to-transparent pointer-events-auto">
             <div className="flex items-center gap-3">
                <div className={`w-2 h-2 rounded-full shadow-lg ${isScanning ? 'bg-teal-500 animate-pulse shadow-teal-500/50' : 'bg-zinc-800'}`}></div>
                <div className="flex flex-col">
                   <span className="text-[10px] font-black text-zinc-500 uppercase tracking-[0.2em] shadow-black drop-shadow-md">EM_FIELD_INTERCEPT</span>
-                  <span className="text-[8px] font-mono text-teal-600 uppercase tracking-widest">{activeArray.name}</span>
+                  <span className={`text-[8px] font-mono uppercase tracking-widest ${sensorModule?.isExtended ? 'text-orange-500' : 'text-teal-600'}`}>
+                    {activeArray.name} {sensorModule?.isExtended && '[EXTENDED_CORE]'}
+                  </span>
                </div>
             </div>
             <div className="flex gap-2">
-                <button onClick={handleClear} className="px-4 py-1.5 border border-zinc-800 bg-black/60 text-[9px] font-black text-zinc-400 hover:text-red-400 hover:border-red-500/50 hover:bg-red-500/10 transition-all uppercase tracking-widest backdrop-blur-md">CLEAR</button>
+                <button onClick={() => setResults({})} className="px-4 py-1.5 border border-zinc-800 bg-black/60 text-[9px] font-black text-zinc-400 hover:text-red-400 hover:border-red-500/50 hover:bg-red-500/10 transition-all uppercase tracking-widest backdrop-blur-md">CLEAR</button>
                 <button onClick={() => setShowHistoryModal(true)} className="px-4 py-1.5 border border-zinc-800 bg-black/60 text-[9px] font-black text-zinc-400 hover:text-blue-400 hover:border-blue-500/50 hover:bg-blue-500/10 transition-all uppercase tracking-widest backdrop-blur-md">HISTORY</button>
             </div>
          </div>
-
-         {/* Radar Visuals */}
          <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-0">
             <div className="absolute inset-0 opacity-10 bg-[radial-gradient(circle_at_center,rgba(0,255,213,0.05),transparent_70%)]"></div>
             <div className="w-[65%] aspect-square rounded-full border border-teal-900/20 opacity-30"></div>
@@ -209,90 +276,136 @@ const ScannerPanel: React.FC<ScannerPanelProps> = ({ stats, platform, allowDisto
             <div className="absolute h-full w-[1px] bg-teal-900/10"></div>
             {!isOffline && <div className="absolute w-[80%] aspect-square rounded-full animate-[spin_8s_linear_infinite] opacity-5" style={{ background: `conic-gradient(from 0deg, transparent 0deg, transparent 270deg, ${hudColor} 360deg)` }}></div>}
          </div>
-
-         {/* Central Button */}
          <div className="relative z-10 pointer-events-auto">
-            <button
-              onClick={handleScan}
-              disabled={isScanning || !stats}
-              className={`w-28 h-28 rounded-full border-2 flex flex-col items-center justify-center transition-all duration-500 ${isScanning ? 'scale-95 opacity-90 border-teal-500/50' : 'hover:scale-105 active:scale-95 hover:border-teal-500/50'} ${!stats ? 'grayscale cursor-not-allowed opacity-30' : 'cursor-pointer'} bg-black/80 backdrop-blur-sm`}
-              style={{ borderColor: isScanning ? hudColor : '#27272a', boxShadow: isScanning ? `0 0 30px ${hudColor}22` : 'none' }}
-            >
-              <div className="text-[9px] font-black uppercase tracking-widest mb-1 transition-colors" style={{ color: isScanning ? hudColor : '#71717a' }}>{isScanning ? 'SCANNING' : (!stats ? 'OFFLINE' : 'INIT_SCAN')}</div>
-              <div className="text-[8px] text-zinc-600 font-mono uppercase">{isScanning ? `${Math.round(scanProgress)}%` : 'READY'}</div>
-              {isScanning && <div className="absolute inset-[-4px] border-t-2 border-b-2 rounded-full animate-spin opacity-50" style={{ borderColor: hudColor }}></div>}
-            </button>
+            <Tooltip name="SCANNER_CORE" source="SYSTEM" desc={currentScriptState.reason || (isSystemScript ? "Initiate full sensor array intercept." : "Execute enhancer logic (no radar scan).")}>
+                <button
+                onClick={() => handleScan()}
+                disabled={isScanning || isProcessing || !canScan}
+                className={`w-28 h-28 rounded-full border-2 flex flex-col items-center justify-center transition-all duration-500 ${isScanning || isProcessing ? 'scale-95 opacity-90 border-teal-500/50' : 'hover:scale-105 active:scale-95 hover:border-teal-500/50'} ${!canScan ? 'grayscale cursor-not-allowed opacity-30' : 'cursor-pointer'} bg-black/80 backdrop-blur-sm`}
+                style={{ borderColor: isScanning || isProcessing ? hudColor : '#27272a', boxShadow: isScanning || isProcessing ? `0 0 30px ${hudColor}22` : 'none' }}
+                >
+                <div className="text-[9px] font-black uppercase tracking-widest mb-1 transition-colors" style={{ color: isScanning || isProcessing ? hudColor : '#71717a' }}>
+                    {isProcessing ? 'NEURAL_SYNC' : (isScanning ? (isSystemScript ? 'SCANNING' : 'SYNCING') : (scannerCooldownRemaining > 0 ? 'RELOADING' : (!stats ? 'OFFLINE' : (isSystemScript ? 'INIT_SCAN' : 'TRIGGER'))))}
+                </div>
+                <div className="text-[8px] text-zinc-600 font-mono uppercase">
+                    {isScanning ? (isSystemScript ? `${Math.round(scanProgress)}%` : 'ACT...') : (scannerCooldownRemaining > 0 ? `${(scannerCooldownRemaining/1000).toFixed(0)}s` : 'READY')}
+                </div>
+                {(isScanning || isProcessing) && <div className="absolute inset-[-4px] border-t-2 border-b-2 rounded-full animate-spin opacity-50" style={{ borderColor: hudColor }}></div>}
+                </button>
+            </Tooltip>
          </div>
-
-         {/* Results Overlay */}
          <div className="absolute inset-0 z-10 pointer-events-none">
             {(Object.values(results) as ScanResult[]).map((res) => {
               const color = getStatusColor(res.status);
               const sensorName = activeArray.nodes.find(s => s.id === res.sensorId)?.name || res.sensorId;
               return (
-                <React.Fragment key={res.sensorId}>
-                    <div 
-                      className="absolute pointer-events-auto flex flex-col items-center justify-center group transform -translate-x-1/2 -translate-y-1/2 cursor-pointer"
-                      style={{ left: `${res.x}%`, top: `${res.y}%` }}
-                      onClick={() => setSelectedResult(res)}
-                    >
-                      <Tooltip name={sensorName} source="SENSOR_GRID" desc={`${res.description}\n${res.details}`} variant={res.status === 'POSITIVE' ? 'green' : 'default'}>
-                        <div className="relative">
-                           <div className={`w-3 h-3 rounded-full border shadow-sm transition-all duration-500 group-hover:scale-150 ${res.status === 'POSITIVE' ? 'animate-pulse' : ''}`} style={{ backgroundColor: color, borderColor: color, boxShadow: `0 0 10px ${color}66` }}></div>
-                           {(res.status === 'POSITIVE' || res.status === 'RARE') && <div className="absolute inset-[-8px] rounded-full border opacity-50 animate-ping" style={{ borderColor: color }}></div>}
-                        </div>
-                      </Tooltip>
+                <div 
+                  key={res.sensorId}
+                  className="absolute pointer-events-auto flex flex-col items-center justify-center group transform -translate-x-1/2 -translate-y-1/2 cursor-pointer"
+                  style={{ left: `${res.x}%`, top: `${res.y}%` }}
+                  onClick={() => setSelectedResult(res)}
+                >
+                  <Tooltip name={sensorName} source="SENSOR_GRID" desc={`${res.description}\n${res.details}`} variant={res.status === 'POSITIVE' ? 'teal' : 'default'}>
+                    <div className="relative">
+                        <div className={`w-3 h-3 rounded-full border shadow-sm transition-all duration-500 group-hover:scale-150 ${res.status === 'POSITIVE' ? 'animate-pulse' : ''}`} style={{ backgroundColor: color, borderColor: color, boxShadow: `0 0 10px ${color}66` }}></div>
+                        {(res.status === 'POSITIVE' || res.status === 'RARE') && <div className="absolute inset-[-8px] rounded-full border opacity-50 animate-ping" style={{ borderColor: color }}></div>}
                     </div>
-                </React.Fragment>
+                  </Tooltip>
+                </div>
               );
             })}
          </div>
       </div>
-
-      {/* --- RIGHT: SENSOR ARRAY PANEL --- */}
-      {/* On mobile: this is top (flex-col-reverse) */}
-      <div className="w-full md:w-80 h-auto md:h-full bg-[#050608] border-b md:border-b-0 md:border-l border-zinc-900 flex flex-col z-30 shadow-[shadow:-10px_0_30px_rgba(0,0,0,0.5)] overflow-hidden shrink-0">
+      <div className="w-full md:w-80 h-auto md:h-full bg-[#050608] border-b md:border-b-0 md:border-l border-zinc-900 flex flex-col z-30 shadow-2xl overflow-hidden shrink-0">
+         <div className="p-4 border-b border-zinc-900 bg-zinc-950/40 flex flex-col gap-4">
+            <div className="flex justify-between items-center">
+                <span className="text-[9px] font-black text-zinc-700 uppercase tracking-widest">Hardware_Manifold</span>
+                <button 
+                    onClick={() => onLauncherSelect?.('SENSOR_PANEL', 'sensor')}
+                    className="p-1 border border-zinc-800 bg-black hover:border-teal-500/50 transition-all group"
+                >
+                    <svg className="w-3 h-3 text-zinc-600 group-hover:text-teal-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5L19 19M5 19l1.5-1.5M17.5 6.5L19 5"/></svg>
+                </button>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+                <Tooltip name="PROBE_PORT" source="SYSTEM" desc="Data Core Probe Interface. (Purple)" variant="purple">
+                    <div className="h-10 border border-zinc-900 bg-black flex items-center justify-center opacity-60 hover:opacity-100 transition-opacity cursor-pointer group" onClick={() => onLauncherSelect?.('SENSOR_PANEL', 'probe')}>
+                        <div className="w-1.5 h-1.5 rounded-full bg-[#bd00ff] group-hover:shadow-[0_0_10px_#bd00ff]"></div>
+                    </div>
+                </Tooltip>
+                <Tooltip name="SENSOR_PORT" source="SYSTEM" desc={currentScriptState.reason || (sensorModule ? `${sensorModule.name}: ${sensorModule.description}` : "Dedicated Sensor Port. (Orange)")}>
+                    <div 
+                        onClick={() => onLauncherSelect?.('SENSOR_PANEL', 'sensor')}
+                        className={`h-10 border flex items-center justify-center transition-all cursor-pointer relative overflow-hidden ${getScriptStateStyle(currentScriptState.state)}`}
+                    >
+                        {sensorModule ? (
+                             <svg className={`w-4 h-4 ${currentScriptState.state === ScriptState.BROKEN ? 'text-red-500 animate-bounce' : 'text-[#f97316] animate-pulse'}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+                        ) : (
+                            <span className="text-[7px] font-black text-zinc-800 uppercase tracking-tighter leading-none text-center">SENSOR<br/>PORT</span>
+                        )}
+                        {scannerCooldownRemaining > 0 && (
+                          <div className="absolute bottom-0 left-0 h-[2px] bg-red-500 animate-pulse shadow-[0_0_5px_red]" style={{ width: `${(scannerCooldownRemaining / (sensorModule?.baseCooldown || 3600000)) * 100}%` }}></div>
+                        )}
+                        {currentScriptState.state === ScriptState.BROKEN && (
+                          <div className="absolute top-0 right-0 p-0.5">
+                             <div className="w-1.5 h-1.5 bg-red-500 rounded-full"></div>
+                          </div>
+                        )}
+                    </div>
+                </Tooltip>
+            </div>
+         </div>
          <div className="p-4 border-b border-zinc-900 bg-zinc-950/80 flex flex-col gap-3 shrink-0">
             <div className="flex justify-between items-center">
-                <h3 className="text-[10px] font-black text-teal-500 uppercase tracking-widest">Active_Sensor_Array</h3>
-                <div className="w-1.5 h-1.5 bg-teal-500/50 rounded-full animate-pulse"></div>
+                <h3 className="text-[10px] font-black text-teal-500 uppercase tracking-widest">Active_Sensor_Profile</h3>
+                <span className={`text-[7px] font-black px-1 border uppercase tracking-tighter ${isSystemScript ? 'text-teal-400 border-teal-900/50 bg-teal-950/40' : (isBufferScript ? 'text-orange-400 border-orange-900/50 bg-orange-950/40' : 'text-zinc-600 border-zinc-900')}`}>
+                   {isSystemScript ? 'System_Trigger' : (isBufferScript ? 'Buffer_Only' : 'Awaiting_Script')}
+                </span>
             </div>
-            <select value={activeArrayId} onChange={(e) => setActiveArrayId(e.target.value)} className="bg-black border border-zinc-800 text-[10px] text-zinc-300 font-mono p-1 uppercase outline-none focus:border-teal-500/50 w-full min-h-[44px]">
-               {availableArrays.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
-            </select>
-            <div className="text-[8px] text-zinc-600 font-mono italic px-1">{activeArray.description}</div>
+            
+            <div className="bg-black/60 border border-zinc-800 p-3 text-[10px] font-mono text-teal-400 uppercase tracking-widest flex justify-between items-center">
+               <span>{activeArray?.name || 'NULL_PROFILE'}</span>
+               <span className="text-[7px] text-zinc-600 bg-zinc-900 px-1 border border-zinc-800">SLOT_DERIVED</span>
+            </div>
+
+            <div className="text-[8px] text-zinc-600 font-mono italic px-1 leading-tight">{activeArray?.description || 'Assign a Sensor Module to load array profile.'}</div>
          </div>
-         
-         <div className="flex-1 overflow-y-auto p-0 space-y-0.5 no-scroll max-h-[30vh] md:max-h-full">
-            {activeArray.nodes.map(s => {
+         <div className="flex-1 overflow-y-auto p-0 space-y-0.5 no-scroll max-h-[30vh] md:max-h-full bg-black/40">
+            {activeArray?.nodes.map(s => {
                const res = results[s.id];
                const color = res ? getStatusColor(res.status) : (s.enabled ? '#3f3f46' : '#18181b'); 
                return (
-                 <div key={s.id} className="p-3 border-b border-zinc-900/50 bg-black/40 hover:bg-zinc-900/30 transition-colors flex flex-col gap-2 group relative">
-                    <div className="flex justify-between items-center">
+                 <div key={s.id} className="p-3 border-b border-zinc-900/40 hover:bg-zinc-900/30 transition-all flex flex-col gap-2 group relative overflow-hidden">
+                    <div className="flex justify-between items-center z-10">
                         <div className="flex flex-col">
-                           <span className={`text-[9px] font-black uppercase tracking-wider ${s.enabled ? 'text-zinc-300' : 'text-zinc-700 line-through'}`}>{s.name}</span>
-                           <span className="text-[7px] font-mono text-zinc-600 uppercase mt-0.5">{s.type} | {s.timeout}ms</span>
+                           <span className={`text-[9px] font-black uppercase tracking-wider transition-colors ${s.enabled ? 'text-zinc-400 group-hover:text-zinc-200' : 'text-zinc-800'}`}>{s.name}</span>
+                           <div className="flex items-center gap-2 mt-0.5">
+                             <span className="text-[7px] font-mono text-zinc-700 uppercase">{s.type} | {s.timeout}ms</span>
+                             <span className={`text-[6px] font-black uppercase px-1 border ${isSystemScript ? 'text-teal-600 border-teal-900/50' : 'text-zinc-800 border-zinc-900/50'}`}>
+                                {isSystemScript ? 'SYS_DRIVEN' : 'WAIT_SYS'}
+                             </span>
+                           </div>
                         </div>
                         <div className="flex items-center gap-2">
-                           {res && <div className="text-[8px] font-black uppercase tracking-wider" style={{ color: color }}>{res.status === 'POSITIVE' ? 'ALERT' : 'OK'}</div>}
-                           <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: s.enabled ? (res ? color : '#3f3f46') : '#18181b' }}></div>
+                           {res && <div className="text-[8px] font-black uppercase tracking-wider animate-in fade-in" style={{ color: color }}>{res.status === 'POSITIVE' ? 'ALERT' : 'OK'}</div>}
+                           <div className={`w-1.5 h-1.5 rounded-full transition-all duration-500 ${res?.status === 'POSITIVE' ? 'animate-pulse' : ''}`} style={{ backgroundColor: s.enabled ? (res ? color : '#3f3f46') : '#18181b', boxShadow: res ? `0 0 5px ${color}` : 'none' }}></div>
                         </div>
                     </div>
+                    {res && res.status === 'POSITIVE' && (
+                        <div className="absolute inset-0 bg-red-500/5 pointer-events-none"></div>
+                    )}
                  </div>
                );
             })}
          </div>
-         
          <div className="p-3 border-t border-zinc-900 bg-zinc-950/50 text-[8px] font-mono text-zinc-600 flex justify-between shrink-0">
-            <span>NODES: {activeArray.nodes.filter(s => s.enabled).length}/{activeArray.nodes.length}</span>
-            <span>ALERTS: {Object.values(results).filter(r => r.status === 'POSITIVE').length}</span>
+            <span className="tracking-tighter">GRID_NODES: {activeArray?.nodes.filter(s => s.enabled).length || 0}/{activeArray?.nodes.length || 0}</span>
+            <span className="tracking-tighter font-bold">ALERTS_DETECTED: {(Object.values(results) as ScanResult[]).filter((r: ScanResult) => r.status === 'POSITIVE').length}</span>
          </div>
       </div>
-
       <Modal isOpen={!!selectedResult} onClose={() => setSelectedResult(null)} title={`ANOMALY_DETAIL: ${selectedResult?.sensorId || 'UNKNOWN'}`} variant={selectedResult?.status === 'POSITIVE' ? 'green' : 'blue'}>
          {selectedResult && (
-            <div className="space-y-6">
+            <div className="space-y-6 animate-in zoom-in-95">
                 <div className="flex justify-between items-start border-b border-zinc-900 pb-4">
                     <div className="flex flex-col gap-1">
                         <span className="text-[9px] text-zinc-500 font-black uppercase tracking-widest">Status_Indicator</span>
@@ -306,33 +419,36 @@ const ScannerPanel: React.FC<ScannerPanelProps> = ({ stats, platform, allowDisto
                 <div className="grid grid-cols-2 gap-6">
                     <div className="space-y-1">
                         <span className="text-[9px] text-zinc-600 uppercase font-black">Description</span>
-                        <p className="text-[11px] text-zinc-200 font-mono leading-relaxed">{selectedResult.description}</p>
+                        <p className="text-[11px] text-zinc-200 font-mono leading-relaxed bg-black/40 p-3 border border-zinc-900">{selectedResult.description}</p>
                     </div>
                     <div className="space-y-1">
                         <span className="text-[9px] text-zinc-600 uppercase font-black">Technical_Details</span>
-                        <p className="text-[11px] text-teal-500 font-mono leading-relaxed">{selectedResult.details}</p>
+                        <p className="text-[11px] text-teal-500 font-mono leading-relaxed bg-black/40 p-3 border border-zinc-900">{selectedResult.details}</p>
                     </div>
                 </div>
-                <div className="flex justify-between items-center text-[8px] text-zinc-600 font-mono pt-2 border-t border-zinc-900">
-                    <span>SOURCE_SYSTEM: {selectedResult.sourceSystem}</span>
-                    <span>SENSOR_ID: {selectedResult.sensorId}</span>
+                <div className="text-[9px] text-zinc-700 italic border-t border-zinc-900 pt-4">
+                   Source System: {selectedResult.sourceSystem}
                 </div>
             </div>
          )}
       </Modal>
-      
-      <Modal isOpen={showHistoryModal} onClose={() => setShowHistoryModal(false)} title="SCANNER_HISTORY_LOG" variant="blue">
+      <Modal isOpen={showHistoryModal} onClose={() => setShowHistoryModal(false)} title="SCANNER_HISTORY_ARCHIVE" variant="blue">
          <div className="space-y-4">
-            <div className="overflow-y-auto max-h-[60vh] space-y-2">
+            <div className="overflow-y-auto max-h-[60vh] space-y-2 pr-2 no-scroll">
                {historyEntries.length > 0 ? historyEntries.map((entry, i) => (
-                  <div key={i} className="p-3 border border-zinc-900 bg-black/40 flex flex-col gap-1">
+                  <div key={i} className="p-3 border border-zinc-900 bg-black/60 flex flex-col gap-1 hover:border-zinc-700 transition-colors group">
                      <div className="flex justify-between items-center text-[9px]">
-                        <span className="text-zinc-400 font-mono">{new Date(entry.timestamp).toLocaleString()}</span>
-                        <span className="text-zinc-600">{entry.values[0]}</span>
+                        <span className="text-zinc-600 font-mono">{new Date(entry.timestamp).toLocaleString()}</span>
+                        <span className="text-zinc-700 font-black uppercase tracking-tighter">{entry.values[0]}</span>
                      </div>
-                     <div className="text-[10px] font-black text-blue-400 uppercase tracking-wide">{entry.values[1]}</div>
+                     <div className="text-[10px] font-black text-blue-400 uppercase tracking-wide group-hover:text-teal-400 transition-colors">{entry.values[1]}</div>
+                     <div className="text-[8px] text-zinc-600 mt-1 truncate opacity-60">{entry.values[2]}</div>
                   </div>
-               )) : <div className="text-center py-8 text-zinc-700 italic text-[10px]">NO_HISTORY_AVAILABLE</div>}
+               )) : (
+                 <div className="h-48 flex items-center justify-center border border-dashed border-zinc-900 opacity-20">
+                    <span className="text-[10px] font-black uppercase tracking-[0.5em]">NO_LOG_DATA</span>
+                 </div>
+               )}
             </div>
          </div>
       </Modal>

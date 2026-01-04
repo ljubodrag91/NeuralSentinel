@@ -1,11 +1,10 @@
 
-import { Launcher, Consumable, PanelSlotConfig } from '../types';
+import { Launcher, Consumable, PanelSlotConfig, SlotConfig } from '../types';
 import { launchersData } from '../data/launchers';
 import { consumablesData } from '../data/consumables';
 
 const STORAGE_KEY = 'neural_sentinel_launchers';
 
-// Centralized list of panels that support historical data features
 export const PANELS_SUPPORTING_HISTORY = [
   'GLOBAL_SYSTEM_PROBE',
   'HANDSHAKE_CORE',
@@ -16,25 +15,43 @@ export const PANELS_SUPPORTING_HISTORY = [
   'SESSION_ARCHIVE'
 ];
 
-// Unified default configuration for all panels
+export const DEFAULT_GLOBAL_LOW_SLOT: SlotConfig = { 
+  launcherId: 'std-neural', 
+  ammoId: 'std-neural-ammo' 
+};
+
+export const DEFAULT_GLOBAL_PROBE_SLOT: SlotConfig = { 
+  launcherId: 'std-core', 
+  ammoId: 'std-data-ammo' 
+};
+
+export const DEFAULT_GLOBAL_SENSOR_SLOT: SlotConfig = { 
+  launcherId: 'mod-std-sensor', 
+  ammoId: 'script-timer' 
+};
+
 export const DEFAULT_PANEL_CONFIG: Record<string, PanelSlotConfig> = {
-  'GLOBAL_SYSTEM_PROBE': { dataSlot: { launcherId: 'std-core', ammoId: 'std-data-ammo' }, neuralSlot: { launcherId: 'std-neural', ammoId: 'std-neural-ammo' } },
-  'HANDSHAKE_CORE': { dataSlot: { launcherId: 'std-core', ammoId: 'std-data-ammo' }, neuralSlot: { launcherId: 'std-neural', ammoId: 'std-neural-ammo' } },
-  'ADAPTER_HUB': { dataSlot: { launcherId: 'std-core', ammoId: 'std-data-ammo' }, neuralSlot: { launcherId: 'std-neural', ammoId: 'std-neural-ammo' } },
-  'CONSOLE_DATA_PROBE': { dataSlot: { launcherId: 'std-core', ammoId: 'std-data-ammo' }, neuralSlot: { launcherId: 'std-neural', ammoId: 'std-neural-ammo' } },
-  'NODE_DIAGNOSTICS': { dataSlot: { launcherId: 'std-core', ammoId: 'std-data-ammo' }, neuralSlot: { launcherId: 'std-neural', ammoId: 'std-neural-ammo' } },
-  'PROCESS_PROBE': { dataSlot: { launcherId: 'std-core', ammoId: 'std-data-ammo' }, neuralSlot: { launcherId: 'std-neural', ammoId: 'std-neural-ammo' } },
-  'RSSI_REPORT': { dataSlot: { launcherId: 'std-core', ammoId: 'std-data-ammo' }, neuralSlot: { launcherId: 'std-neural', ammoId: 'std-neural-ammo' } },
-  'SESSION_ARCHIVE': { dataSlot: { launcherId: 'std-core', ammoId: 'std-data-ammo' }, neuralSlot: { launcherId: 'std-neural', ammoId: 'std-neural-ammo' } },
-  'LOG_AUDIT': { dataSlot: { launcherId: 'std-core', ammoId: 'std-data-ammo' }, neuralSlot: { launcherId: 'std-neural', ammoId: 'std-neural-ammo' } },
+  'GLOBAL_SYSTEM_PROBE': { 
+    probeSlot: { launcherId: 'hist-core', ammoId: 'historical-data-ammo' } 
+  },
+  'HANDSHAKE_CORE': { probeSlot: { launcherId: 'std-core', ammoId: 'std-data-ammo' } },
+  'ADAPTER_HUB': { probeSlot: { launcherId: 'std-core', ammoId: 'std-data-ammo' } },
+  'CONSOLE_DATA_PROBE': { probeSlot: { launcherId: 'std-core', ammoId: 'std-data-ammo' } },
+  'NODE_DIAGNOSTICS': { probeSlot: { launcherId: 'std-core', ammoId: 'std-data-ammo' } },
+  'PROCESS_PROBE': { probeSlot: { launcherId: 'std-core', ammoId: 'std-data-ammo' } },
+  'RSSI_REPORT': { probeSlot: { launcherId: 'std-core', ammoId: 'std-data-ammo' } },
+  'SESSION_ARCHIVE': { probeSlot: { launcherId: 'std-core', ammoId: 'std-data-ammo' } },
+  'LOG_AUDIT': { probeSlot: { launcherId: 'std-core', ammoId: 'std-data-ammo' } },
+  'SENSOR_PANEL': { 
+    probeSlot: { launcherId: 'std-core', ammoId: 'std-data-ammo' }, 
+    sensorSlot: { launcherId: 'mod-std-sensor', ammoId: 'script-timer' } 
+  },
 };
 
 export const FALLBACK_PANEL_CONFIG: PanelSlotConfig = { 
-  dataSlot: { launcherId: 'std-core', ammoId: 'std-data-ammo' }, 
-  neuralSlot: { launcherId: 'std-neural', ammoId: 'std-neural-ammo' } 
+  probeSlot: { launcherId: 'std-core', ammoId: 'std-data-ammo' } 
 };
 
-// Load Initial Data from TS
 const LOADED_LAUNCHERS: Record<string, Launcher> = {};
 launchersData.forEach(l => LOADED_LAUNCHERS[l.id] = l);
 
@@ -46,12 +63,17 @@ export const PROBE_CONSUMABLES = LOADED_CONSUMABLES;
 class LauncherSystem {
   private launchers: Record<string, Launcher> = LOADED_LAUNCHERS;
   private consumables: Record<string, Consumable> = LOADED_CONSUMABLES;
-  private ownedLaunchers: Set<string> = new Set(['std-core', 'std-neural', 'ext-neural']);
+  private ownedLaunchers: Set<string> = new Set(['std-core', 'hist-core', 'std-neural', 'ext-neural', 'mod-std-sensor', 'mod-full-sensor']);
   private ownedConsumables: Record<string, number> = {
     'std-data-ammo': 999,
     'historical-data-ammo': 100,
-    'std-neural-ammo': 999
+    'std-neural-ammo': 999,
+    'neural-link-bypasser': 2,
+    'module-core-logic': 999,
+    'script-timer': 5
   };
+  private boosterEndTime: number = 0;
+  private installedBoosterId: string | null = null;
 
   constructor() {
     this.load();
@@ -61,29 +83,64 @@ class LauncherSystem {
     const saved = localStorage.getItem(STORAGE_KEY);
     if (saved) {
       const parsed = JSON.parse(saved);
-      // We do not overwrite definitions from JSON, only ownership and counts
       if (parsed.ownedLaunchers) this.ownedLaunchers = new Set(parsed.ownedLaunchers);
       if (parsed.ownedAmmo) this.ownedConsumables = parsed.ownedAmmo;
+      if (parsed.boosterEndTime) this.boosterEndTime = parsed.boosterEndTime;
+      if (parsed.installedBoosterId) this.installedBoosterId = parsed.installedBoosterId;
+      
+      // Merge custom manifest items from storage
+      if (parsed.customLaunchers) {
+          Object.values(parsed.customLaunchers).forEach((l: any) => {
+              this.launchers[l.id] = l;
+              if (!this.ownedLaunchers.has(l.id)) this.ownedLaunchers.add(l.id);
+          });
+      }
+      if (parsed.customConsumables) {
+          Object.values(parsed.customConsumables).forEach((c: any) => this.consumables[c.id] = c);
+      }
     }
   }
 
   private save() {
+    const customLaunchers = Object.values(this.launchers).filter(l => !launchersData.find(ld => ld.id === l.id));
+    const customConsumables = Object.values(this.consumables).filter(c => !consumablesData.find(cd => cd.id === c.id));
+
     localStorage.setItem(STORAGE_KEY, JSON.stringify({
       ownedLaunchers: Array.from(this.ownedLaunchers),
-      ownedAmmo: this.ownedConsumables
+      ownedAmmo: this.ownedConsumables,
+      boosterEndTime: this.boosterEndTime,
+      installedBoosterId: this.installedBoosterId,
+      customLaunchers: Object.fromEntries(customLaunchers.map(l => [l.id, l])),
+      customConsumables: Object.fromEntries(customConsumables.map(c => [c.id, c]))
     }));
   }
 
   getAll() { return Object.values(this.launchers); }
+  getAllConsumables() { return Object.values(this.consumables); }
   getById(id: string) { return this.launchers[id]; }
+  getConsumableById(id: string) { return this.consumables[id]; }
   isOwned(id: string) { return this.ownedLaunchers.has(id); }
 
-  getCompatible(type: 'core' | 'neural') {
+  getCompatible(type: 'core' | 'neural' | 'sensor-module') {
     return Object.values(this.launchers).filter(l => l.type === type && this.ownedLaunchers.has(l.id));
   }
   
-  getCompatibleAmmo(launcherType: 'core' | 'neural') {
+  getCompatibleAmmo(launcherType: 'core' | 'neural' | 'main' | 'sensor-module') {
     return Object.values(this.consumables).filter(a => a.compatibleLaunchers.includes(launcherType));
+  }
+
+  /**
+   * Validates whether a panel accepts a launcher based on Tiered hierarchy.
+   */
+  isLauncherAllowed(panelId: string, launcherId: string): boolean {
+    const launcher = this.getById(launcherId);
+    if (!launcher) return false;
+    
+    // Tier 1 (Standard) is always allowed.
+    if (!launcher.tier || launcher.tier === 1) return true;
+    
+    // Tier 2 (Extended) and Tier 3 (Historical) require specific panel compliance.
+    return PANELS_SUPPORTING_HISTORY.includes(panelId);
   }
 
   getStoreItems() {
@@ -97,7 +154,12 @@ class LauncherSystem {
 
   upsert(launcher: Launcher) {
     this.launchers[launcher.id] = launcher;
-    this.ownedLaunchers.add(launcher.id);
+    if (!this.ownedLaunchers.has(launcher.id)) this.ownedLaunchers.add(launcher.id);
+    this.save();
+  }
+
+  upsertConsumable(consumable: Consumable) {
+    this.consumables[consumable.id] = consumable;
     this.save();
   }
 
@@ -107,7 +169,11 @@ class LauncherSystem {
     this.save();
   }
 
-  // Inventory Management
+  deleteConsumable(id: string) {
+    delete this.consumables[id];
+    this.save();
+  }
+
   getOwnedLaunchersList() {
     return Array.from(this.ownedLaunchers).map(id => this.launchers[id]).filter(Boolean);
   }
@@ -127,7 +193,6 @@ class LauncherSystem {
     if (!this.ownedConsumables[id]) this.ownedConsumables[id] = 0;
     this.ownedConsumables[id] += amount;
     
-    // Clamp
     if (this.ownedConsumables[id] < 0) this.ownedConsumables[id] = 0;
     if (def && def.maxStack && this.ownedConsumables[id] > def.maxStack) this.ownedConsumables[id] = def.maxStack;
     
@@ -153,7 +218,35 @@ class LauncherSystem {
     }
     return false;
   }
+
+  isBoosterActive(): boolean {
+    return Date.now() < this.boosterEndTime;
+  }
+
+  getBoosterRemaining(): number {
+    return Math.max(0, this.boosterEndTime - Date.now());
+  }
+
+  activateBooster(): boolean {
+    if (!this.installedBoosterId) return false;
+    if (this.isBoosterActive()) return false;
+    if (!this.hasAmmo(this.installedBoosterId)) return false;
+
+    this.deductAmmo(this.installedBoosterId);
+    this.boosterEndTime = Date.now() + (60 * 60 * 1000); // 60 minutes
+    this.save();
+    return true;
+  }
+
+  installBooster(id: string) {
+    this.installedBoosterId = id;
+    this.save();
+  }
+
+  getInstalledBoosterId() {
+    return this.installedBoosterId;
+  }
 }
 
 export const launcherSystem = new LauncherSystem();
-export const PROBE_AMMUNITION = PROBE_CONSUMABLES; 
+export const PROBE_AMMUNITION = PROBE_CONSUMABLES;

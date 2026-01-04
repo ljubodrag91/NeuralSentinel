@@ -18,7 +18,9 @@
         --accent-purple: #bd00ff;
         --accent-blue: #00f2ff;
         --accent-green: #22c55e;
+        --accent-gold: #eab308;
         --accent-zinc: #1a232e;
+        --hud-accent: var(--accent-blue);
       }
       
       body {
@@ -39,6 +41,25 @@
         background-size: 100% 100%, 100% 4px, 3px 100%;
         pointer-events: none;
         z-index: 60;
+      }
+
+      /* Circuit Board Pattern */
+      .circuit-board-pattern {
+        background-image: 
+          radial-gradient(var(--hud-accent) 0.5px, transparent 0.5px),
+          linear-gradient(to right, var(--hud-accent) 0.5px, transparent 0.5px),
+          linear-gradient(to bottom, var(--hud-accent) 0.5px, transparent 0.5px);
+        background-size: 40px 40px, 40px 40px, 40px 40px;
+        background-position: 0 0, 0 0, 0 0;
+        position: relative;
+      }
+      .circuit-board-pattern::after {
+        content: '';
+        position: absolute;
+        inset: 0;
+        background: radial-gradient(circle at center, transparent 0%, var(--bg-deep) 100%);
+        opacity: 0.8;
+        pointer-events: none;
       }
       
       .distortion-fx {
@@ -78,16 +99,6 @@
         19% { opacity: 0.95; filter: brightness(1.1); }
         20% { opacity: 0.98; filter: brightness(0.9); }
         21% { opacity: 0.97; filter: brightness(1.05); }
-      }
-
-      @keyframes manual-disable-flash {
-        0%, 98%, 100% { box-shadow: 0 0 0px rgba(255, 62, 62, 0); }
-        99% { box-shadow: 0 0 15px rgba(255, 62, 62, 0.8); }
-      }
-
-      .manual-disabled {
-        border: 1px solid #ff3e3e !important;
-        animation: manual-disable-flash 30s infinite;
       }
 
       .tab-flash {
@@ -140,7 +151,6 @@
         display: none;
       }
 
-      /* Enhanced CRT Glitch Animation */
       .core-distortion {
         animation: core-glitch 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94) both infinite;
         will-change: transform;

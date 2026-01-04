@@ -2,15 +2,18 @@
 import React, { useState } from 'react';
 import { launcherSystem } from '../services/launcherService';
 import Tooltip from './common/Tooltip';
-import { PanelSlotConfig } from '../types';
+// Fixed: Added SlotConfig to imports to support globalLowSlot
+import { PanelSlotConfig, SlotConfig } from '../types';
 
 interface InventoryListProps {
   panelSlots?: Record<string, PanelSlotConfig>;
+  // Fixed: Added globalLowSlot to track overall assignments
+  globalLowSlot?: SlotConfig;
 }
 
 type InventoryTab = 'CONSUMABLES' | 'MODULES' | 'OTHER';
 
-const InventoryList: React.FC<InventoryListProps> = ({ panelSlots }) => {
+const InventoryList: React.FC<InventoryListProps> = ({ panelSlots, globalLowSlot }) => {
   const [activeTab, setActiveTab] = useState<InventoryTab>('CONSUMABLES');
   const [selectedItem, setSelectedItem] = useState<string | null>(null);
 
@@ -18,13 +21,20 @@ const InventoryList: React.FC<InventoryListProps> = ({ panelSlots }) => {
   const ownedConsumables = launcherSystem.getOwnedConsumablesList();
 
   const getAssignmentCount = (id: string) => {
-    if (!panelSlots) return 0;
     let count = 0;
+    
+    // Fixed: Count assignments in the global low slot
+    if (globalLowSlot?.launcherId === id) count++;
+    if (globalLowSlot?.ammoId === id) count++;
+
+    if (!panelSlots) return count;
+    
     Object.values(panelSlots).forEach((slot: PanelSlotConfig) => {
-      if (slot.dataSlot?.launcherId === id) count++;
-      if (slot.dataSlot?.ammoId === id) count++;
-      if (slot.neuralSlot?.launcherId === id) count++;
-      if (slot.neuralSlot?.ammoId === id) count++;
+      // Fixed: PanelSlotConfig uses probeSlot (renamed from mediumSlot) and sensorSlot. lowSlot is global.
+      if (slot.probeSlot?.launcherId === id) count++;
+      if (slot.probeSlot?.ammoId === id) count++;
+      if (slot.sensorSlot?.launcherId === id) count++;
+      if (slot.sensorSlot?.ammoId === id) count++;
     });
     return count;
   };
@@ -41,7 +51,7 @@ const InventoryList: React.FC<InventoryListProps> = ({ panelSlots }) => {
     return (
       <Tooltip key={item.id} name={item.name} source="INVENTORY" desc={`${item.description}\n\n[STATUS]: ${isAssigned ? `ACTIVE_ON_${assignmentCount}_PANELS` : 'READY_FOR_ASSIGNMENT'}`} variant={type === 'module' ? 'purple' : 'teal'}>
         <div onClick={() => setSelectedItem(item.id)} className={`relative p-4 border bg-black/60 backdrop-blur-sm flex flex-col gap-3 transition-all duration-300 group cursor-pointer overflow-hidden ${isSelected ? 'shadow-[0_0_20px_rgba(0,0,0,0.5)]' : 'hover:border-zinc-600'}`} style={{ borderColor: borderColor, boxShadow: isSelected ? `inset 0 0 20px ${accentColor}11` : 'none' }}>
-          <div className="absolute inset-0 pointer-events-none opacity-[0.03] bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.25)_50%),linear-gradient(90deg,rgba(255,0,0,0.06),rgba(0,255,0,0.02),rgba(0,0,255,0.06))] z-0"></div>
+          <div className="absolute inset-0 pointer-events-none opacity-[0.03] bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.25)_50%),linear-gradient(90deg,rgba(255,0,0,0.06),rgba(0,242,255,0.02),rgba(0,0,255,0.06))] z-0"></div>
           <div className="flex justify-between items-start relative z-10">
             <div className="flex items-center gap-3">
               <div className={`w-8 h-8 flex items-center justify-center border border-zinc-800 bg-zinc-950 rounded-sm ${isSelected ? glowClass : ''}`}>
@@ -79,7 +89,7 @@ const InventoryList: React.FC<InventoryListProps> = ({ panelSlots }) => {
       <div className="flex-1 overflow-y-auto no-scroll pr-2 pb-4">
         {activeTab === 'MODULES' && <div className="grid grid-cols-1 md:grid-cols-2 gap-4 animate-in slide-in-from-bottom-2 duration-300">{ownedLaunchers.map(l => renderCard(l, 'module'))}</div>}
         {activeTab === 'CONSUMABLES' && <div className="grid grid-cols-1 md:grid-cols-2 gap-4 animate-in slide-in-from-bottom-2 duration-300">{ownedConsumables.map(a => renderCard(a, 'consumable'))}</div>}
-        {activeTab === 'OTHER' && <div className="flex flex-col items-center justify-center h-48 border border-dashed border-zinc-800 bg-zinc-950/30 rounded-sm animate-in fade-in zoom-in-95"><div className="w-12 h-12 mb-4 text-zinc-800 opacity-50"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1"><path d="M20 7h-9m3 10H5m15-5h-5m3-8l3 3m0 0l-3 3m3-3H3"/></svg></div><span className="text-[10px] font-black uppercase tracking-[0.3em] text-zinc-700">Storage_Sector_Empty</span><span className="text-[8px] font-mono text-zinc-600 mt-2">No miscellaneous artifacts or keycards found.</span></div>}
+        {activeTab === 'OTHER' && <div className="flex flex-col items-center justify-center h-48 border border-dashed border-zinc-800 bg-zinc-950/30 rounded-sm animate-in fade-in zoom-in-95"><div className="w-12 h-12 mb-4 text-zinc-800 opacity-50"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1"><path d="M20 7h-9m3 10H5m15-5h-5m3-8l3 3m0 0l-3 3m3-3H3"/></svg></div><span className="text-[10px] font-black uppercase tracking-0.3em text-zinc-700">Storage_Sector_Empty</span><span className="text-[8px] font-mono text-zinc-600 mt-2">No miscellaneous artifacts or keycards found.</span></div>}
       </div>
       <div className="border-t border-zinc-900 pt-3 flex justify-between items-center text-[9px] font-mono text-zinc-600 shrink-0"><span>STORAGE_CAPACITY: 128TB</span><span>SECURE_HASH: 0x99F2A1</span></div>
     </div>
