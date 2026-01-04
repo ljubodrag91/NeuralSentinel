@@ -15,7 +15,9 @@ import {
   DataSourceMode,
   PanelSlotConfig,
   ScriptState,
-  SlotConfig
+  SlotConfig,
+  SlotPermissions,
+  SlotType
 } from './types';
 import Dashboard from './components/Dashboard';
 import CoreStatsView from './components/CoreStatsView';
@@ -32,7 +34,7 @@ import TacticalButton from './components/common/TacticalButton';
 import ProbeAuditDialog from './components/common/ProbeAuditDialog';
 import { CoreSelectorDialog } from './components/common/CoreSelectorDialog';
 import { aiTransport } from './services/aiTransport';
-import { launcherSystem, PROBE_AMMUNITION, DEFAULT_PANEL_CONFIG, FALLBACK_PANEL_CONFIG, DEFAULT_GLOBAL_LOW_SLOT, DEFAULT_GLOBAL_PROBE_SLOT, DEFAULT_GLOBAL_SENSOR_SLOT } from './services/launcherService';
+import { launcherSystem, PROBE_AMMUNITION, DEFAULT_PANEL_CONFIG, FALLBACK_PANEL_CONFIG, DEFAULT_GLOBAL_LOW_SLOT, DEFAULT_GLOBAL_PROBE_SLOT, DEFAULT_GLOBAL_SENSOR_SLOT, DEFAULT_GLOBAL_BUFFER_SLOT } from './services/launcherService';
 import { serverService } from './services/serverService';
 import { HistoryStorage } from './services/historyStorage';
 import { testAiAvailability, performNeuralProbe } from './services/aiService';
@@ -42,17 +44,44 @@ import { PROBE_CONTRACTS } from './services/probeContracts';
 const SETTINGS_KEY = 'neural_sentinel_app_settings_v5';
 const MASTER_PROBE_FIRE_KEY = 'master_probe_last_fire_ts';
 
-const INITIAL_PERMISSIONS: Record<string, { low: boolean, probe: boolean, sensor: boolean }> = {
-  'GLOBAL_SYSTEM_PROBE': { low: true, probe: true, sensor: false },
-  'HANDSHAKE_CORE': { low: true, probe: true, sensor: false },
-  'ADAPTER_HUB': { low: true, probe: true, sensor: false },
-  'CONSOLE_DATA_PROBE': { low: true, probe: true, sensor: false },
-  'NODE_DIAGNOSTICS': { low: true, probe: true, sensor: false },
-  'PROCESS_PROBE': { low: true, probe: true, sensor: false },
-  'RSSI_REPORT': { low: true, probe: true, sensor: false },
-  'SESSION_ARCHIVE': { low: true, probe: true, sensor: false },
-  'LOG_AUDIT': { low: true, probe: true, sensor: false },
-  'SENSOR_PANEL': { low: true, probe: true, sensor: true }
+const FROG_ASCII = `⠀⠀⢀⣠⠤⠶⠖⠒⠒⠶⠦⠤⣄⠀⠀⠀⣀⡤⠤⠤⠤⠤⣄⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+⠀⣴⠋⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⠙⣦⠞⠁⠀⠀⠀⠀⠀⠀⠉⠳⡄⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+⡾⠁⠀⠀⠀⠀⠀⠀⣀⣀⣀⣀⣀⣀⣘⡆⠀⠀⠀⠀⠀⠀⠀⠀⠀⠙⣆⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+⠀⠀⠀⠀⢀⡴⠚⠉⠁⠀⠀⠀⠀⠈⠉⠙⠲⣄⣤⠤⠶⠒⠒⠲⠦⢤⣜⣧⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+⠀⠀⠀⠀⠉⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⠳⡄⠀⠀⠀⠀⠀⠀⠀⠉⠳⢄⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+⠀⠀⠀⠀⠀⠀⠀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⠹⣆⠀⠀⠀⠀⠀⠀⣀⣀⣀⣹⣄⠀⠀⠀⠀⠀⠀⠀⠀⠀
+⠀⠀⠀⠀⣠⠞⣉⣡⠤⠴⠿⠗⠳⠶⣬⣙⠓⢦⡈⠙⢿⡀⠀⠀⢀⣼⣿⣿⣿⣿⣿⡿⣷⣤⡀⠀⠀⠀⠀⠀⠀
+⠀⠀⠀⣾⣡⠞⣁⣀⣀⣀⣠⣤⣤⣤⣄⣭⣷⣦⣽⣦⡀⢻⡄⠰⢟⣥⣾⣿⣏⣉⡙⠓⢦⣻⠃⠀⠀⠀⠀⠀⠀
+⠀⠀⠀⠉⠉⠙⠻⢤⣄⣼⣿⣽⣿⠟⠻⣿⠄⠀⠀⢻⡝⢿⡇⣠⣿⣿⣻⣿⠿⣿⡉⠓⠮⣿⠀⠀⠀⠀⠀⠀⠀
+⠀⠀⠀⠀⠀⠀⠙⢦⡈⠛⠿⣾⣿⣶⣾⡿⠀⠀⠀⢀⣳⣘⢻⣇⣿⣿⣽⣿⣶⣾⠃⣀⡴⣿⠀⠀⠀⠀⠀⠀⠀
+⠀⠀⠀⠀⠀⠀⠀⠀⠙⠲⠤⢄⣈⣉⣙⣓⣒⣒⣚⣉⣥⠟⠀⢯⣉⡉⠉⠉⠛⢉⣉⣡⡾⠁⠀⠀⠀⠀⠀⠀⠀
+⠀⠀⣠⣤⡤⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢈⡿⠋⠀⠀⠀⠀⠈⠻⣍⠉⠀⠺⠿⠋⠙⣦⠀⠀⠀⠀⠀⠀⠀
+⠀⣀⣥⣤⠴⠆⠀⠀⠀⠀⠀⠀⠀⣀⣠⠤⠖⠋⠀⠀⠀⠀⠀⠀⠀⠀⠈⠳⠀⠀⠀⠀⠀⢸⣧⠀⠀⠀⠀⠀⠀
+⠸⢫⡟⠙⣛⠲⠤⣄⣀⣀⠀⠈⠋⠉⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣠⠏⣨⠇⠀⠀⠀⠀⠀
+⠀⠀⠻⢦⣈⠓⠶⠤⣄⣉⠉⠉⠛⠒⠲⠦⠤⠤⣤⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣠⠴⢋⡴⠋⠀⠀⠀⠀⠀⠀
+⠀⠀⠀⠀⠉⠓⠦⣄⡀⠈⠙⠓⠒⠶⠶⠶⠶⠤⣤⣀⣀⣀⣀⣀⣉⣉⣉⣉⣉⣀⣠⠴⢋⡴⠋⠀⠀⠀⠀⠀⠀
+⠀⠀⠀⠀⠀⠀⠀⠀⠉⠓⠦⣄⣀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀⡼⠁⠀⠀⠀⠀⠀⠀⠀
+⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠉⠉⠙⠛⠒⠒⠒⠒⠒⠤⠤⠤⠒⠒⠒⠒⠒⠒⠚⢉⡇⠀⠀⠀⠀⠀⠀⠀⠀
+⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣠⠴⠚⠛⠳⣤⠞⠁⠀⠀⠀⠀⠀⠀⠀⠀
+⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀⣤⠚⠁⠀⠀⠀⠀⠘⠲⣄⡀⠀⠀⠀⠀⠀⠀⠀
+⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣴⠋⠙⢷⡋⢙⡇⢀⡴⢒⡿⢶⣄⡴⠀⠙⠳⣄⠀⠀⠀⠀⠀
+⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠙⢦⡀⠈⠛⢻⠛⢉⡴⣋⡴⠟⠁⠀⠀⠀⠀⠈⢧⡀⠀⠀⠀
+⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢻⡄⠀⠘⣶⢋⡞⠁⠀⠀⢀⡴⠂⠀⠀⠀⠀⠹⣄⠀⠀
+⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⡇⠀⠀⠈⠻⢦⡀⠀⣰⠏⠀⠀⢀⡴⠃⢀⡄⣆⠀
+⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢠⡾⢷⡄⠀⠀⠀⠀⠉⠙⠯⠀⠀⡴⠋⠀⢠⠟⠀⠀⢹⡄`;
+
+const INITIAL_PERMISSIONS: Record<string, SlotPermissions> = {
+  'GLOBAL_SYSTEM_PROBE': { low: true, probe: true, sensor: false, buffer: false },
+  'HANDSHAKE_CORE': { low: true, probe: true, sensor: false, buffer: false },
+  'ADAPTER_HUB': { low: true, probe: true, sensor: false, buffer: false },
+  'CONSOLE_DATA_PROBE': { low: true, probe: true, sensor: false, buffer: false },
+  'NODE_DIAGNOSTICS': { low: true, probe: true, sensor: false, buffer: false },
+  'PROCESS_PROBE': { low: true, probe: true, sensor: false, buffer: false },
+  'RSSI_REPORT': { low: true, probe: true, sensor: false, buffer: false },
+  'SESSION_ARCHIVE': { low: true, probe: true, sensor: false, buffer: false },
+  'LOG_AUDIT': { low: true, probe: true, sensor: false, buffer: false },
+  'ADMIN_PANEL': { low: true, probe: true, sensor: false, buffer: false },
+  'SENSOR_PANEL': { low: true, probe: true, sensor: true, buffer: true }
 };
 
 const App: React.FC = () => {
@@ -62,6 +91,8 @@ const App: React.FC = () => {
   const [unreadLogs, setUnreadLogs] = useState<Record<LogType, boolean>>({ neural: false, console: false, kernel: false, system: false });
   const [showCoreSelector, setShowCoreSelector] = useState(false);
   const [showProbeHistory, setShowProbeHistory] = useState(false);
+  const [auditFocusId, setAuditFocusId] = useState<string | null>(null);
+  const [showFrog, setShowFrog] = useState(false);
   
   const [systemData, setSystemData] = useState<CoreStats | null>(null); 
   const [telemetryData, setTelemetryData] = useState<CoreStats | null>(null); 
@@ -69,7 +100,7 @@ const App: React.FC = () => {
   const [uplinkStatus, setUplinkStatus] = useState({ neural: 'OFFLINE', service: 'OFFLINE' });
   const [serviceConnectionLocked, setServiceConnectionLocked] = useState(false);
   const [terminalHistory, setTerminalHistory] = useState<string[]>([]);
-  const [inventoryContext, setInventoryContext] = useState<{panelId: string, type?: 'low' | 'probe' | 'sensor' | 'main'} | null>(null);
+  const [inventoryContext, setInventoryContext] = useState<{panelId: string, type?: 'low' | 'probe' | 'sensor' | 'buffer' | 'main'} | null>(null);
   const [showPingModal, setShowPingModal] = useState(false);
   const [highSlotScriptTriggerEvent, setHighSlotScriptTriggerEvent] = useState<number>(0);
   const [tick, setTick] = useState(0);
@@ -94,6 +125,7 @@ const App: React.FC = () => {
       globalLowSlot: DEFAULT_GLOBAL_LOW_SLOT,
       globalProbeSlot: DEFAULT_GLOBAL_PROBE_SLOT,
       globalSensorSlot: DEFAULT_GLOBAL_SENSOR_SLOT,
+      globalBufferSlot: DEFAULT_GLOBAL_BUFFER_SLOT,
       slotPermissions: INITIAL_PERMISSIONS,
       telemetryEnabled: true,
       neuralUplinkEnabled: true,
@@ -156,6 +188,7 @@ const App: React.FC = () => {
     const setter = type === 'neural' ? setNeuralLogs : type === 'console' ? setConsoleLogs : type === 'kernel' ? setKernelLogs : setSystemLogs;
     setter(prev => [entry, ...prev].slice(0, 100));
     if (activeLogTab !== type) setUnreadLogs(prev => ({ ...prev, [type]: true }));
+    return entry;
   }, [mode, activeLogTab]);
 
   useEffect(() => {
@@ -201,8 +234,8 @@ const App: React.FC = () => {
 
   const handleNeuralProbe = async (panelName: string, metrics: any) => {
     if (!settings.neuralUplinkEnabled) return;
-    
-    // UNIQUE MASTER CORE PROBE BEHAVIOR
+    if (processingId) return; 
+
     if (panelName === 'GLOBAL_SYSTEM_PROBE') {
         const now = Date.now();
         const lastFire = Number(localStorage.getItem(MASTER_PROBE_FIRE_KEY) || 0);
@@ -214,12 +247,11 @@ const App: React.FC = () => {
         }
 
         setProcessingId(panelName);
+        setShowFrog(true);
         
-        // AGGREGATE ALL ACTIVE PANEL DATA
         const aggregatedProbes: any[] = [];
         (Object.entries(settings.panelSlots) as [string, PanelSlotConfig][]).forEach(([pid, pConfig]) => {
             if (pid === 'GLOBAL_SYSTEM_PROBE') return;
-            // Only include panels that have a probe equipped
             if (pConfig.probeSlot?.launcherId) {
                 const contract = PROBE_CONTRACTS[pid];
                 if (contract) {
@@ -250,19 +282,30 @@ const App: React.FC = () => {
         setLatestCoreProbeResult(result);
         const isError = result.elementId === 'TRANSPORT_ERROR' || result.elementId === 'ERROR';
         
+        let newLog: LogEntry;
         if (!isError) {
           localStorage.setItem(MASTER_PROBE_FIRE_KEY, now.toString());
-          addLog(`MASTER_CORE_PROBE: Successful aggregation of ${aggregatedProbes.length} node vectors.`, LogLevel.SUCCESS, 'neural');
+          newLog = addLog(`MASTER_CORE_PROBE: Successful aggregation of ${aggregatedProbes.length} node vectors.`, LogLevel.SUCCESS, 'neural', {
+            type: 'PROBE_RESULT', panelId: panelName, slotType: 'MAIN', probeType: 'CORE_DATA',
+            probeStatus: 'COMPLETED', tokenLimit: 4000,
+            requestPayload: result._sentPayload, responsePayload: result
+          });
         } else {
-          addLog(`MASTER_CORE_PROBE: Processing failure. [Code: ${result.errorCode || '500'}]`, LogLevel.ERROR, 'neural');
+          newLog = addLog(`MASTER_CORE_PROBE: Processing failure. [Code: ${result.errorCode || '500'}]`, LogLevel.ERROR, 'neural', {
+            type: 'PROBE_RESULT', panelId: panelName, slotType: 'MAIN', probeType: 'CORE_DATA',
+            probeStatus: 'ERROR', tokenLimit: 4000,
+            requestPayload: result._sentPayload, responsePayload: result
+          });
         }
         
+        setShowFrog(false);
+        setAuditFocusId(newLog.id);
+        setShowProbeHistory(true);
         setProcessingId(undefined);
         return;
     }
 
-    // STANDARD PROBE BEHAVIOR
-    let slotType: 'LOW' | 'PROBE' | 'SENSOR' | 'MAIN' = 'PROBE';
+    let slotType: SlotType = 'PROBE';
     if (panelName === 'SENSOR_PANEL') slotType = 'SENSOR';
 
     const slot = settings.panelSlots[panelName]?.[slotType === 'SENSOR' ? 'sensorSlot' : 'probeSlot'] || settings.globalLowSlot;
@@ -274,8 +317,8 @@ const App: React.FC = () => {
     }
 
     setProcessingId(panelName);
+    setShowFrog(true);
     
-    // Automated Token Usage Logic: launcher tokens are used for sensor panel ONLY if Neural Integration is equipped.
     const sensorAmmo = panelName === 'SENSOR_PANEL' && slot?.ammoId ? launcherSystem.getConsumableById(slot.ammoId) : null;
     const useLauncherTokens = panelName !== 'SENSOR_PANEL' || sensorAmmo?.isNeuralIntegration;
     const finalTokenLimit = useLauncherTokens ? (launcherDef?.tokens || 3000) : 3000;
@@ -287,18 +330,22 @@ const App: React.FC = () => {
     const isError = result.elementId === 'TRANSPORT_ERROR' || result.elementId === 'ERROR';
     const logLevel = isError ? LogLevel.ERROR : LogLevel.NEURAL;
 
-    addLog(`Neural Probe Output: ${panelName}${isError ? ` [FAILURE]` : ''}`, logLevel, 'neural', { 
+    const newLog = addLog(`Neural Probe Output: ${panelName}${isError ? ` [FAILURE]` : ''}`, logLevel, 'neural', { 
         type: 'PROBE_RESULT', panelId: panelName, slotType, probeType: 'CORE_DATA',
         probeStatus: isError ? 'ERROR' : 'COMPLETED', tokenLimit: finalTokenLimit,
         requestPayload: result._sentPayload, responsePayload: result, launcherId: slot?.launcherId
     });
     
+    setShowFrog(false);
+    setAuditFocusId(newLog.id);
+    setShowProbeHistory(true);
     setProcessingId(undefined);
     if (slot?.launcherId && !isError) serverService.triggerCooldown(slot.launcherId, launcherDef?.baseCooldown || 60000);
   };
 
   const handleBrainRequest = async (id: string, type: string, metrics: any) => {
-    // GLOBAL LOW SLOT CONSUMPTION
+    if (processingId) return; 
+
     const slot = settings.globalLowSlot;
     const launcherDef = launcherSystem.getById(slot.launcherId);
 
@@ -308,23 +355,29 @@ const App: React.FC = () => {
     }
 
     setProcessingId(id);
+    setShowFrog(true);
+
     const contract = PROBE_CONTRACTS[id] || PROBE_CONTRACTS['GLOBAL_SYSTEM_PROBE'];
     const requestPayload = { ...(contract.buildNeuroPayload ? contract.buildNeuroPayload(metrics) : { labels: ["Metric", "Panel"] }), context: type, platform: settings.platform };
     const response = await aiTransport.fetch(neuralConfig, `Neuro Data Probe: Lightweight insight in JSON.`, JSON.stringify(requestPayload), false, 400);
     
+    let newLog: LogEntry;
     if (response.success) {
-      addLog(`Neuro Data Probe: ${id}`, LogLevel.NEURAL, 'neural', { 
+      newLog = addLog(`Neuro Data Probe: ${id}`, LogLevel.NEURAL, 'neural', { 
           type: 'PROBE_RESULT', panelId: id, slotType: 'LOW', probeType: 'NEURO_DATA', probeStatus: 'COMPLETED', tokenLimit: 400,
           requestPayload, responsePayload: response.data, launcherId: slot?.launcherId
       });
-      // Trigger global low slot cooldown upon successful inference
       serverService.triggerCooldown(slot.launcherId, launcherDef?.baseCooldown || 30000);
     } else {
-      addLog(`Neuro Data Probe Failure [${response.errorCode || '400'}]: ${response.error}`, LogLevel.ERROR, 'neural', {
+      newLog = addLog(`Neuro Data Probe Failure [${response.errorCode || '400'}]: ${response.error}`, LogLevel.ERROR, 'neural', {
           type: 'PROBE_RESULT', panelId: id, slotType: 'LOW', probeType: 'NEURO_DATA', probeStatus: 'ERROR', tokenLimit: 400,
           requestPayload, responsePayload: { error: response.error, code: response.errorCode }, launcherId: slot?.launcherId
       });
     }
+    
+    setShowFrog(false);
+    setAuditFocusId(newLog.id);
+    setShowProbeHistory(true);
     setProcessingId(undefined);
   };
 
@@ -332,12 +385,12 @@ const App: React.FC = () => {
     setSettings(prev => ({ ...prev, ...newSettings }));
   }, []);
 
-  const handleEquip = (pid: string, type: 'low' | 'probe' | 'sensor' | 'main', lid: string, aid: string) => {
+  const handleEquip = (pid: string, type: 'low' | 'probe' | 'sensor' | 'buffer' | 'main', lid: string, aid: string) => {
     if (type === 'main') {
         launcherSystem.installBooster(aid);
         const success = launcherSystem.activateBooster();
         if (success) {
-            addLog(`BOOSTER_ACTIVATED: ${PROBE_AMMUNITION[aid]?.name || aid}. All probe cooldowns bypassed.`, LogLevel.SUCCESS, 'system');
+            addLog(`BOOSTER_ACTIVATED: ${PROBE_AMMUNITION[aid]?.name || aid}. All probe cooldown bypassed.`, LogLevel.SUCCESS, 'system');
             setTick(t => t + 1); 
         } else {
             addLog(`BOOSTER_FAILURE: Resource exhausted or already engaged.`, LogLevel.ERROR, 'system');
@@ -349,10 +402,11 @@ const App: React.FC = () => {
         if (type === 'low') { updateSettings({ globalLowSlot: { launcherId: lid, ammoId: aid } }); return; }
         
         const nextSlots = { ...settings.panelSlots };
-        const slotKey = type === 'probe' ? 'probeSlot' : (type === 'sensor' ? 'sensorSlot' : null);
+        const slotKey = type === 'probe' ? 'probeSlot' : (type === 'sensor' ? 'sensorSlot' : (type === 'buffer' ? 'bufferSlot' : null));
         
         if (type === 'probe') updateSettings({ globalProbeSlot: { launcherId: lid, ammoId: aid } });
         if (type === 'sensor') updateSettings({ globalSensorSlot: { launcherId: lid, ammoId: aid } });
+        if (type === 'buffer') updateSettings({ globalBufferSlot: { launcherId: lid, ammoId: aid } });
 
         if (slotKey) {
             Object.keys(nextSlots).forEach(key => {
@@ -386,7 +440,7 @@ const App: React.FC = () => {
         const panelSupportsHistory = launcherSystem.isHistoricalSupported(pid);
         const finalAid = (ammoRequiresHistory && !panelSupportsHistory) ? 'std-data-ammo' : (aid || 'std-data-ammo');
 
-        const slotKey = type === 'probe' ? 'probeSlot' : 'sensorSlot';
+        const slotKey = type === 'probe' ? 'probeSlot' : (type === 'sensor' ? 'sensorSlot' : 'bufferSlot');
         updateSettings({ panelSlots: { ...settings.panelSlots, [pid]: { ...settings.panelSlots[pid], [slotKey]: { launcherId: finalLid, ammoId: finalAid } } } });
     }
   };
@@ -408,12 +462,13 @@ const App: React.FC = () => {
     const color = type === 'low' ? '#00ffd5' : '#bd00ff';
     const launcherId = type === 'low' ? settings.globalLowSlot.launcherId : settings.globalProbeSlot.launcherId;
     const progress = launcherId ? serverService.getCooldownProgress(launcherId) : 1;
+    const isAnyFiring = !!processingId;
 
     return (
       <Tooltip key={type} name={`${type.toUpperCase()}_LOAD`} source="SYSTEM" desc={`GLOBAL MASTER CONFIG: Click to adjust all ${type} tier slots simultaneously across all panels.`}>
           <div 
-            onClick={() => setInventoryContext({ panelId: 'GLOBAL_SYSTEM', type: type })} 
-            className="flex flex-col items-center gap-1 bg-black/30 p-2 border border-zinc-900/50 hover:border-zinc-700 rounded-sm min-w-[120px] transition-all cursor-pointer group relative overflow-hidden"
+            onClick={() => !isAnyFiring && setInventoryContext({ panelId: 'GLOBAL_SYSTEM', type: type })} 
+            className={`flex flex-col items-center gap-1 bg-black/30 p-2 border border-zinc-900/50 hover:border-zinc-700 rounded-sm min-w-[120px] transition-all cursor-pointer group relative overflow-hidden ${isAnyFiring ? 'opacity-40 cursor-not-allowed grayscale' : ''}`}
           >
               <div className="flex gap-1.5 items-center w-full justify-between px-1">
                   <div className="flex gap-0.5">{[...Array(stats.maxCharges)].map((_, i) => <div key={i} className={`w-1.5 h-6 border transition-all duration-500 ${i < stats.charges ? 'opacity-100 glow-segment' : 'opacity-10'}`} style={{ backgroundColor: color, borderColor: color, boxShadow: i < stats.charges ? `0 0 8px ${color}44` : 'none' }}></div>)}</div>
@@ -433,52 +488,103 @@ const App: React.FC = () => {
     );
   };
 
-  const sensorScriptState = useMemo(() => {
-    return serverService.getScriptState('SENSOR_PANEL', settings);
-  }, [settings, tick]);
+  const handleHeaderScriptShortcut = async (type: 'sensor' | 'buffer') => {
+    const slot = type === 'sensor' ? settings.panelSlots['SENSOR_PANEL']?.sensorSlot : settings.panelSlots['SENSOR_PANEL']?.bufferSlot;
+    if (!slot?.launcherId) return;
 
-  const sensorSlotLauncherId = settings.panelSlots['SENSOR_PANEL']?.sensorSlot?.launcherId;
-  const sensorProgress = sensorSlotLauncherId ? serverService.getCooldownProgress(sensorSlotLauncherId) : 1;
-  const sensorCd = sensorSlotLauncherId ? serverService.getCooldown(sensorSlotLauncherId) : 0;
-
-  const handleHeaderSensorShortcut = async () => {
-    const sensorSlot = settings.panelSlots['SENSOR_PANEL']?.sensorSlot;
-    if (!sensorSlot?.launcherId) return;
-
-    if (sensorCd > 0) {
-      addLog("SCRIPT_ACTIVATION_BLOCKED: Module on persistent reload.", LogLevel.ERROR, "system");
+    const cd = serverService.getCooldown(slot.launcherId);
+    if (cd > 0 || !!processingId) {
+      addLog("SCRIPT_ACTIVATION_BLOCKED: System node busy or reloading.", LogLevel.ERROR, "system");
       return;
     }
 
-    const ammo = PROBE_AMMUNITION[sensorSlot.ammoId];
-    const isDataAmmo = ammo?.type === 'module-core'; 
+    const ammo = PROBE_AMMUNITION[slot.ammoId];
+    addLog(`ACTIVATING ${type.toUpperCase()} SCRIPT: ${ammo?.name || 'Tactical Module'}`, LogLevel.NEURAL, "system");
     
-    addLog(`ACTIVATING SCRIPT: ${ammo?.name || 'Sensor Module'}`, LogLevel.NEURAL, "system");
-    serverService.halveTierCooldowns();
-    addLog("BUFF_APPLIED: Neural Manifold Synced. Tier cooldowns reduced by 50%.", LogLevel.SUCCESS, "neural");
-    serverService.triggerCooldown(sensorSlot.launcherId, 3600000); 
-    setActiveTab('scanner');
-    setHighSlotScriptTriggerEvent(Date.now());
+    if (type === 'buffer') {
+        serverService.halveTierCooldowns();
+        addLog("BUFF_APPLIED: Neural Manifold Synced. Tier cooldowns reduced by 50%.", LogLevel.SUCCESS, "neural");
+    } else {
+        setActiveTab('scanner');
+        setHighSlotScriptTriggerEvent(Date.now());
+    }
 
-    if (isDataAmmo) {
-        handleNeuralProbe('SENSOR_PANEL', { shortcut_action: 'HEADER_QUICK_FIRE' });
+    serverService.triggerCooldown(slot.launcherId, 3600000); 
+
+    if (ammo?.isNeuralIntegration || ammo?.type === 'module-core') {
+        handleNeuralProbe('SENSOR_PANEL', { shortcut_action: `HEADER_QUICK_FIRE_${type.toUpperCase()}` });
     }
   };
 
-  const getScriptStateColor = (state: ScriptState) => {
-    switch (state) {
-      case ScriptState.LOADED: return 'text-orange-500';
-      case ScriptState.DISABLED: return 'text-zinc-600';
-      case ScriptState.REFRESHING: return 'text-orange-400';
-      case ScriptState.BROKEN: return 'text-red-500';
-      default: return 'text-zinc-600';
-    }
-  };
+  const renderHeaderScriptSegment = (type: 'sensor' | 'buffer') => {
+    const state = serverService.getScriptState('SENSOR_PANEL', settings, type);
+    const slot = type === 'sensor' ? settings.panelSlots['SENSOR_PANEL']?.sensorSlot : settings.panelSlots['SENSOR_PANEL']?.bufferSlot;
+    const ammo = slot?.ammoId ? PROBE_AMMUNITION[slot.ammoId] : null;
+    const launcherId = slot?.launcherId;
+    const progress = launcherId ? serverService.getCooldownProgress(launcherId) : 1;
+    const cd = launcherId ? serverService.getCooldown(launcherId) : 0;
 
-  const getSensorScriptName = () => {
-    const scriptId = settings.panelSlots['SENSOR_PANEL']?.sensorSlot?.ammoId;
-    if (!scriptId) return 'EMPTY_LINK';
-    return PROBE_AMMUNITION[scriptId]?.name || 'UNKNOWN_SCRIPT';
+    const getScriptTierClass = () => {
+        if (!ammo) return '';
+        if (ammo.isNeuralIntegration || ammo.autoInterval) return 'glimmer-automatic';
+        if (ammo.type === 'booster' || type === 'buffer') return 'glimmer-augmented';
+        return 'glimmer-standard';
+    };
+
+    const getScriptStateColor = (s: ScriptState) => {
+        switch (s) {
+            case ScriptState.LOADED: return type === 'sensor' ? 'text-orange-500' : 'text-blue-500';
+            case ScriptState.DISABLED: return 'text-zinc-600';
+            case ScriptState.REFRESHING: return type === 'sensor' ? 'text-orange-400' : 'text-blue-400';
+            case ScriptState.BROKEN: return 'text-red-500';
+            default: return 'text-zinc-600';
+        }
+    };
+
+    return (
+      <div className="flex flex-col items-start border-l border-zinc-900 pl-4 shrink-0 min-w-[140px] relative h-full justify-center">
+        <span className={`text-[8px] font-black uppercase tracking-[0.1em] mb-1 transition-colors ${state.state === ScriptState.DISABLED ? 'text-zinc-600' : 'text-zinc-400'}`}>
+          {type === 'sensor' ? 'Scanner_Script' : 'Augmented_Script'}
+        </span>
+        <div className="flex items-center gap-3">
+           <Tooltip 
+             name={`${type.toUpperCase()}_SCRIPT_SHORTCUT`} 
+             source="SYSTEM" 
+             desc={state.reason || `Module: ${launcherId || 'EMPTY'}\nActive Script: ${ammo?.name || 'UNKNOWN'}\n\nClick to TRIGGER ${type} payload.`}
+           >
+             <div 
+               onClick={state.state === ScriptState.LOADED ? () => handleHeaderScriptShortcut(type) : undefined}
+               className={`w-7 h-7 rounded-full border flex items-center justify-center transition-all ${state.state === ScriptState.LOADED && !processingId ? 'cursor-pointer hover:scale-110' : 'cursor-not-allowed grayscale opacity-30'} ${type === 'sensor' ? 'border-orange-500/40 bg-orange-500/5' : 'border-blue-500/40 bg-blue-500/5'}`}
+             >
+                <div className={`w-2 h-2 rounded-full ${state.state === ScriptState.LOADED ? (type === 'sensor' ? 'bg-orange-500 shadow-[0_0_8px_#f97316]' : 'bg-blue-500 shadow-[0_0_8px_#3b82f6]') : 'bg-zinc-800'}`}></div>
+             </div>
+           </Tooltip>
+           <div 
+              onClick={() => !processingId && setInventoryContext({ panelId: 'SENSOR_PANEL', type: type })}
+              className={`flex flex-col group ${processingId ? 'cursor-not-allowed opacity-40' : 'cursor-pointer'}`}
+           >
+              <span className={`text-[8px] font-mono uppercase tracking-widest font-black transition-all group-hover:text-white truncate max-w-[100px] ${state.state === ScriptState.DISABLED ? 'text-zinc-600' : getScriptTierClass()}`}>{ammo?.name || 'EMPTY'}</span>
+              <div className="flex items-center gap-1.5">
+                <span className={`text-[7px] font-mono font-bold ${getScriptStateColor(state.state)}`}>
+                  {state.state === ScriptState.REFRESHING ? `${(cd/1000).toFixed(0)}s` : state.state}
+                </span>
+              </div>
+           </div>
+        </div>
+        {(state.state === ScriptState.LOADED || state.state === ScriptState.REFRESHING) && (
+            <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-zinc-900/30 overflow-hidden">
+               <div 
+                 className={`h-full transition-all duration-1000 ease-linear shadow-[0_0_8px_currentColor]`}
+                 style={{ 
+                   width: `${progress * 100}%`,
+                   backgroundColor: state.state === ScriptState.REFRESHING ? (type === 'sensor' ? '#f97316' : '#3b82f6') : '#22c55e',
+                   color: state.state === ScriptState.REFRESHING ? (type === 'sensor' ? '#f97316' : '#3b82f6') : '#22c55e'
+                 }}
+               ></div>
+            </div>
+        )}
+      </div>
+    );
   };
 
   const isGemini = neuralConfig.provider === NeuralNetworkProvider.GEMINI;
@@ -492,11 +598,12 @@ const App: React.FC = () => {
     if (inventoryContext.panelId === 'GLOBAL_SYSTEM') {
         return {
             probeSlot: settings.globalProbeSlot,
-            sensorSlot: settings.globalSensorSlot
+            sensorSlot: settings.globalSensorSlot,
+            bufferSlot: settings.globalBufferSlot
         };
     }
     return settings.panelSlots[inventoryContext.panelId] || FALLBACK_PANEL_CONFIG;
-  }, [inventoryContext, settings.panelSlots, settings.globalProbeSlot, settings.globalSensorSlot]);
+  }, [inventoryContext, settings.panelSlots, settings.globalProbeSlot, settings.globalSensorSlot, settings.globalBufferSlot]);
 
   const handleRetryTelemetry = useCallback(async () => {
     setUplinkStatus(prev => ({ ...prev, service: 'CONNECTING' as any }));
@@ -548,50 +655,10 @@ const App: React.FC = () => {
           {renderHeaderSlotSegment('low')}
           {renderHeaderSlotSegment('probe')}
           
-          <div className="flex flex-col items-start ml-6 border-l border-zinc-900 pl-6 shrink-0 min-w-[220px]">
-            <span className={`text-[9px] font-black uppercase tracking-[0.1em] mb-1 transition-colors ${sensorScriptState.state === ScriptState.DISABLED ? 'text-zinc-600' : 'text-orange-600'}`}>
-              Script Loaded
-            </span>
-            <div className="flex items-center gap-4">
-               <Tooltip 
-                 name="SENSOR_SCRIPT_SHORTCUT" 
-                 source="SYSTEM" 
-                 desc={sensorScriptState.reason || `Module: ${settings.panelSlots['SENSOR_PANEL']?.sensorSlot?.launcherId || 'EMPTY'}\nActive Script: ${getSensorScriptName()}\n\nClick to TRIGGER script payload and sync manifold.`}
-               >
-                 <div 
-                   onClick={sensorScriptState.state === ScriptState.LOADED ? handleHeaderSensorShortcut : undefined}
-                   className={`w-8 h-8 rounded-full border flex items-center justify-center transition-all ${sensorScriptState.state === ScriptState.LOADED ? 'cursor-pointer hover:scale-110 active:scale-95 border-orange-500/60 bg-orange-500/10 glow-orange' : 'cursor-not-allowed border-zinc-800 bg-black opacity-30 grayscale'} ${sensorScriptState.state === ScriptState.BROKEN ? 'border-red-500 bg-red-950/20 shadow-[0_0_10px_red]' : ''}`}
-                 >
-                    <div className={`w-2.5 h-2.5 rounded-full ${settings.panelSlots['SENSOR_PANEL']?.sensorSlot?.ammoId ? (sensorScriptState.state === ScriptState.BROKEN ? 'bg-red-500 animate-ping' : (sensorScriptState.state === ScriptState.LOADED ? 'bg-orange-500 shadow-[0_0_8px_#f97316] animate-pulse' : 'bg-zinc-800')) : 'bg-zinc-800'}`}></div>
-                 </div>
-               </Tooltip>
-               <div 
-                  onClick={() => setInventoryContext({ panelId: 'SENSOR_PANEL', type: 'sensor' })}
-                  className="flex flex-col cursor-pointer group"
-               >
-                  <span className={`text-[8px] font-mono uppercase tracking-widest font-black transition-all group-hover:text-white ${sensorScriptState.state === ScriptState.DISABLED ? 'text-zinc-600' : 'text-zinc-300'}`}>{getSensorScriptName()}</span>
-                  <div className="flex items-center gap-1.5 mt-0.5">
-                    <span className="text-[7px] text-zinc-600 font-black uppercase">STATUS:</span>
-                    <span className={`text-[9px] font-mono font-bold ${getScriptStateColor(sensorScriptState.state)}`}>
-                      {sensorScriptState.state === ScriptState.REFRESHING ? `${(sensorCd/1000).toFixed(0)}s` : sensorScriptState.state}
-                    </span>
-                  </div>
-               </div>
-            </div>
+          <div className="flex h-full">
+            {renderHeaderScriptSegment('sensor')}
+            {renderHeaderScriptSegment('buffer')}
           </div>
-
-          {(sensorScriptState.state === ScriptState.LOADED || sensorScriptState.state === ScriptState.REFRESHING) && (
-            <div className="absolute bottom-0 left-0 right-0 h-1 bg-zinc-900/30 overflow-hidden">
-               <div 
-                 className={`h-full transition-all duration-1000 ease-linear shadow-[0_0_8px_currentColor]`}
-                 style={{ 
-                   width: `${sensorProgress * 100}%`,
-                   backgroundColor: sensorScriptState.state === ScriptState.REFRESHING ? '#f97316' : '#22c55e',
-                   color: sensorScriptState.state === ScriptState.REFRESHING ? '#f97316' : '#22c55e'
-                 }}
-               ></div>
-            </div>
-          )}
         </div>
 
         <div className="flex-none w-auto h-full flex items-center justify-end px-8 gap-3">
@@ -602,8 +669,9 @@ const App: React.FC = () => {
                 variant="teal"
               >
                 <button 
-                  onClick={() => setInventoryContext({ panelId: 'GLOBAL_SYSTEM', type: 'main' })}
-                  className={`relative w-10 h-10 flex items-center justify-center rounded-sm border transition-all hover:scale-110 active:scale-95 ${isBypasserActive ? 'border-teal-400 bg-teal-500/20 glow-teal shadow-[0_0_15px_#00ffd5]' : 'border-zinc-800 bg-black opacity-40 hover:opacity-100'}`}
+                  onClick={() => !processingId && setInventoryContext({ panelId: 'GLOBAL_SYSTEM', type: 'main' })}
+                  disabled={!!processingId}
+                  className={`relative w-10 h-10 flex items-center justify-center rounded-sm border transition-all hover:scale-110 active:scale-95 ${isBypasserActive ? 'border-teal-400 bg-teal-500/20 glow-teal shadow-[0_0_15px_#00ffd5]' : 'border-zinc-800 bg-black opacity-40 hover:opacity-100'} ${processingId ? 'cursor-not-allowed opacity-20' : ''}`}
                 >
                    <svg className={`w-5 h-5 ${isBypasserActive ? 'text-teal-400' : 'text-zinc-500'}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
                    {isBypasserActive && (
@@ -622,8 +690,9 @@ const App: React.FC = () => {
               <div className="w-[1px] h-6 bg-zinc-900 mx-2"></div>
 
               <button 
-                onClick={() => setShowCoreSelector(true)} 
-                className="relative w-10 h-10 flex items-center justify-center rounded-full border transition-all group overflow-visible shimmer-glow"
+                onClick={() => !processingId && setShowCoreSelector(true)} 
+                disabled={!!processingId}
+                className={`relative w-10 h-10 flex items-center justify-center rounded-full border transition-all group overflow-visible shimmer-glow ${processingId ? 'opacity-20 cursor-not-allowed' : ''}`}
                 style={{ 
                   borderColor: `${coreColor}66`, 
                   backgroundColor: `${coreColor}11`,
@@ -658,8 +727,17 @@ const App: React.FC = () => {
             {activeTab === 'telemetry' && <TelemetryGraphs stats={telemetryData} timeframe="1m" isSimulated={mode === OperationalMode.SIMULATED} isConnected={uplinkStatus.service === 'ACTIVE'} onProbe={handleNeuralProbe} onProbeInfo={() => {}} onBrainClick={handleBrainRequest} onLauncherSelect={(id, type) => setInventoryContext({panelId: id, type: type as any})} serviceStatus={(uplinkStatus.service === 'ACTIVE' ? 'ONLINE' : (serviceConnectionLocked ? 'LOCKED' : 'OFFLINE')) as any} onRetryConnection={handleRetryTelemetry} settings={settings} slotConfig={settings.panelSlots['RSSI_REPORT']} globalLowSlot={settings.globalLowSlot} permissions={settings.slotPermissions['RSSI_REPORT']} />}
             {activeTab === 'toolkit' && <Toolkit onRunCommand={cmd => setTerminalHistory(p => [...p, cmd])} onBreakdown={() => {}} mode={mode} />}
             {activeTab === 'history' && <History data={HistoryStorage.getParsed('HISTORY_SESSION_ARCHIVE')} onProbe={handleNeuralProbe} onProbeInfo={() => {}} onBrainClick={handleBrainRequest} onLauncherSelect={(id, type) => setInventoryContext({panelId: id, type: type as any})} slotConfig={settings.panelSlots['SESSION_ARCHIVE']} globalLowSlot={settings.globalLowSlot} permissions={settings.slotPermissions['SESSION_ARCHIVE']} />}
-            {activeTab === 'admin' && <AdminPanel settings={settings} setSettings={setSettings} />}
-            {activeTab === 'scanner' && <ScannerPanel stats={systemData} platform={settings.platform} settings={settings} onLauncherSelect={(id, type) => setInventoryContext({panelId: id, type: type as any})} onNeuralProbe={handleNeuralProbe} isProcessing={processingId === 'SENSOR_PANEL'} externalTrigger={highSlotScriptTriggerEvent} />}
+            {activeTab === 'admin' && (
+              <AdminPanel 
+                settings={settings} 
+                setSettings={setSettings} 
+                onProbe={handleNeuralProbe}
+                onBrain={handleBrainRequest}
+                onLauncherSelect={(id, type) => setInventoryContext({panelId: id, type: type as any})}
+                processingId={processingId}
+              />
+            )}
+            {activeTab === 'scanner' && <ScannerPanel stats={systemData} platform={settings.platform} settings={settings} onLauncherSelect={(id, type) => setInventoryContext({panelId: id, type: type as any})} onNeuralProbe={handleNeuralProbe} onBrainClick={handleBrainRequest} isProcessing={processingId === 'SENSOR_PANEL'} externalTrigger={highSlotScriptTriggerEvent} />}
           </div>
         </div>
         
@@ -670,29 +748,46 @@ const App: React.FC = () => {
                  <button key={lt} onClick={() => { setActiveLogTab(lt); setUnreadLogs(v => ({...v, [lt]: false})); }} className={`px-4 text-[10px] font-black uppercase tracking-widest relative h-full whitespace-nowrap transition-colors ${activeLogTab === lt ? 'text-white' : 'text-zinc-700 hover:text-zinc-500'} ${unreadLogs[lt] ? 'tab-flash' : ''}`}>{lt}{activeLogTab === lt && <div className="absolute bottom-0 left-2 right-2 h-0.5 bg-purple-500"></div>}</button>
                ))}
              </div>
-             <TacticalButton label="AUDIT" size="sm" onClick={() => setShowProbeHistory(true)} color="#bd00ff" />
+             <TacticalButton label="AUDIT" size="sm" onClick={() => { setAuditFocusId(null); setShowProbeHistory(true); }} color="#bd00ff" />
           </div>
 
-          <div className="flex-1 overflow-hidden p-2">
+          <div className="flex-1 overflow-hidden p-2 relative">
+            {showFrog && (
+              <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-0 overflow-hidden">
+                {/* Distorted Green Background Text Layer */}
+                <div className="absolute inset-0 flex flex-col opacity-[0.05] pointer-events-none select-none">
+                   {[...Array(20)].map((_, i) => (
+                      <div key={i} className="text-[#00ff00] font-mono text-[8px] whitespace-nowrap overflow-hidden core-distortion animate-slow-flicker">
+                         {Array(100).fill(0).map(() => String.fromCharCode(33 + Math.floor(Math.random() * 94))).join('')}
+                      </div>
+                   ))}
+                </div>
+                {/* The Frog ASCII */}
+                <pre className="relative text-[5px] md:text-[6px] leading-[1] font-mono whitespace-pre animate-blink core-distortion text-[#00ff00] z-10">
+                  {FROG_ASCII}
+                </pre>
+              </div>
+            )}
             <Card
               id="LOG_AUDIT"
               title="LIVE_LOG_STREAM"
               variant="purple"
-              className="h-full"
+              className="h-full relative z-10"
               onProbe={() => handleNeuralProbe('LOG_AUDIT', { logs: activeLogTab === 'neural' ? neuralLogs : activeLogTab === 'console' ? consoleLogs : activeLogTab === 'kernel' ? kernelLogs : systemLogs })}
               onBrain={() => handleBrainRequest('LOG_AUDIT', 'Log Stream Analysis', { logType: activeLogTab })}
-              onLauncherSelect={(pid, type) => setInventoryContext({panelId: pid, type: type as any})}
+              onLauncherSelect={(pid, type) => setInventoryContext({ panelId: pid, type: type as any })}
               slotConfig={settings.panelSlots['LOG_AUDIT']}
               globalLowSlot={settings.globalLowSlot}
               permissions={settings.slotPermissions['LOG_AUDIT']}
               isProcessing={processingId === 'LOG_AUDIT'}
+              isAnyProcessing={!!processingId}
             >
               <div className="flex-1 overflow-y-auto space-y-4 font-mono text-[11px] no-scroll z-10 relative">
                    {(activeLogTab === 'neural' ? neuralLogs : activeLogTab === 'console' ? consoleLogs : activeLogTab === 'kernel' ? kernelLogs : systemLogs).map(log => (
                         <div key={log.id} className="border-l-2 pl-4 py-2 bg-black/40 mb-2 group transition-colors relative" style={{ borderColor: log.level === LogLevel.ERROR ? '#f87171' : (log.level === LogLevel.NEURAL ? (log.metadata?.slotType === 'LOW' ? '#00ffd5' : log.metadata?.slotType === 'SENSOR' ? '#f97316' : '#bd00ff') : '#52525b') }}>
                           <div className="flex justify-between items-start mb-1 text-[9px] text-zinc-600">
                             <span>{log.timestamp}</span>
-                            {(log.metadata?.type === 'PROBE_RESULT' || log.message.includes('Neural Probe Output')) && <button onClick={() => setShowProbeHistory(true)} className="text-[8px] font-black text-purple-500 opacity-0 group-hover:opacity-100 transition-opacity hover:underline">PACKET</button>}
+                            {(log.metadata?.type === 'PROBE_RESULT' || log.message.includes('Neural Probe Output')) && <button onClick={() => { setAuditFocusId(log.id); setShowProbeHistory(true); }} className="text-[8px] font-black text-purple-500 opacity-0 group-hover:opacity-100 transition-opacity hover:underline">PACKET</button>}
                           </div>
                           <pre className="whitespace-pre-wrap text-zinc-400 group-hover:text-zinc-200 transition-colors">{log.message}</pre>
                         </div>
@@ -710,17 +805,32 @@ const App: React.FC = () => {
         initialSlotType={inventoryContext?.type as any || 'low'} 
         fullConfig={currentInventoryConfig} 
         globalLowSlot={settings.globalLowSlot}
+        globalBufferSlot={settings.globalBufferSlot}
         onEquip={handleEquip} 
         onClear={(pid, type) => handleEquip(pid, type, 'std-core', 'std-data-ammo')}
         onRemove={(pid, type) => handleEquip(pid, type, 'std-core', 'std-data-ammo')}
       />
       
       <CoreSelectorDialog isOpen={showCoreSelector} onClose={() => setShowCoreSelector(false)} config={neuralConfig} setConfig={setNeuralConfig} />
-      <ProbeAuditDialog isOpen={showProbeHistory} onClose={() => setShowProbeHistory(false)} logs={neuralLogs} onClearFiltered={(ids) => setNeuralLogs(prev => prev.filter(l => !ids.includes(l.id)))} />
+      <ProbeAuditDialog 
+        isOpen={showProbeHistory} 
+        onClose={() => { setShowProbeHistory(false); setAuditFocusId(null); }} 
+        logs={neuralLogs} 
+        focusId={auditFocusId}
+        onClearFiltered={(ids) => setNeuralLogs(prev => prev.filter(l => !ids.includes(l.id)))} 
+      />
 
       <style>{`
         .glow-segment { filter: drop-shadow(0 0 5px currentColor); }
         .glow-orange { box-shadow: 0 0 10px rgba(249, 115, 22, 0.4); }
+
+        @keyframes blink {
+          0%, 100% { opacity: 1; transform: scale(1); }
+          50% { opacity: 0.6; transform: scale(0.98); }
+        }
+        .animate-blink {
+          animation: blink 0.8s infinite ease-in-out;
+        }
 
         .shimmer-glow {
           animation: core-shimmer 3s infinite alternate ease-in-out;
@@ -764,6 +874,14 @@ const App: React.FC = () => {
           0% { transform: translate(-50%, -50%) scale(0); opacity: 0; }
           20% { opacity: 1; }
           100% { transform: translate(-15px, 20px) scale(0.5); opacity: 0; }
+        }
+
+        @keyframes slow-flicker {
+          0%, 100% { opacity: 0.8; }
+          50% { opacity: 0.3; }
+        }
+        .animate-slow-flicker {
+          animation: slow-flicker 4s infinite alternate;
         }
       `}</style>
     </div>

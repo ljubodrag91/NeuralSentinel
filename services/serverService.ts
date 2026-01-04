@@ -125,8 +125,8 @@ class ServerAuthoritativeService {
     const launcher = launcherSystem.getById(launcherId);
     let finalDuration = durationMs;
 
-    // SENSOR SLOT SCRIPT LOGIC: 1-hour standard persistent cooldown.
-    if (launcher?.type === 'sensor-module') {
+    // SENSOR/BUFFER SLOT SCRIPT LOGIC: 1-hour standard persistent cooldown.
+    if (launcher?.type === 'sensor-module' || launcher?.type === 'buffer-module') {
         const SENSOR_SLOT_BASE_COOLDOWN = 3600000; // 1 hour
         finalDuration = SENSOR_SLOT_BASE_COOLDOWN;
 
@@ -159,16 +159,16 @@ class ServerAuthoritativeService {
     return 1 - (remaining / cd.duration);
   }
 
-  getScriptState(panelId: string, settings: AppSettings): { state: ScriptState, reason?: string } {
-    const slotConfig = settings.panelSlots[panelId]?.sensorSlot;
-    const isPermitted = settings.slotPermissions[panelId]?.sensor;
+  getScriptState(panelId: string, settings: AppSettings, slotType: 'sensor' | 'buffer' = 'sensor'): { state: ScriptState, reason?: string } {
+    const slotConfig = slotType === 'sensor' ? settings.panelSlots[panelId]?.sensorSlot : settings.panelSlots[panelId]?.bufferSlot;
+    const isPermitted = slotType === 'sensor' ? settings.slotPermissions[panelId]?.sensor : settings.slotPermissions[panelId]?.buffer;
 
     if (!slotConfig?.launcherId) {
-      return { state: ScriptState.DISABLED, reason: 'Sensor Slot Empty: Module required.' };
+      return { state: ScriptState.DISABLED, reason: `${slotType === 'sensor' ? 'Sensor' : 'Buffer'} Slot Empty: Module required.` };
     }
 
     if (!isPermitted) {
-      return { state: ScriptState.DISABLED, reason: 'Sensor Port Blocked: Administratively restricted.' };
+      return { state: ScriptState.DISABLED, reason: `${slotType === 'sensor' ? 'Sensor' : 'Buffer'} Port Blocked: Administratively restricted.` };
     }
 
     if (this.brokenScripts.has(slotConfig.launcherId)) {
@@ -177,7 +177,7 @@ class ServerAuthoritativeService {
 
     const cd = this.getCooldown(slotConfig.launcherId);
     if (cd > 0) {
-      return { state: ScriptState.REFRESHING, reason: 'Module Reloading: Sensor array persistent refresh active.' };
+      return { state: ScriptState.REFRESHING, reason: `Module Reloading: ${slotType === 'sensor' ? 'Sensor' : 'Buffer'} array persistent refresh active.` };
     }
 
     return { state: ScriptState.LOADED };
@@ -225,7 +225,7 @@ class ServerAuthoritativeService {
   /**
    * Updated to accept launcher mappings (id -> ammoId) to calculate tiered stats with script modifiers.
    */
-  getTierStats(launcherType: 'core' | 'neural' | 'sensor-module', activeLaunchers: Array<{id: string, ammoId: string}>) {
+  getTierStats(launcherType: 'core' | 'neural' | 'sensor-module' | 'buffer-module', activeLaunchers: Array<{id: string, ammoId: string}>) {
     if (activeLaunchers.length === 0) return { charges: 0, maxCharges: 5, cooldown: 0 };
 
     let minCharges = Infinity;

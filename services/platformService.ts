@@ -57,11 +57,99 @@ export const platformService = {
     const randomLoad = () => Math.random() * 100;
     const randomTemp = () => 35 + Math.random() * 45;
     
+    const interfaces: any = isWin ? {
+        'Ethernet0': { 
+          ipv4: ['192.168.1.104'], 
+          ipv6: ['fe80::1c2a:44f3:829:5512'], 
+          mac: ['AA:BB:CC:DD:EE:FF'], 
+          isUp: true, 
+          speed: 1000,
+          rxKB: Math.random() * 450,
+          txKB: Math.random() * 120,
+          totalSentMB: 1452.4,
+          totalRecvMB: 8442.1,
+          lastActivity: new Date().toLocaleTimeString()
+        },
+        'Wi-Fi': { 
+          ipv4: ['192.168.1.105'], 
+          ipv6: [], 
+          mac: ['AA:BB:CC:DD:EE:FE'], 
+          isUp: false, 
+          speed: 866,
+          rxKB: 0,
+          txKB: 0,
+          totalSentMB: 212.5,
+          totalRecvMB: 541.2,
+          lastActivity: '12:45:01'
+        },
+        'vEthernet (Default Switch)': { 
+          ipv4: ['172.22.144.1'], 
+          ipv6: [], 
+          mac: ['00:15:5D:82:11:01'], 
+          isUp: true, 
+          speed: 10000,
+          rxKB: Math.random() * 5,
+          txKB: Math.random() * 2,
+          totalSentMB: 42.1,
+          totalRecvMB: 12.5,
+          lastActivity: new Date().toLocaleTimeString()
+        },
+        'Loopback Pseudo-Interface 1': { 
+          ipv4: ['127.0.0.1'], 
+          ipv6: ['::1'], 
+          mac: [], 
+          isUp: true, 
+          speed: 0,
+          rxKB: Math.random() * 1,
+          txKB: Math.random() * 1,
+          totalSentMB: 1.2,
+          totalRecvMB: 1.2,
+          lastActivity: new Date().toLocaleTimeString()
+        }
+      } : {
+        'eth0': { 
+          ipv4: ['192.168.1.104'], 
+          ipv6: [], 
+          mac: ['AA:BB:CC:DD:EE:FF'], 
+          isUp: true, 
+          speed: 1000,
+          rxKB: Math.random() * 100,
+          txKB: Math.random() * 50,
+          totalSentMB: 500,
+          totalRecvMB: 200,
+          lastActivity: new Date().toLocaleTimeString()
+        },
+        'wlan0': {
+          ipv4: [],
+          ipv6: [],
+          mac: ['AA:BB:CC:DD:EE:AA'],
+          isUp: false,
+          speed: 300,
+          rxKB: 0,
+          txKB: 0,
+          totalSentMB: 10,
+          totalRecvMB: 5,
+          lastActivity: 'Never'
+        },
+        'lo': { 
+          ipv4: ['127.0.0.1'], 
+          ipv6: ['::1'], 
+          mac: [], 
+          isUp: true, 
+          speed: 0,
+          rxKB: 1,
+          txKB: 1,
+          totalSentMB: 1,
+          totalRecvMB: 1,
+          lastActivity: new Date().toLocaleTimeString()
+        }
+      };
+
     return {
       timestamp: now,
       datetime: new Date(now).toISOString(),
       platform: platform,
-      source: 'LOCAL', // This will be overwritten by App.tsx logic if Remote
+      source: 'LOCAL', 
       cpu: {
         cpuCores: 4,
         cpuCoresPhysical: 4,
@@ -108,10 +196,7 @@ export const platformService = {
         errorsOut: 0,
         droppedIn: 0,
         droppedOut: 0,
-        interfaces: {
-          [isWin ? 'Ethernet0' : 'eth0']: { ipv4: ['192.168.1.104'], ipv6: [], mac: ['AA:BB:CC:DD:EE:FF'], isUp: true, speed: 1000 },
-          [isWin ? 'Loopback' : 'lo']: { ipv4: ['127.0.0.1'], ipv6: ['::1'], mac: [], isUp: true, speed: 0 }
-        }
+        interfaces: interfaces
       },
       processes: {
         totalProcesses: 145,

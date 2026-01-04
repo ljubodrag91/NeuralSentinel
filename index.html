@@ -21,6 +21,11 @@
         --accent-gold: #eab308;
         --accent-zinc: #1a232e;
         --hud-accent: var(--accent-blue);
+        
+        /* Script Tier Colors */
+        --tier-standard: #eab308;
+        --tier-automatic: #22c55e;
+        --tier-augmented: #3b82f6;
       }
       
       body {
@@ -171,6 +176,16 @@
         from { opacity: 0.03; }
         to { opacity: 0.08; }
       }
+
+      /* Script Glimmer Effects */
+      @keyframes script-glimmer {
+        0%, 100% { filter: brightness(1) drop-shadow(0 0 0px transparent); }
+        50% { filter: brightness(1.5) drop-shadow(0 0 5px currentColor); }
+      }
+      
+      .glimmer-standard { animation: script-glimmer 3s infinite ease-in-out; color: var(--tier-standard); }
+      .glimmer-automatic { animation: script-glimmer 2s infinite ease-in-out; color: var(--tier-automatic); }
+      .glimmer-augmented { animation: script-glimmer 2.5s infinite ease-in-out; color: var(--tier-augmented); }
     </style>
     <script type="importmap">
     {

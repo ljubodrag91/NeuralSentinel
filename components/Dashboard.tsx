@@ -44,11 +44,10 @@ const Dashboard: React.FC<DashboardProps> = ({
   const terminalEndRef = useRef<HTMLDivElement>(null);
   
   const adapters = useMemo(() => {
-    const base = ['wlan0', 'wlan1', 'eth0', 'lo'];
     if (stats?.network?.interfaces) {
-      return Array.from(new Set([...base, ...Object.keys(stats.network.interfaces)]));
+      return Object.keys(stats.network.interfaces);
     }
-    return base;
+    return ['wlan0', 'eth0', 'lo'];
   }, [stats]);
 
   useEffect(() => {
@@ -65,6 +64,7 @@ const Dashboard: React.FC<DashboardProps> = ({
   const isLocal = settings.dataSourceMode === 'LOCAL';
   const isProbeActive = processingId === 'GLOBAL_SYSTEM_PROBE';
   const platformAccent = settings.platform === Platform.LINUX ? '#eab308' : '#00f2ff';
+  const isWindows = settings.platform === Platform.WINDOWS;
 
   const handleConsoleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -196,19 +196,45 @@ const Dashboard: React.FC<DashboardProps> = ({
               globalLowSlot={settings.globalLowSlot}
               permissions={settings.slotPermissions['ADAPTER_HUB']}
             >
-              <div className="flex flex-col gap-2 max-h-40 overflow-y-auto no-scroll">
+              <div className="flex flex-col gap-2 flex-1 overflow-y-auto no-scroll pr-1">
                 {adapters.map(name => {
                   const iface = stats?.network?.interfaces?.[name];
+                  const isActive = iface?.isUp;
+                  const isHighlighted = isWindows && isActive;
+                  const statusColor = isActive ? (isWindows ? '#00f2ff' : '#22c55e') : '#ef4444';
+                  
+                  // Detail payload for tooltips
+                  const tooltipDesc = iface ? `
+MAC Address: ${iface.mac && iface.mac.length > 0 ? iface.mac[0] : 'None'}
+Status: ${isActive ? 'ACTIVE' : 'INACTIVE'}
+Speed: ${iface.speed > 0 ? `${iface.speed} Mbps` : 'N/A'}
+IP Config: ${iface.ipv4?.join(', ') || 'Unassigned'}
+Throughput RX: ${iface.rxKB?.toFixed(1) || 0} KB/s
+Throughput TX: ${iface.txKB?.toFixed(1) || 0} KB/s
+Total Recv: ${iface.totalRecvMB?.toFixed(1) || 0} MB
+Total Sent: ${iface.totalSentMB?.toFixed(1) || 0} MB
+Last Activity: ${iface.lastActivity || 'Unknown'}
+                  `.trim() : 'Interface data unavailable';
+
                   return (
-                    <div key={name} className="px-4 py-2 border border-zinc-900/40 bg-black/20 flex justify-between items-center group hover:bg-teal-500/5 transition-all">
-                      <div className="flex items-center gap-3">
-                        <div className={`w-1.5 h-1.5 rounded-full ${iface?.isUp ? 'bg-green-500 glow-green' : 'bg-red-500'}`}></div>
-                        <span className="text-[10px] font-black text-zinc-500 uppercase tracking-widest group-hover:text-teal-400">{name}</span>
-                      </div>
-                      <span className="text-[10px] font-mono text-zinc-600">{(iface?.ipv4 && iface.ipv4[0]) || 'OFFLINE'}</span>
-                    </div>
+                    <Tooltip key={name} name={name} source={isLocal ? "LOCAL" : "REMOTE"} desc={tooltipDesc}>
+                        <div className={`px-4 py-2 border bg-black/20 flex flex-col gap-1 group transition-all hover:bg-zinc-900/40 ${isHighlighted ? 'border-blue-500/50 shadow-[0_0_10px_rgba(0,242,255,0.1)]' : 'border-zinc-900/40'}`}>
+                            <div className="flex justify-between items-center">
+                                <div className="flex items-center gap-3">
+                                    <div className={`w-1.5 h-1.5 rounded-full transition-all duration-500`} style={{ backgroundColor: statusColor, boxShadow: isActive ? `0 0 5px ${statusColor}` : 'none' }}></div>
+                                    <span className={`text-[10px] font-black uppercase tracking-widest transition-colors ${isActive ? 'text-zinc-300 group-hover:text-white' : 'text-zinc-700'}`}>{name}</span>
+                                </div>
+                                <span className={`text-[9px] font-mono ${isActive ? 'text-zinc-500' : 'text-zinc-800'}`}>{iface?.rxKB !== undefined ? `RX: ${iface.rxKB.toFixed(1)}K` : ''}</span>
+                            </div>
+                            <div className="flex justify-between items-center mt-0.5">
+                                <span className="text-[9px] font-mono text-zinc-600">{(iface?.ipv4 && iface.ipv4[0]) || 'OFFLINE'}</span>
+                                <span className={`text-[8px] font-mono uppercase tracking-tighter ${isActive ? 'text-zinc-700' : 'text-zinc-900'}`}>{iface?.mac && iface.mac.length > 0 ? iface.mac[0] : 'NO_MAC'}</span>
+                            </div>
+                        </div>
+                    </Tooltip>
                   );
                 })}
+                {adapters.length === 0 && <div className="py-10 text-center text-zinc-800 uppercase tracking-widest text-[9px]">Awaiting adapter broadcast...</div>}
               </div>
             </Card>
           </div>

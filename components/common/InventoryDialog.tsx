@@ -3,24 +3,25 @@ import React, { useState, useEffect, useMemo } from 'react';
 import Modal from './Modal';
 import { launcherSystem, PROBE_AMMUNITION, PANELS_SUPPORTING_HISTORY } from '../../services/launcherService';
 import { PROBE_CONTRACTS } from '../../services/probeContracts';
-import { PanelSlotConfig, SlotConfig } from '../../types';
+import { PanelSlotConfig, SlotConfig, Consumable } from '../../types';
 import Tooltip from './Tooltip';
 
 interface InventoryDialogProps {
   isOpen: boolean;
   onClose: () => void;
   panelId: string;
-  initialSlotType: 'low' | 'probe' | 'sensor' | 'main';
+  initialSlotType: 'low' | 'probe' | 'sensor' | 'buffer' | 'main';
   fullConfig: PanelSlotConfig;
-  onEquip: (panelId: string, slotType: 'low' | 'probe' | 'sensor' | 'main', launcherId: string, ammoId: string) => void;
-  onRemove?: (panelId: string, slotType: 'low' | 'probe' | 'sensor' | 'main') => void;
-  onClear?: (panelId: string, slotType: 'low' | 'probe' | 'sensor' | 'main') => void;
+  onEquip: (panelId: string, slotType: 'low' | 'probe' | 'sensor' | 'buffer' | 'main', launcherId: string, ammoId: string) => void;
+  onRemove?: (panelId: string, slotType: 'low' | 'probe' | 'sensor' | 'buffer' | 'main') => void;
+  onClear?: (panelId: string, slotType: 'low' | 'probe' | 'sensor' | 'buffer' | 'main') => void;
   globalLowSlot?: SlotConfig;
+  globalBufferSlot?: SlotConfig;
 }
 
-const InventoryDialog: React.FC<InventoryDialogProps> = ({ isOpen, onClose, panelId, initialSlotType, fullConfig, onEquip, onRemove, onClear, globalLowSlot }) => {
+const InventoryDialog: React.FC<InventoryDialogProps> = ({ isOpen, onClose, panelId, initialSlotType, fullConfig, onEquip, onRemove, onClear, globalLowSlot, globalBufferSlot }) => {
   const [navLevel, setNavLevel] = useState<'ROOT' | 'SLOT_SELECTED'>('ROOT');
-  const [activeSlot, setActiveSlot] = useState<'low' | 'probe' | 'sensor' | 'main'>(initialSlotType || 'low');
+  const [activeSlot, setActiveSlot] = useState<'low' | 'probe' | 'sensor' | 'buffer' | 'main'>(initialSlotType || 'low');
   
   const [stagedLauncher, setStagedLauncher] = useState<string | null>(null);
   const [stagedAmmoId, setStagedAmmoId] = useState<string | null>(null);
@@ -38,8 +39,11 @@ const InventoryDialog: React.FC<InventoryDialogProps> = ({ isOpen, onClose, pane
         } else if (initialSlotType === 'low') {
           setStagedLauncher(globalLowSlot?.launcherId || null);
           setStagedAmmoId(globalLowSlot?.ammoId || null);
+        } else if (initialSlotType === 'buffer' && isGlobalMode) {
+          setStagedLauncher(globalBufferSlot?.launcherId || null);
+          setStagedAmmoId(globalBufferSlot?.ammoId || null);
         } else {
-          const current = initialSlotType === 'probe' ? fullConfig.probeSlot : fullConfig.sensorSlot;
+          const current = initialSlotType === 'probe' ? fullConfig.probeSlot : (initialSlotType === 'sensor' ? fullConfig.sensorSlot : fullConfig.bufferSlot);
           setStagedLauncher(current?.launcherId || null);
           setStagedAmmoId(current?.ammoId || null);
         }
@@ -50,14 +54,14 @@ const InventoryDialog: React.FC<InventoryDialogProps> = ({ isOpen, onClose, pane
         setActiveSlot('low');
       }
     }
-  }, [isOpen, initialSlotType, fullConfig, globalLowSlot]);
+  }, [isOpen, initialSlotType, fullConfig, globalLowSlot, globalBufferSlot, isGlobalMode]);
 
-  const handleSlotSelect = (type: 'low' | 'probe' | 'sensor' | 'main') => {
+  const handleSlotSelect = (type: 'low' | 'probe' | 'sensor' | 'buffer' | 'main') => {
     setActiveSlot(type);
     setNavLevel('SLOT_SELECTED');
     const current = type === 'main' 
       ? { launcherId: 'MAIN_SYSTEM_BUS', ammoId: launcherSystem.getInstalledBoosterId() || '' }
-      : (type === 'low' ? globalLowSlot : (type === 'probe' ? fullConfig.probeSlot : fullConfig.sensorSlot));
+      : (type === 'low' ? globalLowSlot : (type === 'probe' ? fullConfig.probeSlot : (type === 'sensor' ? fullConfig.sensorSlot : fullConfig.bufferSlot)));
     setStagedLauncher(current?.launcherId || null);
     setStagedAmmoId(current?.ammoId || null);
   };
@@ -102,7 +106,7 @@ const InventoryDialog: React.FC<InventoryDialogProps> = ({ isOpen, onClose, pane
   const hasChanges = useMemo(() => {
     const original = activeSlot === 'main'
       ? { launcherId: 'MAIN_SYSTEM_BUS', ammoId: launcherSystem.getInstalledBoosterId() || '' }
-      : (activeSlot === 'low' ? globalLowSlot : (activeSlot === 'probe' ? fullConfig.probeSlot : fullConfig.sensorSlot));
+      : (activeSlot === 'low' ? globalLowSlot : (activeSlot === 'probe' ? fullConfig.probeSlot : (activeSlot === 'sensor' ? fullConfig.sensorSlot : fullConfig.bufferSlot)));
     
     const launcherChanged = stagedLauncher !== (original?.launcherId || null);
     const ammoChanged = stagedAmmoId !== (original?.ammoId || null);
@@ -118,7 +122,7 @@ const InventoryDialog: React.FC<InventoryDialogProps> = ({ isOpen, onClose, pane
     const ammo = PROBE_AMMUNITION[stagedAmmoId || ''];
 
     return {
-      protocol: activeSlot === 'low' ? 'GLOBAL_NEURO_DATA_INFERENCE' : (activeSlot === 'probe' ? 'CORE_DATA_PROBE' : 'SENSOR_MODULE_EXECUTION'),
+      protocol: activeSlot === 'low' ? 'GLOBAL_NEURO_DATA_INFERENCE' : (activeSlot === 'probe' ? 'CORE_DATA_PROBE' : (activeSlot === 'sensor' ? 'SENSOR_MODULE_EXECUTION' : 'AUGMENTED_BUFFER_MAINTENANCE')),
       panel_context: panelId,
       tier: activeSlot.toUpperCase(),
       launcher_node: launcher?.name || 'NULL',
@@ -135,7 +139,7 @@ const InventoryDialog: React.FC<InventoryDialogProps> = ({ isOpen, onClose, pane
   }, [panelId, activeSlot, stagedLauncher, stagedAmmoId]);
 
   const isHistoricalSupported = PANELS_SUPPORTING_HISTORY.includes(panelId);
-  const requiredLauncherType = activeSlot === 'low' ? 'neural' : (activeSlot === 'probe' ? 'core' : 'sensor-module');
+  const requiredLauncherType = activeSlot === 'low' ? 'neural' : (activeSlot === 'probe' ? 'core' : (activeSlot === 'sensor' ? 'sensor-module' : 'buffer-module'));
   const compatibleLaunchers = useMemo(() => {
     if (activeSlot === 'main') {
         return [{ id: 'MAIN_SYSTEM_BUS', name: 'MAIN SYSTEM BUS', color: '#eab308', type: 'main' as any, tier: 1 as any, description: 'Primary tactical backbone. Accepts Booster Modules.', maxCharges: 1, rechargeRate: 0, tokens: 0, compatibleProbes: [] }];
@@ -149,7 +153,14 @@ const InventoryDialog: React.FC<InventoryDialogProps> = ({ isOpen, onClose, pane
     if (slot === 'low') return '#00ffd5'; 
     if (slot === 'probe') return '#bd00ff'; 
     if (slot === 'sensor') return '#f97316'; 
+    if (slot === 'buffer') return '#3b82f6';
     return '#eab308';
+  };
+
+  const getAmmoTierInfo = (ammo: Consumable) => {
+    if (ammo.isNeuralIntegration || ammo.autoInterval) return { label: 'Automatic', color: '#22c55e', class: 'glimmer-automatic' };
+    if (ammo.type === 'booster' || activeSlot === 'buffer') return { label: 'Augmented', color: '#3b82f6', class: 'glimmer-augmented' };
+    return { label: 'Standard', color: '#eab308', class: 'glimmer-standard' };
   };
 
   const footerActions = (
@@ -177,6 +188,7 @@ const InventoryDialog: React.FC<InventoryDialogProps> = ({ isOpen, onClose, pane
     { id: 'low', name: isGlobalMode ? 'MASTER_LOW_CONFIGURATION' : 'GLOBAL_LOW_SLOT', desc: 'Neural labels & inference. (Globally Managed)', color: getTierColor('low'), visible: isGlobalMode },
     { id: 'probe', name: isGlobalMode ? 'MASTER_PROBE_CONFIGURATION' : 'PROBE_TIER_SLOT', desc: isGlobalMode ? 'Updates all equipped med-tier slots.' : 'Deep-dive panel telemetry auditing.', color: getTierColor('probe'), disabled: (!isGlobalMode && panelId === 'GLOBAL_SYSTEM_PROBE') || !fullConfig.probeSlot, visible: true },
     { id: 'sensor', name: 'SENSOR_PORT_SLOT', desc: 'Hardware sensor nodes.', color: getTierColor('sensor'), disabled: panelId !== 'SENSOR_PANEL', visible: !isGlobalMode },
+    { id: 'buffer', name: isGlobalMode ? 'MASTER_BUFFER_CONFIGURATION' : 'BUFFER_PORT_SLOT', desc: isGlobalMode ? 'Updates all equipped augmented slots.' : 'Maintain system buffs and script optimization.', color: getTierColor('buffer'), disabled: panelId !== 'SENSOR_PANEL' && !isGlobalMode, visible: true },
     { id: 'main', name: 'BOOSTER_TIER_SLOT', desc: 'Global Neural Override.', color: getTierColor('main'), visible: true }
   ];
 
@@ -185,7 +197,7 @@ const InventoryDialog: React.FC<InventoryDialogProps> = ({ isOpen, onClose, pane
       isOpen={isOpen} 
       onClose={onClose} 
       title={isGlobalMode ? 'MASTER_MATRIX_CONFIG' : `PANEL_CONFIG: ${panelId}`} 
-      variant={activeSlot === 'sensor' ? 'green' : 'purple'}
+      variant={activeSlot === 'sensor' ? 'green' : (activeSlot === 'buffer' ? 'blue' : 'purple')}
       footerActions={footerActions}
     >
       <div className="flex flex-col h-[620px] overflow-hidden">
@@ -255,12 +267,17 @@ const InventoryDialog: React.FC<InventoryDialogProps> = ({ isOpen, onClose, pane
                            {Object.values(PROBE_AMMUNITION).filter(a => a.compatibleLaunchers.includes(l.type as any)).filter(a => !(a.features.includes('HISTORY_CSV') && !isHistoricalSupported)).map(ammo => {
                                const isPending = stagedAmmoId === ammo.id;
                                const count = launcherSystem.getAmmoCount(ammo.id);
+                               const tierInfo = getAmmoTierInfo(ammo);
+                               
                                return (
-                                 <div key={ammo.id} className={`relative p-3 border text-[9px] flex flex-col gap-1 transition-all ml-4 ${ammo.disabled ? 'opacity-40 grayscale cursor-not-allowed' : 'cursor-pointer hover:bg-zinc-900 bg-black/60 border-zinc-800'} ${isPending ? 'border-teal-500 shadow-[0_0_10px_rgba(20,184,166,0.1)]' : ''}`} onClick={() => !ammo.disabled && handleAmmoSelect(ammo.id)}>
+                                 <div key={ammo.id} className={`relative p-3 border text-[9px] flex flex-col gap-1 transition-all ml-4 ${ammo.disabled ? 'opacity-40 grayscale cursor-not-allowed' : 'cursor-pointer hover:bg-zinc-900 bg-black/60 border-zinc-800'} ${isPending ? 'border-white shadow-[0_0_10px_rgba(255,255,255,0.1)]' : ''}`} onClick={() => !ammo.disabled && handleAmmoSelect(ammo.id)}>
                                    <div className="absolute -left-4 top-1/2 w-4 h-[1px] bg-zinc-800"></div>
                                    <div className="flex justify-between items-center">
-                                     <span className="font-black uppercase tracking-wider text-zinc-300">{ammo.name}</span>
-                                     {isPending && <span className="text-[7px] text-black px-1 font-bold bg-teal-500 uppercase">SELECTED</span>}
+                                     <div className="flex items-center gap-2">
+                                        <span className={`font-black uppercase tracking-wider ${tierInfo.class}`}>{ammo.name}</span>
+                                        <span className="text-[6px] font-mono px-1 border border-zinc-800 text-zinc-600 uppercase">{tierInfo.label}</span>
+                                     </div>
+                                     {isPending && <span className="text-[7px] text-black px-1 font-bold bg-white uppercase">SELECTED</span>}
                                    </div>
                                    <span className="text-zinc-600 italic text-[8px] leading-tight">{ammo.description}</span>
                                    {!ammo.unlimited && (
@@ -307,7 +324,7 @@ const InventoryDialog: React.FC<InventoryDialogProps> = ({ isOpen, onClose, pane
                    </svg>
                 </div>
                 <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-white">
-                  {activeSlot === 'low' ? 'GLOBAL_NEURO_INFERENCE' : `${activeSlot.toUpperCase()}_TIER_INFERENCE`}
+                  {activeSlot === 'low' ? 'GLOBAL_NEURO_INFERENCE' : (activeSlot === 'buffer' ? 'AUGMENTED_BUFFER_MAINTENANCE' : `${activeSlot.toUpperCase()}_TIER_INFERENCE`)}
                 </h3>
                 {isGlobalMode && <span className="text-[7px] text-teal-400 font-black uppercase tracking-widest animate-pulse">[MASTER_OVERRIDE_ACTIVE]</span>}
              </div>

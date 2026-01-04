@@ -88,5 +88,18 @@ export const launchersData: Launcher[] = [
     "compatibleProbes": ["FULL_SPECTRUM_GRID"],
     "baseCooldown": 120000,
     "isExtended": true
+  },
+  {
+    "id": "mod-augmented-buffer",
+    "name": "Augmented Buffer Module",
+    "type": "buffer-module",
+    "tier": 1,
+    "description": "Specialized tactical buffer module. Designed to maintain continuous system buffs and script effects.",
+    "maxCharges": 1,
+    "rechargeRate": 0,
+    "color": "#3b82f6",
+    "tokens": 2000,
+    "compatibleProbes": ["*"],
+    "baseCooldown": 60000
   }
 ];

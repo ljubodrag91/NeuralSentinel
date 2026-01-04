@@ -14,7 +14,8 @@ export const PANELS_SUPPORTING_EXTENDED = [
   'PROCESS_PROBE',
   'RSSI_REPORT',
   'SESSION_ARCHIVE',
-  'SENSOR_PANEL'
+  'SENSOR_PANEL',
+  'ADMIN_PANEL'
 ];
 
 // Panels supporting Historical (Tier 3) launchers and features
@@ -36,6 +37,11 @@ export const DEFAULT_GLOBAL_PROBE_SLOT: SlotConfig = {
 
 export const DEFAULT_GLOBAL_SENSOR_SLOT: SlotConfig = { 
   launcherId: 'mod-std-sensor', 
+  ammoId: 'sensor-script-ammo' 
+};
+
+export const DEFAULT_GLOBAL_BUFFER_SLOT: SlotConfig = { 
+  launcherId: 'mod-augmented-buffer', 
   ammoId: 'script-timer' 
 };
 
@@ -51,9 +57,11 @@ export const DEFAULT_PANEL_CONFIG: Record<string, PanelSlotConfig> = {
   'RSSI_REPORT': { probeSlot: { launcherId: 'std-core', ammoId: 'std-data-ammo' } },
   'SESSION_ARCHIVE': { probeSlot: { launcherId: 'std-core', ammoId: 'std-data-ammo' } },
   'LOG_AUDIT': { probeSlot: { launcherId: 'std-core', ammoId: 'std-data-ammo' } },
+  'ADMIN_PANEL': { probeSlot: { launcherId: 'std-core', ammoId: 'std-data-ammo' } },
   'SENSOR_PANEL': { 
     probeSlot: { launcherId: 'std-core', ammoId: 'std-data-ammo' }, 
-    sensorSlot: { launcherId: 'mod-std-sensor', ammoId: 'script-timer' } 
+    sensorSlot: { launcherId: 'mod-std-sensor', ammoId: 'sensor-script-ammo' },
+    bufferSlot: { launcherId: 'mod-augmented-buffer', ammoId: 'script-timer' }
   },
 };
 
@@ -72,14 +80,15 @@ export const PROBE_CONSUMABLES = LOADED_CONSUMABLES;
 class LauncherSystem {
   private launchers: Record<string, Launcher> = LOADED_LAUNCHERS;
   private consumables: Record<string, Consumable> = LOADED_CONSUMABLES;
-  private ownedLaunchers: Set<string> = new Set(['std-core', 'hist-core', 'std-neural', 'ext-neural', 'mod-std-sensor', 'mod-full-sensor']);
+  private ownedLaunchers: Set<string> = new Set(['std-core', 'hist-core', 'std-neural', 'ext-neural', 'mod-std-sensor', 'mod-full-sensor', 'mod-augmented-buffer']);
   private ownedConsumables: Record<string, number> = {
     'std-data-ammo': 999,
     'historical-data-ammo': 100,
     'std-neural-ammo': 999,
     'neural-link-bypasser': 2,
     'module-core-logic': 999,
-    'script-timer': 5
+    'script-timer': 5,
+    'sensor-script-ammo': 999
   };
   private boosterEndTime: number = 0;
   private installedBoosterId: string | null = null;
@@ -129,11 +138,11 @@ class LauncherSystem {
   getConsumableById(id: string) { return this.consumables[id]; }
   isOwned(id: string) { return this.ownedLaunchers.has(id); }
 
-  getCompatible(type: 'core' | 'neural' | 'sensor-module') {
+  getCompatible(type: 'core' | 'neural' | 'sensor-module' | 'buffer-module') {
     return Object.values(this.launchers).filter(l => l.type === type && this.ownedLaunchers.has(l.id));
   }
   
-  getCompatibleAmmo(launcherType: 'core' | 'neural' | 'main' | 'sensor-module') {
+  getCompatibleAmmo(launcherType: 'core' | 'neural' | 'main' | 'sensor-module' | 'buffer-module') {
     return Object.values(this.consumables).filter(a => a.compatibleLaunchers.includes(launcherType));
   }
 

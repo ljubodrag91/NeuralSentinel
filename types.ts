@@ -28,7 +28,7 @@ export enum LogLevel {
 
 export type LogType = 'neural' | 'console' | 'kernel' | 'system';
 export type ProbeStatus = 'COMPLETED' | 'ERROR' | 'NO_DATA' | 'PARTIAL' | 'PENDING';
-export type SlotType = 'LOW' | 'PROBE' | 'MAIN' | 'SENSOR';
+export type SlotType = 'LOW' | 'PROBE' | 'MAIN' | 'SENSOR' | 'BUFFER';
 export type DetailedProbeType = 'NEURO_DATA' | 'CORE_DATA' | 'HISTORICAL_CORE' | 'SENSOR_TRIGGER';
 
 export enum ScriptState {
@@ -131,6 +131,11 @@ export interface CoreStats {
       mac: string[];
       isUp: boolean;
       speed: number;
+      rxKB?: number;
+      txKB?: number;
+      totalSentMB?: number;
+      totalRecvMB?: number;
+      lastActivity?: string;
     }>;
   };
   processes: {
@@ -179,14 +184,16 @@ export interface SlotConfig {
 }
 
 export interface PanelSlotConfig {
-  probeSlot?: SlotConfig; // Renamed from mediumSlot
-  sensorSlot?: SlotConfig;   // Dedicated Sensor Slot (Scanner only)
+  probeSlot?: SlotConfig; 
+  sensorSlot?: SlotConfig;   
+  bufferSlot?: SlotConfig;   
 }
 
 export interface SlotPermissions {
   low: boolean;
   probe: boolean;
   sensor: boolean;
+  buffer: boolean;
 }
 
 export interface AppSettings {
@@ -204,8 +211,9 @@ export interface AppSettings {
   maxNeuralCharges: number;
   panelSlots: Record<string, PanelSlotConfig>;
   globalLowSlot: SlotConfig; 
-  globalProbeSlot: SlotConfig; // Persistent Master Probe Slot
-  globalSensorSlot: SlotConfig; // Persistent Master Sensor Slot
+  globalProbeSlot: SlotConfig; 
+  globalSensorSlot: SlotConfig; 
+  globalBufferSlot: SlotConfig; 
   slotPermissions: Record<string, SlotPermissions>;
   telemetryEnabled: boolean;
   neuralUplinkEnabled: boolean;
@@ -229,8 +237,8 @@ export type Timeframe = '1m' | '5m' | '15m' | '30m' | '1h' | '6h' | '12h' | '24h
 export interface Launcher {
   id: string;
   name: string;
-  type: 'core' | 'neural' | 'sensor-module';
-  tier?: 1 | 2 | 3; // Added hierarchy support
+  type: 'core' | 'neural' | 'sensor-module' | 'buffer-module';
+  tier?: 1 | 2 | 3; 
   description: string;
   maxCharges: number;
   rechargeRate: number; // seconds
@@ -238,7 +246,7 @@ export interface Launcher {
   color: string;
   tokens: number;
   baseCooldown?: number; // ms
-  isExtended?: boolean; // If true, triggers neural calls
+  isExtended?: boolean; 
 }
 
 export interface Consumable {
@@ -246,7 +254,7 @@ export interface Consumable {
   name: string;
   type: 'data' | 'neural' | 'booster' | 'module-core';
   description: string;
-  compatibleLaunchers: ('core' | 'neural' | 'main' | 'sensor-module')[];
+  compatibleLaunchers: ('core' | 'neural' | 'main' | 'sensor-module' | 'buffer-module')[];
   cost: number;
   features: string[];
   disabled?: boolean;
@@ -274,8 +282,6 @@ export interface ProbeResult {
   threatLevel: "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
 }
 
-// --- SCANNER SYSTEM TYPES ---
-
 export type SensorScanType = 'NETWORK' | 'SYSTEM' | 'PROCESS' | 'FILESYSTEM' | 'SECURITY';
 
 export interface SensorNodeConfig {
@@ -288,7 +294,6 @@ export interface SensorNodeConfig {
   noDataDefinition: string;
   sensitivity: number; // 1-100
   timeout: number; // ms
-  // Visual placement
   x: number;
   y: number;
 }
@@ -304,8 +309,8 @@ export interface SensorArrayConfig {
   name: string;
   description: string;
   compatibility?: "WINDOWS" | "LINUX" | "BOTH";
-  nodeIds?: string[]; // References to SensorNodeConfig IDs
-  nodes: SensorNodeConfig[]; // Hydrated nodes
+  nodeIds?: string[]; 
+  nodes: SensorNodeConfig[]; 
   settings: GlobalArraySettings;
   created: number;
   modified: number;

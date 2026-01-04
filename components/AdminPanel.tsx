@@ -10,6 +10,10 @@ interface AdminPanelProps {
   allowDistortion?: boolean;
   settings: AppSettings;
   setSettings: React.Dispatch<React.SetStateAction<AppSettings>>;
+  onProbe: (panel: string, data: any) => void;
+  onBrain: (id: string, type: string, metrics: any) => void;
+  onLauncherSelect: (id: string, type: 'low' | 'probe') => void;
+  processingId?: string;
 }
 
 const PANEL_GROUPS: Record<string, string[]> = {
@@ -23,7 +27,7 @@ const PANEL_GROUPS: Record<string, string[]> = {
 
 const ITEMS_PER_PAGE = 6;
 
-const AdminPanel: React.FC<AdminPanelProps> = ({ allowDistortion, settings, setSettings }) => {
+const AdminPanel: React.FC<AdminPanelProps> = ({ allowDistortion, settings, setSettings, onProbe, onBrain, onLauncherSelect, processingId }) => {
   const [activeTab, setActiveTab] = useState<'PANELS' | 'LAUNCHERS' | 'CONSUMABLES'>('PANELS');
   const [searchQuery, setSearchQuery] = useState('');
   
@@ -103,7 +107,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ allowDistortion, settings, setS
 
   const togglePanelSlot = (panelId: string, slot: keyof SlotPermissions) => {
     setSettings(prev => {
-      const current = prev.slotPermissions[panelId] || { low: true, probe: true, sensor: true };
+      const current = prev.slotPermissions[panelId] || { low: true, probe: true, sensor: true, buffer: true };
       return {
         ...prev,
         slotPermissions: {
@@ -182,7 +186,21 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ allowDistortion, settings, setS
         
         {activeTab === 'PANELS' && (
             <div className="w-full flex flex-col overflow-hidden">
-              <Card id="admin_slot_management" title="PANEL_INFRASTRUCTURE_CONTROL" variant="purple" allowDistortion={allowDistortion} className="flex-1 overflow-hidden">
+              <Card 
+                id="ADMIN_PANEL" 
+                title="PANEL_INFRASTRUCTURE_CONTROL" 
+                variant="purple" 
+                allowDistortion={allowDistortion} 
+                className="flex-1 overflow-hidden"
+                onProbe={() => onProbe('ADMIN_PANEL', { settings })}
+                onBrain={() => onBrain('ADMIN_PANEL', 'Infrastructure Audit', { settings })}
+                onLauncherSelect={(pid, type) => onLauncherSelect('ADMIN_PANEL', type)}
+                slotConfig={settings.panelSlots['ADMIN_PANEL']}
+                globalLowSlot={settings.globalLowSlot}
+                permissions={settings.slotPermissions['ADMIN_PANEL'] || { low: true, probe: true, sensor: false, buffer: false }}
+                isProcessing={processingId === 'ADMIN_PANEL'}
+                isAnyProcessing={!!processingId}
+              >
                   <div className="flex flex-col h-full overflow-hidden">
                       <p className="text-[9px] text-zinc-500 italic mb-6 border-b border-zinc-900 pb-4 shrink-0">
                         Map hardware interfaces and configure slot availability across tactical groups. 
@@ -204,7 +222,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ allowDistortion, settings, setS
 
                                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                                       {visiblePanels.map(panelId => {
-                                        const perms = settings.slotPermissions[panelId] || { low: true, probe: true, sensor: true };
+                                        const perms = settings.slotPermissions[panelId] || { low: true, probe: true, sensor: true, buffer: true };
                                         const hasSensorSupport = panelId === 'SENSOR_PANEL';
 
                                         return (
@@ -251,7 +269,14 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ allowDistortion, settings, setS
         {activeTab === 'LAUNCHERS' && (
             <>
             <div className="w-full lg:w-1/2 flex flex-col overflow-hidden">
-                <Card id="admin_launcher_editor" title={editingId ? 'EDIT_LAUNCHER_MODULE' : 'NEW_LAUNCHER_MODULE'} variant="teal" allowDistortion={allowDistortion} className="flex-1 overflow-hidden">
+                <Card 
+                  id="admin_launcher_editor" 
+                  title={editingId ? 'EDIT_LAUNCHER_MODULE' : 'NEW_LAUNCHER_MODULE'} 
+                  variant="teal" 
+                  allowDistortion={allowDistortion} 
+                  className="flex-1 overflow-hidden"
+                  permissions={{ low: false, probe: false, sensor: false, buffer: false }}
+                >
                     <div className="space-y-4 overflow-y-auto pr-2 flex-1 scrollbar-thin">
                       <div className="grid grid-cols-2 gap-4">
                           <div className="flex flex-col gap-1">
@@ -335,7 +360,14 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ allowDistortion, settings, setS
         {activeTab === 'CONSUMABLES' && (
             <>
             <div className="w-full lg:w-1/2 flex flex-col overflow-hidden">
-                <Card id="admin_consumable_editor" title={editingConsumableId ? 'EDIT_CONSUMABLE' : 'NEW_CONSUMABLE'} variant="blue" allowDistortion={allowDistortion} className="flex-1 overflow-hidden">
+                <Card 
+                  id="admin_consumable_editor" 
+                  title={editingConsumableId ? 'EDIT_CONSUMABLE' : 'NEW_CONSUMABLE'} 
+                  variant="blue" 
+                  allowDistortion={allowDistortion} 
+                  className="flex-1 overflow-hidden"
+                  permissions={{ low: false, probe: false, sensor: false, buffer: false }}
+                >
                     <div className="space-y-4 overflow-y-auto pr-2 flex-1 scrollbar-thin">
                         <div className="grid grid-cols-2 gap-4">
                             <div className="flex flex-col gap-1">

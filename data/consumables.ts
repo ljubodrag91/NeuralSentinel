@@ -14,7 +14,7 @@ export const consumablesData: Consumable[] = [
   },
   {
     "id": "historical-data-ammo",
-    "name": "Historical Probe (Extended)",
+    "name": "Standard Historical Probe (Extended)",
     "type": "data",
     "description": "Includes up to 24h of local CSV history for trend analysis. Stack limited.",
     "compatibleLaunchers": ["core"],
@@ -34,27 +34,27 @@ export const consumablesData: Consumable[] = [
   },
   {
     "id": "script-cap-double",
-    "name": "Double Capacity Script",
+    "name": "Augmented Capacity Multiplier",
     "type": "booster",
     "description": "Neural buffer script. Doubles the current capacity of the targeted low or mid slot.",
-    "compatibleLaunchers": ["core", "neural"],
+    "compatibleLaunchers": ["core", "neural", "buffer-module"],
     "cost": 0,
     "features": ["CAPACITY_MODIFIER", "X2_MULT"],
     "unlimited": true
   },
   {
     "id": "script-cap-plus2",
-    "name": "Increment +2 Script",
+    "name": "Augmented Capacity Expansion",
     "type": "booster",
     "description": "Modular expansion script. Increases current capacity of the targeted slot by 2.",
-    "compatibleLaunchers": ["core", "neural"],
+    "compatibleLaunchers": ["core", "neural", "buffer-module"],
     "cost": 0,
     "features": ["CAPACITY_MODIFIER", "PLUS_2_ADD"],
     "unlimited": true
   },
   {
     "id": "sensor-script-ammo",
-    "name": "Sensor Script Packet",
+    "name": "Standard Sensor Packet",
     "type": "module-core",
     "description": "Automated scanning sequence. Triggers full sensor array execution in Scanner Panel.",
     "compatibleLaunchers": ["sensor-module"],
@@ -64,7 +64,7 @@ export const consumablesData: Consumable[] = [
   },
   {
     "id": "sensor-script-neural-1m",
-    "name": "Neural Integration Script (1m)",
+    "name": "Automatic Neural Sync (1m)",
     "type": "module-core",
     "description": "Automated scanning sequence with Neural Integration. Scans and transmits results every 1 minute.",
     "compatibleLaunchers": ["sensor-module"],
@@ -76,7 +76,7 @@ export const consumablesData: Consumable[] = [
   },
   {
     "id": "sensor-script-neural-5m",
-    "name": "Neural Integration Script (5m)",
+    "name": "Automatic Neural Sync (5m)",
     "type": "module-core",
     "description": "Automated scanning sequence with Neural Integration. Scans and transmits results every 5 minutes.",
     "compatibleLaunchers": ["sensor-module"],
@@ -88,7 +88,7 @@ export const consumablesData: Consumable[] = [
   },
   {
     "id": "sensor-script-neural-10m",
-    "name": "Neural Integration Script (10m)",
+    "name": "Automatic Neural Sync (10m)",
     "type": "module-core",
     "description": "Automated scanning sequence with Neural Integration. Scans and transmits results every 10 minutes.",
     "compatibleLaunchers": ["sensor-module"],
@@ -100,20 +100,20 @@ export const consumablesData: Consumable[] = [
   },
   {
     "id": "script-timer",
-    "name": "Script Reload Timer",
+    "name": "Augmented Reload Optimization",
     "type": "booster",
     "description": "Tactical high-slot module. Controls and optimizes reload cooldowns for all high-tier modules.",
-    "compatibleLaunchers": ["sensor-module"],
+    "compatibleLaunchers": ["sensor-module", "buffer-module"],
     "cost": 1,
     "features": ["COOLDOWN_REDUCTION", "AUTO_RELOAD"],
     "maxStack": 10
   },
   {
     "id": "neural-link-bypasser",
-    "name": "Neural Link Bypasser",
+    "name": "Augmented Cerebral Override",
     "type": "booster",
     "description": "Tactical cerebral override. Bypasses all probe cooldowns for 60 minutes.",
-    "compatibleLaunchers": ["main"],
+    "compatibleLaunchers": ["main", "buffer-module"],
     "cost": 0,
     "features": ["COOLDOWN_BYPASS", "INSTANT_RELOAD"],
     "maxStack": 5

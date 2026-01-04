@@ -18,6 +18,7 @@ interface CardProps {
   onLauncherSelect?: (panelId: string, type: 'low' | 'probe') => void;
   onHistory?: () => void;
   isProcessing?: boolean;
+  isAnyProcessing?: boolean;
   variant?: 'real' | 'sim' | 'default' | 'blue' | 'purple' | 'green' | 'offline' | 'teal';
   probeColor?: string;
   allowDistortion?: boolean;
@@ -29,7 +30,7 @@ interface CardProps {
 }
 
 const Card: React.FC<CardProps> = ({ 
-  id, title, titleTooltip, children, className = '', onProbe, onProbeInfo, onBrain, onLauncherSelect, onHistory, isProcessing, variant = 'default', probeColor, allowDistortion = false, platform, cooldown = 0, permissions = { low: true, probe: true, sensor: false }, slotConfig, globalLowSlot
+  id, title, titleTooltip, children, className = '', onProbe, onProbeInfo, onBrain, onLauncherSelect, onHistory, isProcessing, isAnyProcessing, variant = 'default', probeColor, allowDistortion = false, platform, cooldown = 0, permissions = { low: true, probe: true, sensor: false, buffer: false }, slotConfig, globalLowSlot
 }) => {
   const [isGlitching, setIsGlitching] = useState(false);
   const [tick, setTick] = useState(0);
@@ -82,8 +83,10 @@ const Card: React.FC<CardProps> = ({
     const isEquipped = !!equipped?.launcherId;
     const isAdminEnabled = permissions[type];
     
-    // Low slots are removed from individual panels as per requirement
-    const isInteractive = isAdminEnabled && !isProcessing;
+    // Only render the slot if it is permitted by the admin policy
+    if (!isAdminEnabled) return null;
+
+    const isInteractive = !isAnyProcessing;
     const targetPanelId = id;
     
     let label = 'PROBE';
@@ -105,17 +108,13 @@ const Card: React.FC<CardProps> = ({
       <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
     );
 
-    if (!isAdminEnabled) colorHex = '#450a0a';
-
-    let tooltipFullDesc = isAdminEnabled 
-      ? `Slot: ${label}\nModule: ${moduleName}\nCharges: ${charges}/${maxCharges}\nCooldown: ${(cooldownValue/1000).toFixed(1)}s\n\nLocal panel-specific probe manifold.`
-      : 'DISABLED_BY_ADMIN';
+    let tooltipFullDesc = `Slot: ${label}\nModule: ${moduleName}\nCharges: ${charges}/${maxCharges}\nCooldown: ${(cooldownValue/1000).toFixed(1)}s\n\nLocal panel-specific probe manifold.`;
 
     return (
       <Tooltip key={type} name={`${label}_SLOT`} source="SYSTEM" desc={tooltipFullDesc} variant={isEquipped ? 'purple' : 'default'}>
         <div 
           onClick={() => isInteractive && onLauncherSelect?.(targetPanelId, type)}
-          className={`group relative flex flex-col items-center justify-center w-10 h-12 border transition-all ${isInteractive ? 'bg-black/60 border-zinc-800 hover:border-zinc-500 cursor-pointer' : 'bg-red-950/5 border-zinc-900/30 opacity-40 cursor-default'}`}
+          className={`group relative flex flex-col items-center justify-center w-10 h-12 border transition-all ${isInteractive ? 'bg-black/60 border-zinc-800 hover:border-zinc-500 cursor-pointer' : 'bg-zinc-950 border-zinc-900/30 opacity-40 cursor-default'}`}
           style={{ color: colorHex }}
         >
            <div className="relative">
@@ -151,10 +150,12 @@ const Card: React.FC<CardProps> = ({
               {title}
             </h3>
             
-            <div className="flex items-center gap-1 border-l border-zinc-800/50 pl-4 ml-2">
-              {/* Individual Low Slot rendering removed as per global configuration requirement */}
-              {renderSlotIcon('probe')}
-            </div>
+            {/* Respect probe permission and config existence for rendering header slots. Hidden if permission is false or slot is empty in management contexts. */}
+            {permissions.probe && slotConfig && (
+              <div className="flex items-center gap-1 border-l border-zinc-800/50 pl-4 ml-2">
+                {renderSlotIcon('probe')}
+              </div>
+            )}
           </div>
 
           <div className="flex items-center gap-3">
@@ -169,23 +170,23 @@ const Card: React.FC<CardProps> = ({
               </Tooltip>
             )}
             
-            {onProbe && (
+            {onProbe && permissions.probe && (
               <Tooltip name="CORE_DATA_PROBE" source="NEURAL_NETWORK" variant="purple" desc="Initiate a Deep-Dive Core Data Probe.">
                 <TacticalButton 
                   label={isProcessing ? 'SYNC' : 'PROBE'} 
                   onClick={onProbe} 
-                  disabled={isProcessing || !permissions.probe} 
+                  disabled={isAnyProcessing || !permissions.probe} 
                   color={probeColor || '#bd00ff'} 
                   size="sm" cooldown={cooldown} 
                 />
               </Tooltip>
             )}
 
-            {onBrain && (
+            {onBrain && permissions.low && (
               <Tooltip name="NEURAL_INFERENCE" source="NEURAL_NETWORK" variant="purple" desc="Initiate a Contextual Neural Inference using GLOBAL LOW slot. Consumption: 1 Global Low Charge.">
                 <button 
-                  onClick={onBrain} disabled={isProcessing || !permissions.low}
-                  className={`p-1.5 border border-zinc-800 bg-zinc-950 flex items-center justify-center transition-all ${isProcessing ? 'animate-pulse text-purple-400' : 'text-teal-600 hover:text-teal-400'} ${!permissions.low ? 'opacity-20 cursor-not-allowed' : 'active:scale-90'}`}
+                  onClick={onBrain} disabled={isAnyProcessing || !permissions.low}
+                  className={`p-1.5 border border-zinc-800 bg-zinc-950 flex items-center justify-center transition-all ${isProcessing ? 'animate-pulse text-purple-400' : 'text-teal-600 hover:text-teal-400'} ${!permissions.low || isAnyProcessing ? 'opacity-20 cursor-not-allowed' : 'active:scale-90'}`}
                 >
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-4 h-4"><path d="M9.5 2A2.5 2.5 0 0 1 12 4.5v15a2.5 2.5 0 0 1-4.96.44 2.5 2.5 0 0 1-2.79-2.74 2.5 2.5 0 0 1-2-2.53 2.5 2.5 0 0 1 2.5-2.5h.75a.5.5 0 0 0 .5-.5v-4.73a2.5 2.5 0 0 1 2.5-2.5h1zM14.5 2A2.5 2.5 0 0 0 12 4.5v15a2.5 2.5 0 0 0 4.96.44 2.5 2.5 0 0 0 2.79-2.74 2.5 2.5 0 0 0 2-2.53 2.5 2.5 0 0 0-2.5-2.5h-.75a.5.5 0 0 1-.5-.5v-4.73a2.5 2.5 0 0 0-2.5-2.5h-1z"/></svg>
                 </button>
