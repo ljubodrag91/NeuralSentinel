@@ -1,8 +1,7 @@
-
 import React, { useState, useEffect, useMemo } from 'react';
 import Card from './common/Card';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, ResponsiveContainer, Tooltip as RechartsTooltip, BarChart, Bar } from 'recharts';
-import { Timeframe, OperationalMode, CoreStats } from '../types';
+import { Timeframe, OperationalMode, CoreStats, AppSettings, SlotPermissions, PanelSlotConfig, SlotConfig } from '../types';
 import Tooltip from './common/Tooltip';
 import Modal from './common/Modal';
 
@@ -11,19 +10,23 @@ interface TelemetryProps {
   onProbe: (panel: string, data: any) => void;
   onProbeInfo: (title: string, payload: any) => void;
   onBrainClick: (id: string, type: string, metrics: any) => void;
-  onLauncherSelect: (id: string, type: 'data' | 'neural') => void;
+  onLauncherSelect: (id: string, type: 'low' | 'probe') => void;
   onHistoryShow?: (panelId: string, title: string, headers: string[]) => void;
   isSimulated: boolean;
   isConnected: boolean;
   timeframe: Timeframe;
   processingId?: string;
   allowDistortion?: boolean;
-  serviceStatus: 'ONLINE' | 'OFFLINE' | 'LOCKED';
+  serviceStatus: 'ONLINE' | 'OFFLINE' | 'LOCKED' | 'CONNECTING';
   onRetryConnection: () => void;
+  settings: AppSettings;
+  slotConfig?: PanelSlotConfig;
+  globalLowSlot?: SlotConfig;
+  permissions?: SlotPermissions;
 }
 
 const TelemetryGraphs: React.FC<TelemetryProps> = ({ 
-  stats, onProbe, onProbeInfo, onBrainClick, onLauncherSelect, onHistoryShow, isSimulated, isConnected, timeframe, processingId, allowDistortion, serviceStatus, onRetryConnection 
+  stats, onProbe, onProbeInfo, onBrainClick, onLauncherSelect, onHistoryShow, isSimulated, isConnected, timeframe, processingId, allowDistortion, serviceStatus, onRetryConnection, settings, slotConfig, globalLowSlot, permissions
 }) => {
   const [rssiData, setRssiData] = useState<any[]>([]);
   const [activeMetrics, setActiveMetrics] = useState<Set<string>>(new Set(['rssi']));
@@ -64,28 +67,19 @@ const TelemetryGraphs: React.FC<TelemetryProps> = ({
     });
   };
 
-  // Strictly check both connection and data availability.
-  // If connection is good but stats are missing, we don't fabricate data.
   const isDataActive = serviceStatus === 'ONLINE' && !!stats; 
-  const sourceState = isDataActive ? 'LIVE' : 'OFFLINE';
 
   useEffect(() => {
     if (!isDataActive || !stats) return;
 
-    // Strict Data Mode: Only push points if we have data.
     const now = new Date();
     const timeLabel = now.toLocaleTimeString();
     
-    // Derive Signal from valid stats
     let signalVal = -65; 
-    
     const load = stats.cpu?.usage || 0;
     const net = (stats.network?.inRateKB || 0) + (stats.network?.outRateKB || 0);
-    // Fluctuate based on actual system load to visualize "activity"
     signalVal += (Math.random() * 5) - (load / 20); 
     if (net > 500) signalVal -= 5;
-
-    // Clamp value
     signalVal = Math.max(-95, Math.min(-30, signalVal));
 
     setRssiData(prev => {
@@ -98,26 +92,38 @@ const TelemetryGraphs: React.FC<TelemetryProps> = ({
   const currentRssi = (isDataActive && rssiData.length > 0) ? rssiData[rssiData.length - 1].val : -99;
   const themeColor = serviceStatus === 'ONLINE' ? '#00ffd5' : '#ff3e3e';
 
+  const getStatusDisplay = () => {
+    switch (serviceStatus) {
+      case 'ONLINE': return <span className="text-green-500 font-bold uppercase tracking-widest">LIVE</span>;
+      case 'CONNECTING': return <span className="text-teal-400 font-bold uppercase tracking-widest animate-pulse">CONNECTING...</span>;
+      case 'LOCKED': return <span className="text-red-900 font-bold uppercase tracking-widest">LOCKED (RETRY_MANUAL)</span>;
+      case 'OFFLINE': 
+      default: return <span className="text-red-600 font-bold uppercase tracking-widest">OFFLINE</span>;
+    }
+  };
+
   return (
     <div className="space-y-10 animate-in fade-in duration-500 pb-20 no-scroll h-full">
       <div className="flex justify-between items-center px-4">
         <div className="flex items-center gap-4">
           <div className="text-[10px] font-black text-zinc-700 uppercase tracking-widest">RF_TELEMETRY_ENGINE</div>
-          {serviceStatus !== 'ONLINE' && (
-            <div className="px-3 py-1 bg-red-950/30 border border-red-900/50 text-red-500 text-[9px] font-black uppercase tracking-widest animate-pulse">
-              UPLINK_OFFLINE
-            </div>
-          )}
-        </div>
-        <div className="flex items-center gap-2">
-          {serviceStatus === 'LOCKED' && (
+          <div className="flex items-center gap-2 border-l border-zinc-900 pl-4">
              <button 
                onClick={onRetryConnection}
-               className="text-[9px] font-black border border-red-500 bg-red-500/10 px-3 py-1.5 text-red-400 hover:text-white hover:bg-red-500 transition-all uppercase tracking-widest animate-pulse"
+               disabled={serviceStatus === 'CONNECTING'}
+               className={`text-[9px] font-black border px-3 py-1.5 uppercase tracking-widest transition-all ${
+                 serviceStatus === 'ONLINE' ? 'border-teal-500/30 text-teal-500 hover:bg-teal-500/10' : 
+                 'border-red-500/60 bg-red-950/20 text-red-500 hover:bg-red-500 hover:text-white'
+               } ${serviceStatus === 'CONNECTING' ? 'opacity-50 cursor-wait' : ''}`}
              >
-               INITIALIZE_UPLINK
+               {serviceStatus === 'ONLINE' ? 'SYNC_UPLINK' : 'INITIALIZE_UPLINK'}
              </button>
-          )}
+             <div className="text-[9px] font-mono ml-2">
+                {getStatusDisplay()}
+             </div>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
           <button 
             onClick={downloadSentinelScripts}
             className="text-[9px] font-black border border-teal-500/30 bg-teal-500/5 px-3 py-1.5 text-teal-500 hover:text-white hover:bg-teal-500/20 transition-all uppercase tracking-widest"
@@ -180,9 +186,14 @@ const TelemetryGraphs: React.FC<TelemetryProps> = ({
             onProbe={() => onProbe('RSSI_REPORT', { rssiData })}
             onProbeInfo={() => onProbeInfo('RSSI_REPORT', { rssiData })}
             onBrain={() => onBrainClick('RSSI_REPORT', 'RF Intelligence', { currentRssi })}
-            onLauncherSelect={(_, type) => onLauncherSelect('RSSI_REPORT', type)}
+            onLauncherSelect={(_, type) => onLauncherSelect('RSSI_REPORT', type as any)}
             onHistory={() => onHistoryShow?.('RSSI_REPORT', 'RF_SIGNAL_LOG', ['SIGNAL', 'NOISE'])}
             allowDistortion={allowDistortion}
+            slotConfig={slotConfig}
+            globalLowSlot={globalLowSlot}
+            permissions={permissions}
+            isProcessing={processingId === 'RSSI_REPORT'}
+            platform={settings.platform}
           >
             {serviceStatus === 'ONLINE' ? (
               <div className="w-full h-full pb-10">

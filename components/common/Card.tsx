@@ -77,17 +77,17 @@ const Card: React.FC<CardProps> = ({
   const accent = getAccentStyles();
   const titleColorClass = getTitleColor();
 
-  const renderSlotIcon = (type: 'low' | 'probe') => {
-    const equipped = type === 'low' ? globalLowSlot : slotConfig?.probeSlot;
+  const renderSlotIcon = (type: 'probe') => {
+    const equipped = slotConfig?.probeSlot;
     const isEquipped = !!equipped?.launcherId;
     const isAdminEnabled = permissions[type];
     
-    // Interaction is disabled for low slots as they are now globally managed.
-    const isInteractive = isAdminEnabled && !isProcessing && type === 'probe';
+    // Low slots are removed from individual panels as per requirement
+    const isInteractive = isAdminEnabled && !isProcessing;
     const targetPanelId = id;
     
-    let label = type === 'low' ? 'LOW' : 'PROBE';
-    let colorHex = isEquipped ? (type === 'low' ? '#00ffd5' : '#bd00ff') : '#52525b';
+    let label = 'PROBE';
+    let colorHex = isEquipped ? '#bd00ff' : '#52525b';
     let charges = 0;
     let maxCharges = 1;
     let cooldownValue = 0;
@@ -101,23 +101,21 @@ const Card: React.FC<CardProps> = ({
       cooldownValue = serverService.getCooldown(equipped!.launcherId);
     }
 
-    const icon = type === 'low' ? (
-      <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M9.5 2A2.5 2.5 0 0 1 12 4.5v15a2.5 2.5 0 0 1-4.96.44 2.5 2.5 0 0 1-2.79-2.74 2.5 2.5 0 0 1-2-2.53 2.5 2.5 0 0 1 2.5-2.5h.75a.5.5 0 0 0 .5-.5v-4.73a2.5 2.5 0 0 1 2.5-2.5h1z" /></svg>
-    ) : (
+    const icon = (
       <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
     );
 
     if (!isAdminEnabled) colorHex = '#450a0a';
 
     let tooltipFullDesc = isAdminEnabled 
-      ? `Slot: ${label}\nModule: ${moduleName}\nCharges: ${charges}/${maxCharges}\nCooldown: ${(cooldownValue/1000).toFixed(1)}s\n\n${type === 'low' ? 'GLOBAL Master Config. Shared across all panels. Edit via header timers.' : 'Local panel-specific probe manifold.'}`
+      ? `Slot: ${label}\nModule: ${moduleName}\nCharges: ${charges}/${maxCharges}\nCooldown: ${(cooldownValue/1000).toFixed(1)}s\n\nLocal panel-specific probe manifold.`
       : 'DISABLED_BY_ADMIN';
 
     return (
-      <Tooltip key={type} name={`${label}_SLOT`} source="SYSTEM" desc={tooltipFullDesc} variant={isEquipped ? (type === 'low' ? 'teal' : 'purple') : 'default'}>
+      <Tooltip key={type} name={`${label}_SLOT`} source="SYSTEM" desc={tooltipFullDesc} variant={isEquipped ? 'purple' : 'default'}>
         <div 
           onClick={() => isInteractive && onLauncherSelect?.(targetPanelId, type)}
-          className={`group relative flex flex-col items-center justify-center w-10 h-12 border transition-all ${isInteractive ? 'bg-black/60 border-zinc-800 hover:border-zinc-500 cursor-pointer' : 'bg-red-950/10 border-red-900/20 opacity-40 cursor-default'}`}
+          className={`group relative flex flex-col items-center justify-center w-10 h-12 border transition-all ${isInteractive ? 'bg-black/60 border-zinc-800 hover:border-zinc-500 cursor-pointer' : 'bg-red-950/5 border-zinc-900/30 opacity-40 cursor-default'}`}
           style={{ color: colorHex }}
         >
            <div className="relative">
@@ -154,7 +152,7 @@ const Card: React.FC<CardProps> = ({
             </h3>
             
             <div className="flex items-center gap-1 border-l border-zinc-800/50 pl-4 ml-2">
-              {/* Individual Low Slot rendering removed as per architectural update */}
+              {/* Individual Low Slot rendering removed as per global configuration requirement */}
               {renderSlotIcon('probe')}
             </div>
           </div>
@@ -184,7 +182,7 @@ const Card: React.FC<CardProps> = ({
             )}
 
             {onBrain && (
-              <Tooltip name="NEURAL_INFERENCE" source="NEURAL_NETWORK" variant="purple" desc="Initiate a Contextual Neural Inference using GLOBAL LOW slot.">
+              <Tooltip name="NEURAL_INFERENCE" source="NEURAL_NETWORK" variant="purple" desc="Initiate a Contextual Neural Inference using GLOBAL LOW slot. Consumption: 1 Global Low Charge.">
                 <button 
                   onClick={onBrain} disabled={isProcessing || !permissions.low}
                   className={`p-1.5 border border-zinc-800 bg-zinc-950 flex items-center justify-center transition-all ${isProcessing ? 'animate-pulse text-purple-400' : 'text-teal-600 hover:text-teal-400'} ${!permissions.low ? 'opacity-20 cursor-not-allowed' : 'active:scale-90'}`}

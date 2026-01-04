@@ -8,6 +8,7 @@ export interface TransportResponse {
   requestBody: any; 
   rawText?: string;
   error?: string;
+  errorCode?: number | string;
 }
 
 /**
@@ -17,7 +18,7 @@ export interface TransportResponse {
 function cleanAndParseJson(text: string): any {
   // 1. Remove thinking tags or other XML-like tags often returned by models
   let cleaned = text.replace(/<thought>[\s\S]*?<\/thought>/g, "");
-  cleaned = cleaned.replace(/<\|.*?\|>/g, "");
+  cleaned = cleaned.replace(/<|.*?|>/g, "");
   
   // 2. Remove markdown code blocks
   cleaned = cleaned.replace(/```json\s?|```/g, "").trim();
@@ -135,7 +136,15 @@ export const aiTransport = {
         });
         
         const data = await response.json();
-        if (data.error) throw new Error(data.error.message || "Unknown Local AI Error");
+        if (data.error) {
+            return {
+                success: false,
+                data: null,
+                requestBody,
+                error: data.error.message || "Unknown Local AI Error",
+                errorCode: data.error.code
+            };
+        }
         
         const text = data.choices[0].message.content;
         
@@ -158,11 +167,29 @@ export const aiTransport = {
       }
     } catch (e: any) {
       console.error("AI Transport Error:", e);
+      let errorMsg = e.message || "Neural Transport Failure";
+      let errorCode = "TRANSPORT_ERR";
+
+      // Attempt to parse structured API error from message
+      if (errorMsg.includes("ApiError:")) {
+          try {
+              const jsonStr = errorMsg.substring(errorMsg.indexOf('{'));
+              const parsed = JSON.parse(jsonStr);
+              if (parsed.error) {
+                  errorMsg = parsed.error.message;
+                  errorCode = parsed.error.code;
+              }
+          } catch (pe) {
+              // Fallback to raw message
+          }
+      }
+
       return { 
         success: false, 
         data: null, 
         requestBody, 
-        error: e.message || "Neural Transport Failure" 
+        error: errorMsg,
+        errorCode
       };
     }
   }

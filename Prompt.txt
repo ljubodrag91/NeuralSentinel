@@ -2,61 +2,44 @@ Role: Expert Frontend & Security Engineer
 Context: Neural Sentinel SOC Console (React 19, TypeScript, Tailwind, Gemini AI)
 
 CORE OBJECTIVE:
-Maintain stability, correctness, and operator clarity in a high-fidelity Cyber-Tactical Dashboard. 
-The application manages both Local (Windows) and Remote (Linux/Pi) telemetry sources using a Tiered Slot Architecture.
+Maintain stability, correctness, and operator clarity in a Cyber-Tactical Dashboard managing Local (Windows) and Remote (Linux/Pi) telemetry.
 
 ---
 
-1. ARCHITECTURAL INVARIANTS (DO NOT BREAK)
-- State Management: React useState/useEffect. Persistent state via `HistoryStorage` and `LauncherSystem` in localStorage.
-- Data Source Routing: 
-  - LOCAL mode = 127.0.0.1 (Windows HUD).
-  - REMOTE mode = User-defined IP (Linux HUD).
-- AI Integration: 
-  - Gemini (Cloud) and Local LLM support.
-  - "Core Probes" = Heavy analysis (Tokens: 4000-8000).
-  - "Neural Probes" = Lightweight inference (Tokens: 400-800).
-- Data Persistence: 24-hour sliding window for CSV history logs.
+1. ARCHITECTURAL INVARIANTS
+- Data Source: LOCAL (127.0.0.1/Windows) vs REMOTE (User IP/Linux).
+- AI Tiers: "Core Probes" (4k-8k tokens) vs "Neural Probes" (400-800 tokens).
+- Persistence: 24h CSV history sliding window. LocalManifest merging on restart.
 
-2. TIERED SLOT LOGIC
-- LOW (Teal): Neural/Inference only.
-- MEDIUM (Purple): Core Data Probes.
-- HIGH (Orange): Specialized Hardware (Sensors) & Scripts.
-  - High slot cooldown: 1 hour base. Persisted.
-  - Buffer Scripts (e.g., Script Reload Timer) can reduce cooldowns (e.g., from 1 hour to 1 minute).
-- Charges: Low/Medium reflect the minimum charges among all active modules of that tier. High slot is limited to 1.
+2. TIERED SLOT RULES
+- LOW (Teal): Global management only. No per-panel configuration rendering. Displays status visually but interaction is disabled at panel level.
+- MEDIUM/PROBE (Purple): Per-panel configuration. Core Data Probes.
+- HIGH/SENSOR (Orange): Specific panels (Scanner). 1-hour persistent cooldown.
+- MASTER CORE PROBE:
+  - Unique to MASTER_INTELLIGENCE panel.
+  - Aggregation Logic: Iterate through `settings.panelSlots`. If a panel has an active `probeSlot.launcherId`, call its `PROBE_CONTRACTS[pid].buildPayload` and push to an aggregation array.
+  - Limits: Single 4000-token aggregated payload. 
+  - Cooldown: 5-minute global interval (300,000ms).
 
-3. PROBE CONTRACT EXAMPLES
-- GLOBAL_SYSTEM_PROBE:
-  - Description: Consolidated system-wide security audit.
-  - Expected Response: JSON Assessment (threat_level, anomalies, recommendations).
-  - compatibleSlots: Medium, High.
-- NEURO_DATA_PROBE:
-  - Description: Contextual metadata inference for UI labels.
-  - Expected Response: JSON mapping labels to security descriptions.
-  - compatibleSlots: Low.
+3. SCRIPT & CONSUMABLE LOGIC
+- System Scripts: Reset results and trigger full radar scans.
+- Buffer Scripts: Enhance state without clearing existing radar data.
+- Boosters: Consumables (e.g., Bypasser) used in 'main' slot types. Fire immediately upon selection in InventoryDialog.
+- Reload Timers: Reduce sensor module cooldowns (e.g., from 1hr to 1min).
 
-4. VISUAL & UI RULES
-- Aesthetics: Cyber-Tactical HUD (Scanlines, CRT flicker).
-- Color Coding (Strict):
-  - BLUE/CYAN (#00f2ff) -> Local Host / Simulation
-  - GREEN (#22c55e) -> Remote Host / Success
-  - RED (#ff3e3e) -> Offline / Error
-  - PURPLE (#bd00ff) -> Neural Activity (Medium)
-  - TEAL (#00ffd5) -> Neural Activity (Low)
-  - ORANGE (#f97316) -> Hardware/Scripts (High)
-- Confirm Buttons: MANDATORY in all MATRIX_CONFIG dialogs for committing hardware changes.
+4. VISUAL & UI STANDARDS
+- HUD Elements: CRT Flicker, Scanlines, Chromatic Aberration.
+- Color Coding: 
+  - BLUE (#00f2ff): Local/Sim
+  - GREEN (#22c55e): Remote/Success
+  - RED (#ff3e3e): Offline/Error
+  - PURPLE (#bd00ff): Neural/Probe
+  - TEAL (#00ffd5): Neural/Low (Global)
+  - ORANGE (#f97316): Hardware/Sensor
+- Config Commit: MANDATORY "CONFIRM" button in InventoryDialog for hardware changes.
 
-5. SCANNER FUNCTIONALITY
-- Node Grid: Radial scanning animation.
-- Quick Fire: Circle icon in header fires data-type sensors immediately and switches tab to "Scanner".
-- Sensor Cooldown: 1 minute (if optimized), 1 hour (base).
-
-6. DYNAMIC REFLECTION
-- Any item, module, or launcher added via Admin or modified in the manifest MUST be merged with base data on app restart to ensure persistence.
-
-7. NEGATIVE CONSTRAINTS
+5. RESTRICTIONS
+- Do not modify existing probe contracts.
 - Do not introduce external state libraries.
-- Do not remove the "FROG_ASCII" easter egg.
-- Do not change JSON schemas expected by the 5050 backend.
-- Do not rename "Neural Probe" or "Core Probe".
+- Do not restore per-panel low slot configuration.
+- Do not change 5050 backend telemetry schemas.

@@ -5,12 +5,21 @@ import { consumablesData } from '../data/consumables';
 
 const STORAGE_KEY = 'neural_sentinel_launchers';
 
-export const PANELS_SUPPORTING_HISTORY = [
+// Panels supporting Extended (Tier 2) launchers and features
+export const PANELS_SUPPORTING_EXTENDED = [
   'GLOBAL_SYSTEM_PROBE',
   'HANDSHAKE_CORE',
   'ADAPTER_HUB',
   'NODE_DIAGNOSTICS',
   'PROCESS_PROBE',
+  'RSSI_REPORT',
+  'SESSION_ARCHIVE',
+  'SENSOR_PANEL'
+];
+
+// Panels supporting Historical (Tier 3) launchers and features
+export const PANELS_SUPPORTING_HISTORY = [
+  'GLOBAL_SYSTEM_PROBE',
   'RSSI_REPORT',
   'SESSION_ARCHIVE'
 ];
@@ -88,7 +97,6 @@ class LauncherSystem {
       if (parsed.boosterEndTime) this.boosterEndTime = parsed.boosterEndTime;
       if (parsed.installedBoosterId) this.installedBoosterId = parsed.installedBoosterId;
       
-      // Merge custom manifest items from storage
       if (parsed.customLaunchers) {
           Object.values(parsed.customLaunchers).forEach((l: any) => {
               this.launchers[l.id] = l;
@@ -130,16 +138,27 @@ class LauncherSystem {
   }
 
   /**
-   * Validates whether a panel accepts a launcher based on Tiered hierarchy.
+   * Validates whether a panel accepts a launcher based on strict probe type tiers.
    */
   isLauncherAllowed(panelId: string, launcherId: string): boolean {
     const launcher = this.getById(launcherId);
     if (!launcher) return false;
     
-    // Tier 1 (Standard) is always allowed.
-    if (!launcher.tier || launcher.tier === 1) return true;
+    const tier = launcher.tier || 1;
     
-    // Tier 2 (Extended) and Tier 3 (Historical) require specific panel compliance.
+    // Tier 1 (Standard) is always allowed.
+    if (tier === 1) return true;
+    
+    // Tier 2 (Extended)
+    if (tier === 2) return PANELS_SUPPORTING_EXTENDED.includes(panelId);
+    
+    // Tier 3 (Historical)
+    if (tier === 3) return PANELS_SUPPORTING_HISTORY.includes(panelId);
+    
+    return true;
+  }
+
+  isHistoricalSupported(panelId: string): boolean {
     return PANELS_SUPPORTING_HISTORY.includes(panelId);
   }
 
@@ -184,6 +203,10 @@ class LauncherSystem {
       if (!def) return null;
       return { ...def, count };
     }).filter((item): item is Consumable & { count: number } => item !== null && (item.unlimited || item.count > 0));
+  }
+
+  getAmmoCount(id: string): number {
+    return this.ownedConsumables[id] || 0;
   }
 
   adjustAmmo(id: string, amount: number) {

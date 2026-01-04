@@ -1,80 +1,69 @@
-# Neural Sentinel - SOC Console v.3.1.0
+# Neural Sentinel - SOC Console v.3.2.0
 
-Neural Sentinel is a high-fidelity Security Operations Center (SOC) interface designed for managing remote Kali Linux deployments on Raspberry Pi devices and local Windows hosts. It bridges the gap between raw command-line tools and tactical intelligence through an integrated AI Neural Engine.
+Neural Sentinel is a high-fidelity Security Operations Center (SOC) interface designed for managing remote Kali Linux deployments on Raspberry Pi devices and local Windows hosts. It features an integrated AI Neural Engine for heuristic telemetry auditing.
 
 ---
 
-## 🚀 Core Architecture & Tiered Slot System
+## 🚀 Core Architecture: Tiered Slot System
 
-The interface utilizes a modular **Slot System** for telemetry and security auditing. Each panel can be configured with specialized hardware modules and software scripts across three tiers:
+The interface utilizes a modular **Slot System** for telemetry and security auditing. Configuration is divided into three functional tiers:
 
-### 1. Tiered Slots (Color Coded)
+### 1. Slot Tiers & Ownership
 *   **LOW SLOT (Teal - #00ffd5)**:
-    *   **Function**: Contextual Neural Inferences.
-    *   **Probes**: Neural Data Probes (Inferences on labels, UI metadata, and lightweight insights).
+    *   **Function**: Contextual Neural Inferences and UI metadata labeling.
+    *   **Management**: **GLOBALLY MANAGED**. Individual panels display status but do not allow local configuration. Changes are applied via the central header load segments.
     *   **Consumption**: Low Core Charges.
-*   **MEDIUM SLOT (Purple - #bd00ff)**:
-    *   **Function**: Core Data Auditing.
-    *   **Probes**: Core Data Probes (Deep-dive telemetry analysis, heuristic resource auditing).
+*   **MEDIUM / PROBE SLOT (Purple - #bd00ff)**:
+    *   **Function**: Panel-specific Core Data Probes.
+    *   **Management**: Configured per-panel. Allows specialized analysis of specific telemetry streams (e.g., Process trees, RF Signal logs).
     *   **Consumption**: Medium Core Charges.
-*   **HIGH SLOT (Orange - #f97316)**:
-    *   **Function**: Specialized Hardware & Script Automation.
-    *   **Modules**: Sensor Modules, High-tier Forensic Scripts.
-    *   **Behavior**: Shared 1-charge limit across all panels. Supports **Script Reload Timers** (1-hour standard cooldown, persisted across sessions).
+*   **HIGH / SENSOR SLOT (Orange - #f97316)**:
+    *   **Function**: Specialized Hardware Intercepts & Script Automation.
+    *   **Management**: Exclusive to specific panels (primarily **Scanner**). 
+    *   **Behavior**: High-tier modules have persistent **Reload Timers** (1-hour base cooldown).
 
 ---
 
-## 🧠 Intelligence Probes
+## 🧠 Master Core Probe (Intelligence Hub)
 
-The AI engine facilitates several distinct probe types, each with specific "Contracts" defining their logic:
-
-*   **Core Data Probe**: Deep analysis of panel-specific telemetry (e.g., Process trees, RF Signal logs).
-*   **Neural Data Probe**: Lightweight contextual inference for UI tooltips and metadata labels.
-*   **Historical Probe**: Aggregated analysis using up to 24 hours of stored CSV data.
-*   **Master Intelligence Probe**: A global probe that consolidates all active telemetry into a single security assessment. Supports dynamic token sizing (4k-8k tokens).
-
----
-
-## 🛠 Scanner & Sensor Array
-
-The **Scanner Tab** provides a dedicated interface for the EM Field Intercept manifold:
-*   **Node Grid**: Interactive anomaly points mapping physical and virtual sensors.
-*   **Scan Logs**: Real-time logging of sensor firing and anomaly detection.
-*   **Extended Modules**: High-tier sensor modules trigger automated Neural Audits upon scan completion.
-*   **Shortcut**: A quick-fire circle icon in the header allows for immediate data-type sensor firing and automatic tab switching.
+The **MASTER_INTELLIGENCE** panel features a unique **Main Core Probe** behavior:
+*   **Aggregated Data Collection**: When fired, the system crawls all active panels. If a panel has a Probe Slot equipped, its specific data contract payload is extracted.
+*   **Unified Packet**: All collected payloads are combined into a single array-based aggregated packet.
+*   **AI Processing**: The packet is processed by the AI core with a strict **4000 token limit**.
+*   **Global Cooldown**: Due to high resource cost, this probe can only be triggered **once every 5 minutes**. A visual cooldown timer is displayed in the UI.
 
 ---
 
-## 💾 Data Persistence & Manifest Management
+## 🛠 Scanner & Sensor Manifold
 
-*   **Dynamic Manifest**: New launchers, consumables, or modules added via the **Admin Panel** are persisted to `localStorage` and reflected immediately on app restart.
-*   **History Engine**: Critical tactical actions (Neural Probes, Handshakes, Command Executions) are archived in CSV format.
-*   **Retention**: Data follows a 24-hour sliding window.
-*   **Storage Tiers**:
-    *   **JSON**: Hardware definitions and manifest metadata.
-    *   **CSV**: Time-series telemetry and audit logs.
+The **Scanner Tab** operates the EM Field Intercept manifold:
+*   **Sensor Nodes**: Visual grid of anomaly points (Network, System, Process, Filesystem).
+*   **Scripts**:
+    *   **System Scripts**: Trigger a full sensor array scan sequence.
+    *   **Buffer Scripts**: Provide enhancers/buffs without wiping existing radar scans.
+    *   **Neural Integration Scripts**: Automated scans that transmit results to the AI engine at set intervals (1m, 5m, 10m).
+*   **Boosters**: Consumables like the **Neural Link Bypasser** allow for temporary bypassing of all probe cooldowns (60-minute duration).
 
 ---
 
-## 🔧 Operation Modes
+## 🔧 Operation Modes & Services
 
 | State | Color | Meaning |
 | :--- | :--- | :--- |
-| **LOCAL ACTIVE** | **Blue / Cyan** | Localhost (127.0.0.1) telemetry active. Windows HUD auto-detected. |
-| **REMOTE ACTIVE** | **Green** | Remote SSH/HTTP link established. Linux HUD (Kali) active. |
-| **DISCONNECTED** | **Red** | Link void or target unreachable. |
-| **NEURAL SYNC** | **Purple** | AI Reasoning / Probe in progress. |
+| **LOCAL ACTIVE** | **Blue / Cyan** | Windows Host (127.0.0.1) telemetry active. |
+| **REMOTE ACTIVE** | **Green** | Remote SSH/HTTP link (Pi/Linux) active. |
+| **NEURAL SYNC** | **Purple** | AI Reasoning / Aggregated Probe in progress. |
+
+### Service Management
+Operators can manually enable/disable the **Telemetry Uplink** or **Neural Link** via the Master Intelligence panel. This allows for stealth operations or resource conservation.
 
 ---
 
 ## 📖 User Instructions: MATRIX_CONFIG
+To modify hardware configuration:
+1.  Click the **Slot Port** icon (Probe or Sensor) in any panel header.
+2.  Select a **Launcher Module** and apply **Consumables/Scripts**.
+3.  **CRITICAL**: You must click the **APPLY** and **CONFIRM** buttons in the `MASTER_MATRIX_CONFIG` dialog to commit hardware changes. Closing without confirming reverts to the previous state.
 
-To modify a panel's configuration:
-1.  Click the **Module Slots** icon in any panel header.
-2.  Select the desired **Tier** (Low/Med/High).
-3.  Select a **Launcher Module** and apply **Ammunition/Scripts**.
-4.  **CRITICAL**: You must click the **APPLY_AND_CONFIRM** button to commit changes. Closing the dialog without confirming will revert to the previous stable configuration.
-
-*Build: Neural_Sentinel_v3.1.0_PRO*
-*Developer: Neural W Monitor Team*
+*Build: Neural_Sentinel_v3.2.0_PRO*
 *Clearance: LEVEL_04_SOC_OP*

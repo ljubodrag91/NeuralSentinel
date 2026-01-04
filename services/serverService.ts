@@ -31,7 +31,6 @@ class ServerAuthoritativeService {
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
-        // Migration/Sanitization for legacy or direct timestamp data
         Object.keys(parsed).forEach(key => {
           if (typeof parsed[key] === 'number') {
             parsed[key] = { readyAt: parsed[key], duration: 3600000 };
@@ -80,7 +79,25 @@ class ServerAuthoritativeService {
     localStorage.setItem(CHARGES_STORAGE_KEY, JSON.stringify(this.charges));
   }
 
-  validateProbe(launcherId: string, cost: number = 1): boolean {
+  /**
+   * Calculates dynamic capacity based on the base launcher max charges and any equipped script modifiers.
+   */
+  getEffectiveMaxCharges(launcherId: string, ammoId?: string): number {
+    const launcher = launcherSystem.getById(launcherId);
+    if (!launcher) return 0;
+    
+    let base = launcher.maxCharges;
+
+    if (ammoId === 'script-cap-double') {
+      return base * 2;
+    } else if (ammoId === 'script-cap-plus2') {
+      return base + 2;
+    }
+    
+    return base;
+  }
+
+  validateProbe(launcherId: string, cost: number = 1, ammoId?: string): boolean {
     const launcher = launcherSystem.getById(launcherId);
     if (!launcher) return false;
     
@@ -127,16 +144,6 @@ class ServerAuthoritativeService {
     this.saveCooldowns();
   }
 
-  flagAsBroken(launcherId: string) {
-    this.brokenScripts.add(launcherId);
-    this.saveBrokenScripts();
-  }
-
-  repairScript(launcherId: string) {
-    this.brokenScripts.delete(launcherId);
-    this.saveBrokenScripts();
-  }
-
   getCooldown(launcherId: string): number {
     if (launcherSystem.isBoosterActive()) return 0;
     const cd = this.cooldowns[launcherId];
@@ -152,9 +159,6 @@ class ServerAuthoritativeService {
     return 1 - (remaining / cd.duration);
   }
 
-  /**
-   * Derives the current ScriptState for the dedicated sensor slot in the Scanner Panel.
-   */
   getScriptState(panelId: string, settings: AppSettings): { state: ScriptState, reason?: string } {
     const slotConfig = settings.panelSlots[panelId]?.sensorSlot;
     const isPermitted = settings.slotPermissions[panelId]?.sensor;
@@ -179,9 +183,6 @@ class ServerAuthoritativeService {
     return { state: ScriptState.LOADED };
   }
 
-  /**
-   * Global Buff: Halves all current Low and Probe tier cooldowns.
-   */
   halveTierCooldowns() {
     launcherSystem.getAll().forEach(l => {
       if (l.type === 'core' || l.type === 'neural') {
@@ -199,18 +200,18 @@ class ServerAuthoritativeService {
     this.saveCooldowns();
   }
 
-  getCharges(launcherId: string): number {
+  getCharges(launcherId: string, ammoId?: string): number {
+    const max = this.getEffectiveMaxCharges(launcherId, ammoId);
     if (launcherSystem.isBoosterActive()) {
-        const launcher = launcherSystem.getById(launcherId);
-        return launcher ? launcher.maxCharges : 5;
+        return max;
     }
-    return this.charges[launcherId] || 0;
+    const current = this.charges[launcherId] || 0;
+    return Math.min(current, max);
   }
 
-  recharge(launcherId: string, amount: number = 1) {
-    const launcher = launcherSystem.getById(launcherId);
-    if (!launcher) return;
-    this.charges[launcherId] = Math.min(launcher.maxCharges, (this.charges[launcherId] || 0) + amount);
+  recharge(launcherId: string, amount: number = 1, ammoId?: string) {
+    const max = this.getEffectiveMaxCharges(launcherId, ammoId);
+    this.charges[launcherId] = Math.min(max, (this.charges[launcherId] || 0) + amount);
     this.saveCharges();
   }
 
@@ -221,27 +222,29 @@ class ServerAuthoritativeService {
     }
   }
 
-  getTierStats(launcherType: 'core' | 'neural' | 'sensor-module', activeLauncherIds: string[]) {
-    if (activeLauncherIds.length === 0) return { charges: 0, maxCharges: 5, cooldown: 0 };
+  /**
+   * Updated to accept launcher mappings (id -> ammoId) to calculate tiered stats with script modifiers.
+   */
+  getTierStats(launcherType: 'core' | 'neural' | 'sensor-module', activeLaunchers: Array<{id: string, ammoId: string}>) {
+    if (activeLaunchers.length === 0) return { charges: 0, maxCharges: 5, cooldown: 0 };
 
     let minCharges = Infinity;
     let maxCooldown = 0;
     let maxCap = 0;
 
-    activeLauncherIds.forEach(id => {
-      const c = this.getCharges(id);
-      const cd = this.getCooldown(id);
-      const def = launcherSystem.getById(id);
-      if (def) {
-        if (c < minCharges) minCharges = c;
-        if (cd > maxCooldown) maxCooldown = cd;
-        maxCap = Math.max(maxCap, def.maxCharges);
-      }
+    activeLaunchers.forEach(link => {
+      const c = this.getCharges(link.id, link.ammoId);
+      const cd = this.getCooldown(link.id);
+      const cap = this.getEffectiveMaxCharges(link.id, link.ammoId);
+      
+      if (c < minCharges) minCharges = c;
+      if (cd > maxCooldown) maxCooldown = cd;
+      maxCap = Math.max(maxCap, cap);
     });
 
     return {
       charges: minCharges === Infinity ? 0 : minCharges,
-      maxCharges: maxCap || 5,
+      maxCharges: maxCap,
       cooldown: maxCooldown
     };
   }

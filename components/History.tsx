@@ -1,7 +1,6 @@
-
 import React, { useState } from 'react';
 import Card from './common/Card';
-import { PanelSlotConfig, SlotConfig } from '../types';
+import { PanelSlotConfig, SlotConfig, SlotPermissions } from '../types';
 
 interface HistoryProps {
   data: any[];
@@ -13,9 +12,10 @@ interface HistoryProps {
   allowDistortion?: boolean;
   slotConfig?: PanelSlotConfig;
   globalLowSlot?: SlotConfig;
+  permissions?: SlotPermissions;
 }
 
-const History: React.FC<HistoryProps> = ({ data, onProbe, onProbeInfo, onBrainClick, onLauncherSelect, processingId, allowDistortion, slotConfig, globalLowSlot }) => {
+const History: React.FC<HistoryProps> = ({ data, onProbe, onProbeInfo, onBrainClick, onLauncherSelect, processingId, allowDistortion, slotConfig, globalLowSlot, permissions }) => {
   const getArchivePayload = () => {
     const csvHeaders = "TIMESTAMP,ACTION,TARGET,RESULT";
     const csvRows = data.map(h => `${h.timestamp},${h.action},${h.target},${h.result}`).join("\n");
@@ -45,6 +45,7 @@ const History: React.FC<HistoryProps> = ({ data, onProbe, onProbeInfo, onBrainCl
         allowDistortion={allowDistortion}
         slotConfig={slotConfig}
         globalLowSlot={globalLowSlot}
+        permissions={permissions}
       >
         <div className="overflow-x-auto p-2">
           <table className="w-full font-mono text-[11px] text-[#4a726f] border-collapse">

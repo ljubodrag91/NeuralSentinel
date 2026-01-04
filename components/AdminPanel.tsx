@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo } from 'react';
-import { Launcher, AppSettings, SlotPermissions, Consumable } from '../types';
+import { Launcher, AppSettings, SlotPermissions, Consumable, SlotConfig } from '../types';
 import { launcherSystem, PROBE_AMMUNITION } from '../services/launcherService';
 import { serverService } from '../services/serverService';
 import Card from './common/Card';
@@ -12,18 +12,14 @@ interface AdminPanelProps {
   setSettings: React.Dispatch<React.SetStateAction<AppSettings>>;
 }
 
-const SYSTEM_PANELS = [
-  'GLOBAL_SYSTEM_PROBE',
-  'HANDSHAKE_CORE',
-  'ADAPTER_HUB',
-  'CONSOLE_DATA_PROBE',
-  'NODE_DIAGNOSTICS',
-  'PROCESS_PROBE',
-  'RSSI_REPORT',
-  'SESSION_ARCHIVE',
-  'LOG_AUDIT',
-  'SENSOR_PANEL'
-];
+const PANEL_GROUPS: Record<string, string[]> = {
+  'DASHBOARD': ['GLOBAL_SYSTEM_PROBE', 'HANDSHAKE_CORE', 'ADAPTER_HUB', 'CONSOLE_DATA_PROBE'],
+  'TELEMETRY': ['RSSI_REPORT'],
+  'CORE_STATS': ['NODE_DIAGNOSTICS', 'PROCESS_PROBE'],
+  'SCANNER': ['SENSOR_PANEL'],
+  'HISTORY': ['SESSION_ARCHIVE'],
+  'SYSTEM': ['LOG_AUDIT', 'ADMIN_PANEL']
+};
 
 const ITEMS_PER_PAGE = 6;
 
@@ -32,7 +28,6 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ allowDistortion, settings, setS
   const [searchQuery, setSearchQuery] = useState('');
   
   // Pagination States
-  const [panelPage, setPanelPage] = useState(0);
   const [launcherPage, setLauncherPage] = useState(0);
   const [consumablePage, setConsumablePage] = useState(0);
 
@@ -48,10 +43,6 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ allowDistortion, settings, setS
   const [consumableFormData, setConsumableFormData] = useState<Partial<Consumable>>({
     id: '', name: '', type: 'data', description: '', compatibleLaunchers: ['core'], cost: 1, features: [], unlimited: false, maxStack: 100
   });
-
-  const filteredPanels = useMemo(() => {
-    return SYSTEM_PANELS.filter(p => p.toLowerCase().includes(searchQuery.toLowerCase()));
-  }, [searchQuery]);
 
   const filteredLaunchers = useMemo(() => {
     return launchers.filter(l => 
@@ -147,6 +138,18 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ allowDistortion, settings, setS
     );
   };
 
+  const TacticalToggle = ({ active, onToggle, label }: { active: boolean, onToggle: () => void, label: string }) => (
+    <div className="flex items-center justify-between py-1.5 px-3 bg-black/40 border border-zinc-900 group hover:border-zinc-700 transition-all">
+       <span className="text-[8px] font-black uppercase text-zinc-600 group-hover:text-zinc-400 tracking-wider">{label}</span>
+       <div 
+         onClick={onToggle}
+         className={`w-10 h-5 border flex items-center px-0.5 cursor-pointer transition-all ${active ? 'border-teal-500/50 bg-teal-950/20' : 'border-zinc-800 bg-black'}`}
+       >
+          <div className={`w-3.5 h-3.5 transition-all ${active ? 'translate-x-5 bg-teal-500 shadow-[0_0_8px_#00ffd5]' : 'translate-x-0 bg-zinc-800'}`}></div>
+       </div>
+    </div>
+  );
+
   return (
     <div className="space-y-6 animate-in fade-in h-full flex flex-col overflow-hidden pb-6">
       <header className="flex flex-col md:flex-row justify-between items-start md:items-center px-2 gap-4 shrink-0">
@@ -158,7 +161,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ allowDistortion, settings, setS
             value={searchQuery}
             onChange={(e) => {
               setSearchQuery(e.target.value);
-              setPanelPage(0); setLauncherPage(0); setConsumablePage(0);
+              setLauncherPage(0); setConsumablePage(0);
             }}
             className="flex-1 max-w-xs bg-black border border-zinc-800 p-2 text-[10px] text-zinc-400 font-mono outline-none focus:border-teal-500/50"
           />
@@ -182,81 +185,63 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ allowDistortion, settings, setS
               <Card id="admin_slot_management" title="PANEL_INFRASTRUCTURE_CONTROL" variant="purple" allowDistortion={allowDistortion} className="flex-1 overflow-hidden">
                   <div className="flex flex-col h-full overflow-hidden">
                       <p className="text-[9px] text-zinc-500 italic mb-6 border-b border-zinc-900 pb-4 shrink-0">
-                        Map hardware interfaces and review equipment status per tactical node. 
-                        Toggling tiers here will immediately restrict or permit slot availability on the dashboard.
+                        Map hardware interfaces and configure slot availability across tactical groups. 
+                        Probe and Sensor slots are managed per-panel, while Low Tier (Neural) slots are managed globally.
                       </p>
                       
-                      <div className="flex-1 overflow-y-auto pr-2 space-y-4">
-                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                              {filteredPanels.slice(panelPage * ITEMS_PER_PAGE, (panelPage + 1) * ITEMS_PER_PAGE).map(panelId => {
-                                const perms = settings.slotPermissions[panelId] || { low: true, probe: true, sensor: true };
-                                const slotConfig = settings.panelSlots[panelId];
-                                const hasSensorSupport = panelId === 'SENSOR_PANEL';
-                                
-                                return (
-                                    <div key={panelId} className="p-4 border border-zinc-900 bg-black/40 flex flex-col gap-4 group hover:border-zinc-700 transition-all shadow-lg">
-                                        <div className="flex justify-between items-start">
-                                            <div className="flex flex-col">
-                                                <span className="text-[10px] font-black text-zinc-400 group-hover:text-white transition-colors uppercase">{panelId}</span>
-                                                <span className="text-[7px] text-zinc-700 font-mono mt-0.5">0x{panelId.length.toString(16).toUpperCase()}_NODE</span>
-                                            </div>
-                                            <div className="flex items-center gap-1.5 px-2 py-0.5 border border-zinc-800 bg-zinc-900/50">
-                                              <div className="w-1 h-1 bg-teal-500 rounded-full animate-pulse"></div>
-                                              <span className="text-[7px] font-black text-zinc-500 uppercase">ACTIVE</span>
-                                            </div>
-                                        </div>
-                                        
-                                        <div className="space-y-3">
-                                            {(['low', 'probe', 'sensor'] as const).map(slot => {
-                                                if (slot === 'sensor' && !hasSensorSupport) return null;
-                                                const active = perms[slot];
-                                                
-                                                // Identify current equipment for the slot
-                                                let equippedId = 'NONE';
-                                                let equippedAmmo = '';
-                                                if (slot === 'low') {
-                                                  equippedId = settings.globalLowSlot.launcherId;
-                                                  equippedAmmo = settings.globalLowSlot.ammoId;
-                                                } else if (slot === 'probe' && slotConfig?.probeSlot) {
-                                                  equippedId = slotConfig.probeSlot.launcherId;
-                                                  equippedAmmo = slotConfig.probeSlot.ammoId;
-                                                } else if (slot === 'sensor' && slotConfig?.sensorSlot) {
-                                                  equippedId = slotConfig.sensorSlot.launcherId;
-                                                  equippedAmmo = slotConfig.sensorSlot.ammoId;
-                                                }
+                      <div className="flex-1 overflow-y-auto pr-2 space-y-8 pb-10">
+                          {Object.entries(PANEL_GROUPS).map(([groupName, panelIds]) => {
+                             const visiblePanels = panelIds.filter(p => p.toLowerCase().includes(searchQuery.toLowerCase()));
+                             if (visiblePanels.length === 0) return null;
 
-                                                return (
-                                                    <div key={slot} className="flex flex-col gap-1.5">
-                                                        <div className="flex justify-between items-center px-1">
-                                                            <span className="text-[8px] font-black text-zinc-600 uppercase">{slot}_TIER</span>
-                                                            <button 
-                                                                onClick={() => togglePanelSlot(panelId, slot)}
-                                                                className={`text-[7px] font-black px-1.5 py-0.5 border uppercase transition-all ${active ? 'border-teal-500/50 text-teal-400' : 'border-red-900/50 text-red-900'}`}
-                                                            >
-                                                                {active ? 'PERMITTED' : 'BLOCKED'}
-                                                            </button>
-                                                        </div>
-                                                        <div className={`p-2 border bg-black/60 flex flex-col gap-1 ${active ? 'border-zinc-800' : 'border-red-950/20 opacity-30 grayscale'}`}>
-                                                            <div className="flex justify-between items-center text-[8px] font-mono">
-                                                                <span className="text-zinc-700">Launcher:</span>
-                                                                <span className="text-zinc-400 font-bold">{equippedId || 'NULL'}</span>
-                                                            </div>
-                                                            <div className="flex justify-between items-center text-[8px] font-mono">
-                                                                <span className="text-zinc-700">Script:</span>
-                                                                <span className="text-zinc-500">{equippedAmmo || '—'}</span>
-                                                            </div>
-                                                        </div>
+                             return (
+                               <div key={groupName} className="space-y-4">
+                                  <div className="flex items-center gap-3">
+                                     <div className="h-[1px] flex-1 bg-zinc-900"></div>
+                                     <span className="text-[10px] font-black text-teal-600 uppercase tracking-[0.3em]">{groupName}</span>
+                                     <div className="h-[1px] flex-1 bg-zinc-900"></div>
+                                  </div>
+
+                                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                      {visiblePanels.map(panelId => {
+                                        const perms = settings.slotPermissions[panelId] || { low: true, probe: true, sensor: true };
+                                        const hasSensorSupport = panelId === 'SENSOR_PANEL';
+
+                                        return (
+                                            <div key={panelId} className="p-4 border border-zinc-900 bg-black/40 flex flex-col gap-4 group hover:border-zinc-700 transition-all shadow-lg relative">
+                                                <div className="flex justify-between items-start">
+                                                    <div className="flex flex-col">
+                                                        <span className="text-[10px] font-black text-zinc-400 group-hover:text-white transition-colors uppercase">{panelId}</span>
+                                                        <span className="text-[7px] text-zinc-700 font-mono mt-0.5">0x{panelId.length.toString(16).toUpperCase()}_NODE</span>
                                                     </div>
-                                                );
-                                            })}
-                                        </div>
-                                    </div>
-                                );
-                              })}
-                          </div>
-                      </div>
-                      <div className="shrink-0">
-                        {renderPagination(filteredPanels.length, panelPage, setPanelPage)}
+                                                </div>
+                                                
+                                                <div className="space-y-2">
+                                                    <Tooltip name="PROBE_TIER_PERMISSION" source="CONFIG" desc="Enable or disable the Medium Slot (Core Data Probe) for this specific panel.">
+                                                       <TacticalToggle 
+                                                          label="Probe Tier Slot" 
+                                                          active={perms.probe} 
+                                                          onToggle={() => togglePanelSlot(panelId, 'probe')} 
+                                                       />
+                                                    </Tooltip>
+
+                                                    {hasSensorSupport && (
+                                                       <Tooltip name="SENSOR_TIER_PERMISSION" source="CONFIG" desc="Enable or disable the High Slot (Hardware Sensor Grid) for the scanner panel.">
+                                                          <TacticalToggle 
+                                                             label="Sensor Tier Slot" 
+                                                             active={perms.sensor} 
+                                                             onToggle={() => togglePanelSlot(panelId, 'sensor')} 
+                                                          />
+                                                       </Tooltip>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        );
+                                      })}
+                                  </div>
+                               </div>
+                             );
+                          })}
                       </div>
                   </div>
               </Card>

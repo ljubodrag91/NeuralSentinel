@@ -160,13 +160,13 @@ const InventoryDialog: React.FC<InventoryDialogProps> = ({ isOpen, onClose, pane
             onClick={handleApply}
             className="px-6 py-2 bg-teal-500/10 border border-teal-500/40 text-teal-400 text-[10px] font-black uppercase tracking-widest hover:bg-teal-500/20 transition-all"
           >
-            APPLY
+            {activeSlot === 'main' ? 'FIRE' : 'APPLY'}
           </button>
           <button 
             onClick={handleConfirm}
             className="px-6 py-2 bg-teal-500/20 border border-teal-500 text-teal-400 text-[10px] font-black uppercase tracking-widest hover:bg-teal-500/30 transition-all shadow-[0_0_10px_rgba(20,184,166,0.2)]"
           >
-            CONFIRM
+            {activeSlot === 'main' ? 'ACTIVATE' : 'CONFIRM'}
           </button>
         </>
       )}
@@ -254,6 +254,7 @@ const InventoryDialog: React.FC<InventoryDialogProps> = ({ isOpen, onClose, pane
                          <div className="ml-6 pt-2 space-y-2 animate-in slide-in-from-top-2">
                            {Object.values(PROBE_AMMUNITION).filter(a => a.compatibleLaunchers.includes(l.type as any)).filter(a => !(a.features.includes('HISTORY_CSV') && !isHistoricalSupported)).map(ammo => {
                                const isPending = stagedAmmoId === ammo.id;
+                               const count = launcherSystem.getAmmoCount(ammo.id);
                                return (
                                  <div key={ammo.id} className={`relative p-3 border text-[9px] flex flex-col gap-1 transition-all ml-4 ${ammo.disabled ? 'opacity-40 grayscale cursor-not-allowed' : 'cursor-pointer hover:bg-zinc-900 bg-black/60 border-zinc-800'} ${isPending ? 'border-teal-500 shadow-[0_0_10px_rgba(20,184,166,0.1)]' : ''}`} onClick={() => !ammo.disabled && handleAmmoSelect(ammo.id)}>
                                    <div className="absolute -left-4 top-1/2 w-4 h-[1px] bg-zinc-800"></div>
@@ -262,6 +263,9 @@ const InventoryDialog: React.FC<InventoryDialogProps> = ({ isOpen, onClose, pane
                                      {isPending && <span className="text-[7px] text-black px-1 font-bold bg-teal-500 uppercase">SELECTED</span>}
                                    </div>
                                    <span className="text-zinc-600 italic text-[8px] leading-tight">{ammo.description}</span>
+                                   {!ammo.unlimited && (
+                                     <span className="text-[7px] font-mono text-zinc-500 mt-1">STOCK: {count} units</span>
+                                   )}
                                  </div>
                                );
                            })}

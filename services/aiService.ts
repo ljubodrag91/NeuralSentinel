@@ -13,7 +13,7 @@ function truncateInputStrict(text: string, maxChars: number = 10000): string {
 function extractJsonLoose(text: string): any {
   const cleaned = text
     .replace(/```json|```/g, "")
-    .replace(/<\|.*?\|>/g, "")
+    .replace(/<|.*?|>/g, "")
     .replace(/<thought>[\s\S]*?<\/thought>/g, "")
     .trim();
   const match = cleaned.match(/\{[\s\S]*\}/);
@@ -224,6 +224,20 @@ Schema:
   try {
     const result = await aiTransport.fetch(config, systemInstruction, userPrompt, true, context.tokenLimit);
     if (!result.success) {
+      // Check for structured error from transport
+      if (result.error) {
+          return {
+              description: `Neural Link Failure [Code ${result.errorCode || '400'}]: ${result.error}`,
+              recommendation: "Review launcher parameters. If using thinking mode, ensure token capacity is sufficient (>3000 chars).",
+              status: context.mode,
+              elementType: panelName,
+              elementId: "TRANSPORT_ERROR",
+              anomalies: ["VALIDATION_FAILURE"],
+              threatLevel: "UNKNOWN",
+              _sentPayload
+          };
+      }
+      
       // If transport says failure but we have rawText, it's a parse error. Try fallback parse.
       if (result.rawText) {
           try {
@@ -241,7 +255,7 @@ Schema:
     console.error("Neural Probe Error:", e);
     return {
       description: `Neural Link Failure: ${e.message}`,
-      recommendation: "Check AI Configuration and Connectivity. The model might be outputting invalid JSON format due to token limits or reasoning complexity.",
+      recommendation: "Check AI Configuration and Connectivity. The model might be outputting invalid JSON format or experiencing an API bottleneck.",
       status: context.mode,
       elementType: panelName,
       elementId: "ERROR",

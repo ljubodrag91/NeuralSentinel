@@ -252,6 +252,8 @@ export interface Consumable {
   disabled?: boolean;
   unlimited?: boolean;
   maxStack?: number;
+  autoInterval?: number; // ms
+  isNeuralIntegration?: boolean;
 }
 
 export interface ModuleDefinition {

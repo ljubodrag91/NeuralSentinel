@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { CoreStats, Platform, SensorArrayConfig, SensorNodeConfig, AppSettings, ScriptState } from '../types';
 import Tooltip from './common/Tooltip';
@@ -181,7 +180,8 @@ const ScannerPanel: React.FC<ScannerPanelProps> = ({ stats, platform, allowDisto
            }
         }
 
-        if (sensorModule?.isExtended && onNeuralProbe) {
+        // Automatic Probe Data Sending for Neural Integration scripts or Extended modules
+        if ((sensorModule?.isExtended || activeAmmo?.isNeuralIntegration) && onNeuralProbe) {
             onNeuralProbe('SENSOR_PANEL', { results: sessionResults });
         }
 
@@ -202,20 +202,19 @@ const ScannerPanel: React.FC<ScannerPanelProps> = ({ stats, platform, allowDisto
     }
   }, [isScanning, activeArray, sensorSlotConfig, sensorModule, sensorLauncherId, stats, scannerCooldownRemaining, currentScriptState, onNeuralProbe, platform, isSystemScript, activeAmmo]);
 
-  // Automatic Scan Engine with dynamic interval reduction for active System Scripts
+  // Automatic Scan Engine with support for script-specific auto-intervals
   useEffect(() => {
     if (currentScriptState.state !== ScriptState.LOADED || isScanning || isProcessing) return;
 
-    const basePoll = (settings?.pollInterval || 30) * 1000;
-    // Reduce interval by 50% when a System Script is active to increase tactical data density
-    const dynamicInterval = isSystemScript ? basePoll / 2 : basePoll;
+    // Use script's specific interval if available, otherwise use dynamic settings interval
+    const interval = activeAmmo?.autoInterval || (isSystemScript ? (settings?.pollInterval || 30) * 500 : (settings?.pollInterval || 30) * 1000);
 
     const autoTimer = setInterval(() => {
       handleScan(true);
-    }, dynamicInterval);
+    }, interval);
 
     return () => clearInterval(autoTimer);
-  }, [currentScriptState.state, isScanning, isProcessing, isSystemScript, settings?.pollInterval, handleScan]);
+  }, [currentScriptState.state, isScanning, isProcessing, isSystemScript, settings?.pollInterval, handleScan, activeAmmo]);
 
   useEffect(() => {
     if (externalTrigger && externalTrigger > 0) {
@@ -248,6 +247,12 @@ const ScannerPanel: React.FC<ScannerPanelProps> = ({ stats, platform, allowDisto
   if (!activeArray) return <div className="p-10 text-center text-zinc-500">LOADING_SENSOR_MODULES...</div>;
 
   const canScan = currentScriptState.state === ScriptState.LOADED && !!stats;
+
+  const globalLowSlot = settings?.globalLowSlot;
+  const lowSlotLauncherId = globalLowSlot?.launcherId;
+  const lowSlotLauncher = lowSlotLauncherId ? launcherSystem.getById(lowSlotLauncherId) : null;
+  const lowSlotCharges = lowSlotLauncherId ? serverService.getCharges(lowSlotLauncherId) : 0;
+  const lowSlotPermissions = settings?.slotPermissions['SENSOR_PANEL']?.low !== false;
 
   return (
     <div className="flex flex-col-reverse md:flex-row h-full w-full bg-[#020406] overflow-hidden relative">
@@ -322,12 +327,20 @@ const ScannerPanel: React.FC<ScannerPanelProps> = ({ stats, platform, allowDisto
                 <span className="text-[9px] font-black text-zinc-700 uppercase tracking-widest">Hardware_Manifold</span>
                 <button 
                     onClick={() => onLauncherSelect?.('SENSOR_PANEL', 'sensor')}
-                    className="p-1 border border-zinc-800 bg-black hover:border-teal-500/50 transition-all group"
+                    className="p-1 border border-zinc-800 bg-black hover:border-teal-400/50 transition-all group"
                 >
                     <svg className="w-3 h-3 text-zinc-600 group-hover:text-teal-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5L19 19M5 19l1.5-1.5M17.5 6.5L19 5"/></svg>
                 </button>
             </div>
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-3 gap-2">
+                <Tooltip name="LOW_TIER_PORT" source="SYSTEM" desc="Global Neural Inference Interface. Read-only at panel level. Managed via central segments." variant="teal">
+                    <div 
+                        className={`h-10 border flex flex-col items-center justify-center transition-all bg-red-950/5 border-zinc-900/30 opacity-30 cursor-default`}
+                    >
+                        <div className={`w-1.5 h-1.5 rounded-full ${lowSlotPermissions ? 'bg-[#00ffd5]' : 'bg-zinc-800'}`}></div>
+                        {lowSlotPermissions && lowSlotLauncherId && <span className="text-[6px] font-mono text-zinc-600 mt-1 uppercase">CHG: {lowSlotCharges}</span>}
+                    </div>
+                </Tooltip>
                 <Tooltip name="PROBE_PORT" source="SYSTEM" desc="Data Core Probe Interface. (Purple)" variant="purple">
                     <div className="h-10 border border-zinc-900 bg-black flex items-center justify-center opacity-60 hover:opacity-100 transition-opacity cursor-pointer group" onClick={() => onLauncherSelect?.('SENSOR_PANEL', 'probe')}>
                         <div className="w-1.5 h-1.5 rounded-full bg-[#bd00ff] group-hover:shadow-[0_0_10px_#bd00ff]"></div>
@@ -363,10 +376,15 @@ const ScannerPanel: React.FC<ScannerPanelProps> = ({ stats, platform, allowDisto
                 </span>
             </div>
             
-            <div className="bg-black/60 border border-zinc-800 p-3 text-[10px] font-mono text-teal-400 uppercase tracking-widest flex justify-between items-center">
-               <span>{activeArray?.name || 'NULL_PROFILE'}</span>
-               <span className="text-[7px] text-zinc-600 bg-zinc-900 px-1 border border-zinc-800">SLOT_DERIVED</span>
-            </div>
+            <Tooltip name="PROFILE_SELECT" source="SYSTEM" desc="Click to modify active sensor module configuration and script assignment.">
+                <div 
+                  onClick={() => onLauncherSelect?.('SENSOR_PANEL', 'sensor')}
+                  className="bg-black/60 border border-zinc-800 p-3 text-[10px] font-mono text-teal-400 uppercase tracking-widest flex justify-between items-center cursor-pointer hover:border-teal-500/50 transition-all group"
+                >
+                  <span className="group-hover:text-white transition-colors">{activeArray?.name || 'NULL_PROFILE'}</span>
+                  <span className="text-[7px] text-zinc-600 bg-zinc-900 px-1 border border-zinc-800 group-hover:text-teal-500 group-hover:border-teal-950">SLOT_DERIVED</span>
+                </div>
+            </Tooltip>
 
             <div className="text-[8px] text-zinc-600 font-mono italic px-1 leading-tight">{activeArray?.description || 'Assign a Sensor Module to load array profile.'}</div>
          </div>

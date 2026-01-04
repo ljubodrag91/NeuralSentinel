@@ -33,6 +33,26 @@ export const consumablesData: Consumable[] = [
     "unlimited": true
   },
   {
+    "id": "script-cap-double",
+    "name": "Double Capacity Script",
+    "type": "booster",
+    "description": "Neural buffer script. Doubles the current capacity of the targeted low or mid slot.",
+    "compatibleLaunchers": ["core", "neural"],
+    "cost": 0,
+    "features": ["CAPACITY_MODIFIER", "X2_MULT"],
+    "unlimited": true
+  },
+  {
+    "id": "script-cap-plus2",
+    "name": "Increment +2 Script",
+    "type": "booster",
+    "description": "Modular expansion script. Increases current capacity of the targeted slot by 2.",
+    "compatibleLaunchers": ["core", "neural"],
+    "cost": 0,
+    "features": ["CAPACITY_MODIFIER", "PLUS_2_ADD"],
+    "unlimited": true
+  },
+  {
     "id": "sensor-script-ammo",
     "name": "Sensor Script Packet",
     "type": "module-core",
@@ -41,6 +61,42 @@ export const consumablesData: Consumable[] = [
     "cost": 1,
     "features": ["AUTO_SCAN", "NODE_SEQUENCING"],
     "unlimited": true
+  },
+  {
+    "id": "sensor-script-neural-1m",
+    "name": "Neural Integration Script (1m)",
+    "type": "module-core",
+    "description": "Automated scanning sequence with Neural Integration. Scans and transmits results every 1 minute.",
+    "compatibleLaunchers": ["sensor-module"],
+    "cost": 1,
+    "features": ["AUTO_SCAN", "NEURAL_INTEGRATION", "AUTO_TRANSMIT"],
+    "unlimited": true,
+    "autoInterval": 60000,
+    "isNeuralIntegration": true
+  },
+  {
+    "id": "sensor-script-neural-5m",
+    "name": "Neural Integration Script (5m)",
+    "type": "module-core",
+    "description": "Automated scanning sequence with Neural Integration. Scans and transmits results every 5 minutes.",
+    "compatibleLaunchers": ["sensor-module"],
+    "cost": 1,
+    "features": ["AUTO_SCAN", "NEURAL_INTEGRATION", "AUTO_TRANSMIT"],
+    "unlimited": true,
+    "autoInterval": 300000,
+    "isNeuralIntegration": true
+  },
+  {
+    "id": "sensor-script-neural-10m",
+    "name": "Neural Integration Script (10m)",
+    "type": "module-core",
+    "description": "Automated scanning sequence with Neural Integration. Scans and transmits results every 10 minutes.",
+    "compatibleLaunchers": ["sensor-module"],
+    "cost": 1,
+    "features": ["AUTO_SCAN", "NEURAL_INTEGRATION", "AUTO_TRANSMIT"],
+    "unlimited": true,
+    "autoInterval": 600000,
+    "isNeuralIntegration": true
   },
   {
     "id": "script-timer",
